@@ -1,0 +1,406 @@
+﻿.admin-users-page {
+    width: 100%;
+}
+
+.user-filter-panel {
+    padding: 14px 16px;
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: 280px 220px 220px max-content;
+    align-items: flex-end;
+    justify-content: start;
+    gap: 10px;
+}
+
+.filter-cell,
+.filter-actions {
+    min-width: 0;
+}
+
+.filter-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+}
+
+.filter-action-bar {
+    display: inline-flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.filter-action-bar ::deep .mud-button-root {
+    min-width: 72px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 7px;
+}
+
+.user-filter-panel ::deep .mud-input-control {
+    width: 100%;
+    margin: 0;
+    height: 40px;
+    min-height: 40px;
+}
+
+.user-filter-panel ::deep .mud-input-control-input-container,
+.user-filter-panel ::deep .mud-input {
+    height: 40px;
+    min-height: 40px;
+}
+
+.user-filter-panel ::deep .mud-input {
+    align-items: center;
+}
+
+.user-filter-panel ::deep .mud-input-root,
+.user-filter-panel ::deep .mud-select-input {
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 38px;
+}
+
+.user-filter-panel ::deep .mud-input-adornment {
+    height: 38px;
+    margin-top: 0;
+}
+
+.user-filter-panel ::deep .mud-input-outlined-border {
+    top: 0;
+}
+
+.user-filter-panel ::deep .mud-input-label-outlined {
+    transform: translate(14px, 11px) scale(1);
+}
+
+.user-filter-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start {
+    transform: translate(40px, 11px) scale(1);
+}
+
+.user-filter-panel ::deep .mud-input-label-outlined.mud-shrink {
+    transform: translate(14px, -6px) scale(.75);
+}
+
+.user-filter-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink {
+    transform: translate(40px, -6px) scale(.75);
+}
+
+.user-filter-panel ::deep .mud-input-root-outlined {
+    min-height: 40px;
+}
+
+.admin-table {
+    min-width: 1190px;
+    table-layout: fixed;
+}
+
+.col-account {
+    width: 128px;
+}
+
+.col-password {
+    width: 76px;
+}
+
+.col-name {
+    width: 108px;
+}
+
+.col-project {
+    width: 136px;
+}
+
+.col-roles {
+    width: 230px;
+}
+
+.col-hospitals {
+    width: 230px;
+}
+
+.col-email {
+    width: 170px;
+}
+
+.col-actions {
+    width: 112px;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child {
+    text-align: center;
+}
+
+.admin-table td {
+    overflow: hidden;
+}
+
+.admin-table tr.disabled-row {
+    opacity: .58;
+}
+
+.project-name,
+.table-text-list {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.row-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 30px;
+    white-space: nowrap;
+}
+
+.row-actions ::deep .mud-button-root {
+    min-width: 40px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 4px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.account-dialog-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(17, 32, 51, .34);
+    backdrop-filter: blur(8px);
+}
+
+.account-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(820px, 100%);
+    max-height: min(88vh, 920px);
+    overflow: hidden;
+    border: 1px solid var(--mcr-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(244, 251, 255, .90)),
+        linear-gradient(135deg, rgba(37, 99, 235, .06), rgba(20, 184, 166, .05));
+    box-shadow: var(--mcr-shadow);
+}
+
+.account-dialog::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(14, 165, 233, .36), transparent);
+}
+
+.account-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 68px;
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid rgba(76, 135, 170, .16);
+}
+
+.account-dialog-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    color: var(--mcr-text);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.account-dialog-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    color: #ffffff;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--mcr-primary), var(--mcr-primary-light));
+    box-shadow: 0 10px 20px rgba(37, 99, 235, .18);
+}
+
+.account-dialog-icon ::deep svg {
+    width: 20px;
+    height: 20px;
+    color: #ffffff !important;
+}
+
+.account-dialog-close {
+    border: 1px solid rgba(76, 135, 170, .16);
+    background: rgba(255, 255, 255, .62);
+}
+
+.account-dialog-body {
+    overflow: auto;
+    padding: 18px 20px 16px;
+}
+
+.account-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+}
+
+.account-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    color: var(--mcr-text-soft);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.account-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    color: var(--mcr-text);
+    border: 1px solid var(--mcr-border);
+    border-radius: 7px;
+    background: var(--mcr-surface);
+}
+
+.account-input:focus {
+    border-color: var(--mcr-primary);
+    outline: 2px solid rgba(37, 99, 235, .14);
+}
+
+.account-input:disabled {
+    color: var(--mcr-muted);
+    background: #f8fafc;
+}
+
+.account-flags {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 1 / -1;
+    gap: 10px 18px;
+    min-height: 36px;
+    padding: 2px 0;
+}
+
+.account-check,
+.account-role-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--mcr-text-soft);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.account-check input,
+.account-role-check input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--mcr-primary);
+}
+
+.account-role-section {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--mcr-border);
+    border-radius: var(--mcr-radius);
+    background: rgba(248, 250, 252, .86);
+}
+
+.account-role-title {
+    color: var(--mcr-text);
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.account-role-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.account-role-check {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--mcr-border);
+    border-radius: 999px;
+    background: var(--mcr-surface);
+}
+
+.account-dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px 18px;
+    border-top: 1px solid rgba(76, 135, 170, .14);
+    background: rgba(255, 255, 255, .50);
+}
+
+.account-dialog-actions ::deep .mud-button-root {
+    min-width: 86px;
+    min-height: 40px;
+    border-radius: 7px;
+}
+
+@media (max-width: 1180px) {
+    .filter-grid {
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+    }
+
+    .filter-actions {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 760px) {
+    .filter-grid,
+    .account-form {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-actions {
+        grid-column: auto;
+    }
+
+    .filter-action-bar {
+        margin-bottom: 0;
+    }
+
+    .account-dialog-mask {
+        align-items: flex-start;
+        padding: 14px;
+    }
+
+    .account-dialog-head,
+    .account-dialog-body,
+    .account-dialog-actions {
+        padding-inline: 16px;
+    }
+
+    .account-flags {
+        grid-column: auto;
+    }
+}

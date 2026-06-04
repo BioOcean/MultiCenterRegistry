@@ -1,0 +1,39 @@
+﻿@page "/"
+@inherits BasePage
+
+<PageTitle>正在进入</PageTitle>
+
+<div class="admin-main-container">
+    @if (_isLoading)
+    {
+        <div class="loading-wrapper">
+            <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-3">正在进入系统...</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="empty-wrapper">
+            <MudIcon Icon="@Icons.Material.Filled.AppsOutage" Size="Size.Large" Color="Color.Secondary" Style="font-size: 64px;" />
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-3">暂无可用功能</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">请联系管理员分配本系统角色权限</MudText>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+
+    protected override Task OnPageInitializedAsync()
+    {
+        var targetPath = FeatureCatalog.GetDefaultPath(CurrentPermissionCodes);
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            _isLoading = false;
+            return Task.CompletedTask;
+        }
+
+        inj_navigationManager.NavigateTo(targetPath, true);
+        return Task.CompletedTask;
+    }
+}

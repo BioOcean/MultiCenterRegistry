@@ -1,0 +1,325 @@
+﻿.quality-list-page {
+    width: 100%;
+}
+
+.quality-center-filter {
+    display: block;
+}
+
+.quality-center-filter-row {
+    display: grid;
+    grid-template-columns: 180px max-content;
+    align-items: flex-end;
+    justify-content: start;
+    gap: 10px;
+}
+
+.quality-center-month-field {
+    min-width: 0;
+}
+
+.quality-list-filter {
+    grid-template-columns: 260px 180px 180px 150px 150px max-content;
+}
+
+.quality-export-panel {
+    grid-template-columns: 180px 180px 220px 180px max-content max-content;
+}
+
+.quality-center-filter-actions,
+.quality-list-filter-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    height: 40px;
+}
+
+.quality-center-filter-actions ::deep .mud-button-root,
+.quality-list-filter-actions ::deep .mud-button-root,
+.quality-export-panel ::deep .mud-button-root,
+.quality-detail-filter ::deep .mud-button-root {
+    min-width: 72px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 7px;
+}
+
+.quality-center-filter ::deep .mud-input-control,
+.quality-list-filter ::deep .mud-input-control,
+.quality-export-panel ::deep .mud-input-control,
+.quality-detail-filter ::deep .mud-input-control {
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+}
+
+.quality-center-filter ::deep .mud-input-control-input-container,
+.quality-center-filter ::deep .mud-input,
+.quality-list-filter ::deep .mud-input-control-input-container,
+.quality-list-filter ::deep .mud-input,
+.quality-export-panel ::deep .mud-input-control-input-container,
+.quality-export-panel ::deep .mud-input,
+.quality-detail-filter ::deep .mud-input-control-input-container,
+.quality-detail-filter ::deep .mud-input {
+    height: 40px;
+    min-height: 40px;
+}
+
+.quality-center-filter ::deep .mud-input,
+.quality-list-filter ::deep .mud-input,
+.quality-export-panel ::deep .mud-input,
+.quality-detail-filter ::deep .mud-input {
+    align-items: center;
+}
+
+.quality-center-filter ::deep .mud-input-root,
+.quality-center-filter ::deep .mud-select-input,
+.quality-list-filter ::deep .mud-input-root,
+.quality-list-filter ::deep .mud-select-input,
+.quality-export-panel ::deep .mud-input-root,
+.quality-export-panel ::deep .mud-select-input,
+.quality-detail-filter ::deep .mud-input-root,
+.quality-detail-filter ::deep .mud-select-input {
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 38px;
+}
+
+.quality-center-filter ::deep .mud-input-adornment,
+.quality-list-filter ::deep .mud-input-adornment,
+.quality-export-panel ::deep .mud-input-adornment,
+.quality-detail-filter ::deep .mud-input-adornment {
+    height: 38px;
+    margin-top: 0;
+}
+
+.quality-center-filter ::deep .mud-input-outlined-border,
+.quality-list-filter ::deep .mud-input-outlined-border,
+.quality-export-panel ::deep .mud-input-outlined-border,
+.quality-detail-filter ::deep .mud-input-outlined-border {
+    top: 0;
+}
+
+.quality-center-filter ::deep .mud-input-label-outlined,
+.quality-list-filter ::deep .mud-input-label-outlined,
+.quality-export-panel ::deep .mud-input-label-outlined,
+.quality-detail-filter ::deep .mud-input-label-outlined {
+    transform: translate(14px, 11px) scale(1);
+}
+
+.quality-center-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start,
+.quality-list-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start,
+.quality-export-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start,
+.quality-detail-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start {
+    transform: translate(40px, 11px) scale(1);
+}
+
+.quality-center-filter ::deep .mud-input-label-outlined.mud-shrink,
+.quality-list-filter ::deep .mud-input-label-outlined.mud-shrink,
+.quality-export-panel ::deep .mud-input-label-outlined.mud-shrink,
+.quality-detail-filter ::deep .mud-input-label-outlined.mud-shrink {
+    transform: translate(14px, -6px) scale(.75);
+}
+
+.quality-center-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.quality-list-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.quality-export-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.quality-detail-filter ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink {
+    transform: translate(40px, -6px) scale(.75);
+}
+
+.quality-center-filter ::deep .mud-input-root-outlined,
+.quality-list-filter ::deep .mud-input-root-outlined,
+.quality-export-panel ::deep .mud-input-root-outlined,
+.quality-detail-filter ::deep .mud-input-root-outlined {
+    min-height: 40px;
+}
+
+.summary-detail div {
+    color: var(--mcr-text-soft);
+    line-height: 1.6;
+}
+
+.quality-center-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, 42%) minmax(420px, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.quality-month-panel,
+.quality-detail-panel {
+    min-height: 360px;
+}
+
+.quality-detail-filter {
+    display: grid;
+    grid-template-columns: 220px max-content max-content;
+    align-items: flex-end;
+    justify-content: start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mcr-border-light);
+    background: var(--mcr-surface);
+}
+
+.quality-table {
+    min-width: 1120px;
+    table-layout: fixed;
+}
+
+.quality-month-table,
+.quality-hospital-table {
+    width: 100%;
+    min-width: 100%;
+}
+
+.quality-hospital-table {
+    table-layout: fixed;
+}
+
+.quality-table th,
+.quality-table td {
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.quality-table th:last-child,
+.quality-table td:last-child {
+    text-align: center;
+}
+
+.quality-cell-text,
+.report-name {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.report-name {
+    color: var(--mcr-text);
+    font-weight: 700;
+}
+
+.operation-cell {
+    width: 120px;
+    padding-right: 8px;
+    padding-left: 8px;
+}
+
+.quality-row-actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 30px;
+    white-space: nowrap;
+}
+
+.quality-row-actions ::deep .mud-button-root {
+    min-width: 40px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 4px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.count-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 42px;
+    height: 28px;
+    padding: 0 10px;
+    color: var(--mcr-primary);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--mcr-border-strong);
+    border-radius: 999px;
+    background: var(--mcr-primary-soft);
+}
+
+.count-link:hover,
+.count-link.active {
+    color: #ffffff;
+    border-color: var(--mcr-primary);
+    background: var(--mcr-primary);
+}
+
+.quality-pager {
+    min-height: 64px;
+}
+
+.quality-dialog-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(17, 32, 51, .34);
+    backdrop-filter: blur(8px);
+}
+
+.quality-edit-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(980px, 100%);
+    max-height: min(88vh, 920px);
+    overflow: hidden;
+    border: 1px solid var(--mcr-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(244, 251, 255, .90)),
+        linear-gradient(135deg, rgba(37, 99, 235, .06), rgba(20, 184, 166, .05));
+    box-shadow: var(--mcr-shadow);
+}
+
+.quality-edit-dialog ::deep .modal-edit-content {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    background-image: none;
+}
+
+@media (max-width: 1180px) {
+    .quality-center-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .quality-list-filter,
+    .quality-export-panel {
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
+    .quality-center-filter-row,
+    .quality-list-filter,
+    .quality-export-panel,
+    .quality-detail-filter {
+        grid-template-columns: 1fr;
+    }
+
+    .quality-center-filter-actions,
+    .quality-list-filter-actions {
+        justify-content: flex-start;
+    }
+
+    .quality-dialog-mask {
+        align-items: flex-start;
+        padding: 14px;
+    }
+}

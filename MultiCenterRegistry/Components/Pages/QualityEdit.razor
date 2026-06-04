@@ -1,0 +1,267 @@
+﻿@page "/quality/new"
+@inherits BasePage
+
+<PageTitle>新建质控</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="@PageClass">
+    @if (IsModal)
+    {
+        <div class="panel-title">
+            <span id="quality-create-modal-title">新建质控</span>
+            <button type="button" class="modal-close" title="关闭" @onclick="Back">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="detail-header">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="Back">返回</MudButton>
+            <div>
+                <h1>新建质控</h1>
+                <div class="page-subtitle">保存后会按质控模板初始化表单</div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载基础数据</span>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="form-panel" Elevation="0">
+            <MudTextField T="string" @bind-Value="_name" Label="报表名称" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_qualityMonth" Label="质控月份" Placeholder="yyyy-MM" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudSelect T="Guid" @bind-Value="_templateMapId" Label="疾病类型" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var template in _templates)
+                {
+                    <MudSelectItem T="Guid" Value="@template.Id">@template.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_hospitalId" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
+                @foreach (var hospital in _hospitals)
+                {
+                    <MudSelectItem T="string" Value="@hospital.Id.ToString()">@hospital.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField T="string" @bind-Value="_qualityUserId" Label="质控员用户 ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <div class="actions editor-actions">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">保存</MudButton>
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public bool IsModal { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> Saved { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+    private readonly List<QualityTemplateOption> _templates = [];
+    private readonly List<SystemHospital> _hospitals = [];
+    private readonly List<string> _scopeHospitalIds = [];
+    private string _name = "质控上报";
+    private string _qualityMonth = DateTime.Now.ToString("yyyy-MM");
+    private Guid _templateMapId;
+    private string _hospitalId = "";
+    private string _qualityUserId = "";
+    private bool _isLoading = true;
+
+    private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            await LoadRoleScopesAsync();
+
+            var maps = await _registryContext.FormTemplateMaps.AsNoTracking()
+                .Where(x => x.BusinessType == "quality")
+                .OrderBy(x => x.TemplateName)
+                .ToListAsync();
+            _templates.AddRange(maps.Select(x => new QualityTemplateOption(x.Id, x.TemplateName)));
+            _templateMapId = _templates.FirstOrDefault()?.Id ?? Guid.Empty;
+
+            var hospitalQuery = _registryContext.SystemHospitals.AsNoTracking();
+            if (!HasPermission(PermissionConstants.QualityManage) && _scopeHospitalIds.Count > 0)
+            {
+                var scopeIds = _scopeHospitalIds.Select(TryParseGuid).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                hospitalQuery = hospitalQuery.Where(x => scopeIds.Contains(x.Id));
+            }
+
+            _hospitals.AddRange(await hospitalQuery.OrderBy(x => x.Name).ToListAsync());
+            if (_hospitals.Count == 1)
+            {
+                _hospitalId = _hospitals[0].Id.ToString();
+            }
+
+            _qualityUserId = CurrentUserId;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityCreate))
+        {
+            return;
+        }
+
+        if (_templateMapId == Guid.Empty || !DateTime.TryParse($"{_qualityMonth.Trim()}-01", out var qualityDate))
+        {
+            inj_snackbar.Add("请选择质控模板并填写正确月份", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_hospitalId))
+        {
+            inj_snackbar.Add("请选择医院", Severity.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_qualityUserId) && Guid.TryParse(_qualityUserId, out var qualityUserGuid))
+        {
+            var exists = await _registryContext.SystemUsers.AsNoTracking().AnyAsync(x => x.Id == qualityUserGuid);
+            if (!exists)
+            {
+                inj_snackbar.Add("质控员用户 ID 不存在", Severity.Warning);
+                return;
+            }
+        }
+
+        if (!await ConfirmAsync("确认新建质控报表？"))
+        {
+            return;
+        }
+
+        var templateMap = await _registryContext.FormTemplateMaps.AsNoTracking()
+            .FirstAsync(x => x.Id == _templateMapId);
+        var now = DateTime.Now;
+        var qualityId = Guid.NewGuid();
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        _registryContext.QualityReports.Add(new QualityReport
+        {
+            Id = qualityId,
+            OldQualityId = qualityId.ToString(),
+            Name = string.IsNullOrWhiteSpace(_name) ? "质控上报" : _name.Trim(),
+            QualityDate = qualityDate,
+            TemplateId = templateMap.SourceFollowTemplateId,
+            HospitalId = EmptyToNull(_hospitalId),
+            QualityUserId = EmptyToNull(_qualityUserId),
+            Status = 0,
+            CreatedAt = now,
+            CreatedBy = CurrentUserId
+        });
+
+        await AddQualityFormAsync(qualityId, templateMap, now);
+        _registryContext.OperationLogs.Add(CreateOperationLog("质控", "新建", "quality", qualityId));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("质控报表已创建", Severity.Success);
+        if (IsModal)
+        {
+            await Saved.InvokeAsync(qualityId);
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.QualityDetail(qualityId));
+    }
+
+    private async Task AddQualityFormAsync(Guid qualityId, RegistryFormTemplateMap templateMap, DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var instance = new RegistryFormInstance
+        {
+            OwnerType = "quality",
+            OwnerId = qualityId,
+            FormTemplateId = templateMap.FormTemplateId,
+            FormTemplateMapId = templateMap.Id,
+            SourceCustomFormId = templateMap.SourceCustomFormId,
+            SourceFollowTemplateId = templateMap.SourceFollowTemplateId,
+            Status = 0,
+            CreatedAt = now,
+            CreatedBy = CurrentUserId
+        };
+        _registryContext.FormInstances.Add(instance);
+
+        var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
+            .Where(x => x.FormTemplateId == templateMap.FormTemplateId)
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.StorageKey)
+            .ToListAsync();
+        foreach (var field in definitions)
+        {
+            _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
+            {
+                FormInstanceId = instance.Id,
+                FormFieldDefinitionId = field.Id,
+                StorageKey = field.StorageKey,
+                SourceSubjectId = field.SourceSubjectId,
+                FieldCode = field.FieldCode,
+                FieldName = field.FieldName,
+                Sort = field.Sort,
+                CreatedAt = now,
+                CreatedBy = CurrentUserId
+            });
+        }
+    }
+
+    private async Task Back()
+    {
+        if (IsModal)
+        {
+            await Cancelled.InvokeAsync();
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.QualityList);
+    }
+
+    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId))
+        {
+            return;
+        }
+
+        var hospitalIds = await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId.ToString())
+            .Distinct()
+            .ToListAsync();
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(hospitalIds);
+    }
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private sealed record QualityTemplateOption(Guid Id, string Name);
+}

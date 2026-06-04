@@ -1,0 +1,228 @@
+﻿@page "/portal"
+@layout FullScreenLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>@_portalTitle</PageTitle>
+
+<div class="portal-page">
+    <section class="portal-hero" style="@HeroStyle">
+        <header class="portal-header">
+            <div class="portal-brand">
+                @if (!string.IsNullOrWhiteSpace(_logoUrl))
+                {
+                    <img src="@_logoUrl" alt="logo" />
+                }
+                <span>@_portalTitle</span>
+            </div>
+            <button type="button" class="portal-login-btn" @onclick="EnterSystem">@(_isAuthenticated ? "进入系统" : "登录")</button>
+        </header>
+
+        <div class="hero-content">
+            <div>
+                <h1>@_portalTitle</h1>
+                <p>@_portalContent</p>
+                <button type="button" class="hero-action" @onclick="EnterSystem">进入系统</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="portal-body">
+        <div class="metric-grid">
+            @foreach (var metric in Metrics)
+            {
+                <div class="metric-card">
+                    <span>@metric.Title</span>
+                    <strong>@metric.Value</strong>
+                </div>
+            }
+        </div>
+
+        <div class="content-grid">
+            <section class="content-panel">
+                <div class="panel-head">
+                    <h2>文献介绍</h2>
+                    <span>Introduction</span>
+                </div>
+                @if (_introductions.Count == 0)
+                {
+                    <div class="empty-row">暂无文献介绍</div>
+                }
+                else
+                {
+                    <div class="article-list">
+                        @foreach (var item in _introductions)
+                        {
+                            <article class="article-row">
+                                <div class="article-cover">
+                                    @if (string.IsNullOrWhiteSpace(item.Cover))
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Article" />
+                                    }
+                                    else
+                                    {
+                                        <img src="@item.Cover" alt="封面" />
+                                    }
+                                </div>
+                                <div>
+                                    <h3>@item.Title</h3>
+                                    <p>@GetSnippet(item.Content, 92)</p>
+                                    <time>@ShowDate(item.CreatedAt)</time>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="content-panel">
+                <div class="panel-head">
+                    <h2>系统消息</h2>
+                    <span>Notice</span>
+                </div>
+                @if (_messages.Count == 0)
+                {
+                    <div class="empty-row">暂无系统消息</div>
+                }
+                else
+                {
+                    <div class="message-list">
+                        @foreach (var item in _messages)
+                        {
+                            <article class="message-row">
+                                <time>@ShowDate(item.CreatedAt)</time>
+                                <p>@GetSnippet(item.Content, 120)</p>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    </section>
+</div>
+
+@code {
+    private const int ArticleTypeIntroduction = 1;
+    private const int ArticleTypeMessage = 2;
+
+    private readonly List<ArticlePreview> _introductions = [];
+    private readonly List<ArticlePreview> _messages = [];
+    private string _portalTitle = "介入数据填报与管理平台";
+    private string _portalContent = "多中心介入病例填报、质控、评审与数据管理。";
+    private string _logoUrl = "";
+    private string _backgroundUrl = "images/login-background.jpg";
+    private int _hospitalCount;
+    private int _expertCount;
+    private int _caseCount;
+    private int _diseaseCount;
+    private bool _isAuthenticated;
+
+    private string HeroStyle => $"background-image: linear-gradient(90deg, rgba(6, 90, 72, 0.88), rgba(13, 123, 102, 0.66)), url('{_backgroundUrl}');";
+
+    private IReadOnlyList<PortalMetric> Metrics =>
+    [
+        new("协作医院", _hospitalCount),
+        new("评审专家", _expertCount),
+        new("登记病例", _caseCount),
+        new("疾病类型", _diseaseCount)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authenticationState = await inj_authenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authenticationState.User.Identity?.IsAuthenticated == true;
+        _logoUrl = inj_configuration.GetValue<string>("AppSettings:hospitalLogo") ?? "images/logo.png";
+        _backgroundUrl = inj_configuration.GetValue<string>("AppSettings:loginBg") ?? "images/login-background.jpg";
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var dbContext = await inj_registryDbContextFactory.CreateDbContextAsync();
+        var codes = new[] { PortalConfigConstants.LoginTitle, PortalConfigConstants.LoginContent };
+        var configs = await dbContext.PortalConfigs.AsNoTracking()
+            .Where(x => codes.Contains(x.Code))
+            .ToDictionaryAsync(x => x.Code, x => x.Value);
+
+        if (configs.TryGetValue(PortalConfigConstants.LoginTitle, out var title) && !string.IsNullOrWhiteSpace(title))
+        {
+            _portalTitle = title;
+        }
+
+        if (configs.TryGetValue(PortalConfigConstants.LoginContent, out var content) && !string.IsNullOrWhiteSpace(content))
+        {
+            _portalContent = content;
+        }
+
+        _hospitalCount = await dbContext.SystemHospitals.AsNoTracking().CountAsync();
+        _caseCount = await dbContext.Cases.AsNoTracking().CountAsync();
+        _diseaseCount = await dbContext.Cases.AsNoTracking()
+            .Where(x => x.DiseaseId != null && x.DiseaseId != "")
+            .Select(x => x.DiseaseId)
+            .Distinct()
+            .CountAsync();
+        _expertCount = await dbContext.SystemMapUserRoles.AsNoTracking()
+            .Join(
+                dbContext.SystemUsers.AsNoTracking().Where(x => x.IsValid),
+                userRole => userRole.UserId,
+                user => user.Id,
+                (userRole, user) => new { userRole.UserId, userRole.RoleId })
+            .Join(
+                dbContext.SystemMapRolePermissions.AsNoTracking(),
+                userRole => userRole.RoleId,
+                rolePermission => rolePermission.RoleId,
+                (userRole, rolePermission) => new { userRole.UserId, rolePermission.PermissionId })
+            .Join(
+                dbContext.SystemPermissions.AsNoTracking().Where(x => x.Code == PermissionConstants.AppraiseEdit || x.Code == PermissionConstants.AppraiseView),
+                userRole => userRole.PermissionId,
+                permission => permission.Id,
+                (userRole, permission) => userRole.UserId)
+            .Distinct()
+            .CountAsync();
+
+        _introductions.Clear();
+        _introductions.AddRange(await dbContext.Articles.AsNoTracking()
+            .Where(x => x.Type == ArticleTypeIntroduction)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(4)
+            .Select(x => new ArticlePreview(x.Title, x.Content, x.Cover, x.CreatedAt))
+            .ToListAsync());
+
+        _messages.Clear();
+        _messages.AddRange(await dbContext.Articles.AsNoTracking()
+            .Where(x => x.Type == ArticleTypeMessage)
+            .OrderByDescending(x => x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Take(4)
+            .Select(x => new ArticlePreview(x.Title, x.Content, x.Cover, x.CreatedAt))
+            .ToListAsync());
+    }
+
+    private void EnterSystem()
+    {
+        inj_navigationManager.NavigateTo(_isAuthenticated ? RouteConstants.Home : RouteConstants.Login);
+    }
+
+    private static string GetSnippet(string? value, int length)
+    {
+        var text = ToPlainText(value);
+        return text.Length <= length ? text : $"{text[..length]}...";
+    }
+
+    private static string ToPlainText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var noTags = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        return System.Net.WebUtility.HtmlDecode(noTags).Trim();
+    }
+
+    private static string ShowDate(DateTime value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private sealed record PortalMetric(string Title, int Value);
+
+    private sealed record ArticlePreview(string Title, string Content, string? Cover, DateTime CreatedAt);
+}

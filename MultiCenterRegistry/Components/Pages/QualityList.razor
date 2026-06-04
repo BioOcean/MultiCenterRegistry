@@ -1,0 +1,952 @@
+﻿@page "/quality"
+@inherits BasePage
+
+<PageTitle>@(IsQualityCenterMode ? "数据报表" : "质控管理")</PageTitle>
+
+<div class="quality-page quality-list-page">
+    <div class="page-header">
+        <div>
+            <h1>@(IsQualityCenterMode ? "数据报表" : "质控管理")</h1>
+            <div class="page-subtitle">@(IsQualityCenterMode ? $"共 {_qualityMonthSummaries.Count} 个月度数据报表" : $"共 {_totalCount} 条质控报表")</div>
+        </div>
+        <div class="header-actions">
+            @if (!IsQualityCenterMode && HasPermission(PermissionConstants.QualityCreate))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateQuality">新建质控</MudButton>
+            }
+            @if (HasAnyPermission(PermissionConstants.QualityView, PermissionConstants.QualityManage))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ToggleExportPanel">导出</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadQualityReportsAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    @if (_showCreateQualityModal)
+    {
+        <div class="quality-dialog-mask" role="presentation">
+            <section class="quality-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="quality-create-modal-title">
+                <QualityEdit IsModal="true" Saved="OnQualityCreated" Cancelled="CloseCreateQualityModal" />
+            </section>
+        </div>
+    }
+
+    @if (_showExportPanel)
+    {
+        <MudPaper Class="export-panel quality-export-panel" Elevation="0">
+            <MudTextField T="string" @bind-Value="_exportStartMonth" Label="开始月份" Placeholder="yyyy-MM" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+            <MudTextField T="string" @bind-Value="_exportEndMonth" Label="结束月份" Placeholder="yyyy-MM" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+            <MudSelect T="string" @bind-Value="_exportHospitalId" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">全部医院</MudSelectItem>
+                @foreach (var hospital in _hospitalOptions)
+                {
+                    <MudSelectItem T="string" Value="@hospital.Id">@hospital.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_exportTemplateId" Label="疾病类型" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">全部疾病</MudSelectItem>
+                @foreach (var template in _templateOptions)
+                {
+                    <MudSelectItem T="string" Value="@template.Id">@template.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Disabled="@(!CanExport)" Href="@BuildExportUrl()" Target="_blank">确认导出</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="ToggleExportPanel">取消</MudButton>
+        </MudPaper>
+    }
+
+    @if (IsQualityCenterMode)
+    {
+        <MudPaper Class="filter-panel quality-center-filter" Elevation="0">
+            <div class="quality-center-filter-row">
+                <div class="quality-center-month-field">
+                    <MudTextField T="string"
+                                  @bind-Value="_monthValue"
+                                  Label="质控时间"
+                                  Placeholder="yyyy-MM"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  OnKeyDown="OnSearchKeyDown" />
+                </div>
+                <div class="quality-center-filter-actions">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetFiltersAsync">重置</MudButton>
+                </div>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="filter-panel quality-list-filter" Elevation="0">
+            <MudTextField T="string"
+                          @bind-Value="_keyword"
+                          Label="关键字"
+                          Placeholder="报表名称、疾病、医院、质控员"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          OnKeyDown="OnSearchKeyDown" />
+            <MudSelect T="string" @bind-Value="_hospitalFilterValue" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">全部医院</MudSelectItem>
+                @foreach (var hospital in _hospitalOptions)
+                {
+                    <MudSelectItem T="string" Value="@hospital.Id">@hospital.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_templateFilterValue" Label="疾病类型" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">全部疾病</MudSelectItem>
+                @foreach (var template in _templateOptions)
+                {
+                    <MudSelectItem T="string" Value="@template.Id">@template.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField T="string"
+                          @bind-Value="_monthValue"
+                          Label="月份"
+                          Placeholder="yyyy-MM"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Immediate="true"
+                          OnKeyDown="OnSearchKeyDown" />
+            <MudSelect T="string" @bind-Value="_statusValue" Label="状态" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">全部</MudSelectItem>
+                <MudSelectItem T="string" Value="@("0")">未填报</MudSelectItem>
+                <MudSelectItem T="string" Value="@("1")">已上报</MudSelectItem>
+                <MudSelectItem T="string" Value="@("2")">已驳回</MudSelectItem>
+            </MudSelect>
+            <div class="quality-list-filter-actions">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetFiltersAsync">重置</MudButton>
+            </div>
+        </MudPaper>
+    }
+
+    @if (!IsQualityCenterMode && HasAnyPermission(PermissionConstants.CaseApprove, PermissionConstants.QualityManage))
+    {
+        <MudPaper Class="summary-panel" Elevation="0">
+            <div class="summary-item">
+                <span>统计月份</span>
+                <strong>@_summaryMonthText</strong>
+            </div>
+            <div class="summary-item">
+                <span>医院数</span>
+                <strong>@_hospitalCount</strong>
+            </div>
+            <div class="summary-item">
+                <span>已上报</span>
+                <strong>@_submittedHospitalCount</strong>
+            </div>
+            <div class="summary-item">
+                <span>未上报</span>
+                <strong>@_unsubmittedHospitalCount</strong>
+            </div>
+            <div class="summary-detail">
+                <span>未上报医院</span>
+                <div>@(_unsubmittedHospitals.Count == 0 ? "无" : string.Join("、", _unsubmittedHospitals))</div>
+            </div>
+        </MudPaper>
+    }
+
+    @if (IsQualityCenterMode)
+    {
+        <div class="quality-center-layout">
+            <MudPaper Class="list-panel quality-month-panel" Elevation="0">
+                <div class="list-toolbar">
+                    <div class="list-title">
+                        <strong>月度数据报表</strong>
+                        <span>点击已/未上报医院数查看明细</span>
+                    </div>
+                </div>
+                @if (_isLoading)
+                {
+                    <div class="loading-row">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <span>正在加载月度统计</span>
+                    </div>
+                }
+                else if (_qualityMonthSummaries.Count == 0)
+                {
+                    <div class="empty-row">未找到月度上报统计</div>
+                }
+                else
+                {
+                    <div class="table-wrap">
+                        <table class="quality-table quality-month-table">
+                            <thead>
+                                <tr>
+                                    <th>上报日期</th>
+                                    <th>已上报医院数</th>
+                                    <th>未上报医院数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _qualityMonthSummaries)
+                                {
+                                    <tr>
+                                        <td>@item.MonthText</td>
+                                        <td>
+                                            <button type="button" class="@GetQualityCountButtonClass(item.Month, SubmittedDetailType)" @onclick="@(() => SelectQualityDetailAsync(item.Month, SubmittedDetailType))">@item.SubmittedCount</button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="@GetQualityCountButtonClass(item.Month, UnsubmittedDetailType)" @onclick="@(() => SelectQualityDetailAsync(item.Month, UnsubmittedDetailType))">@item.UnsubmittedCount</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </MudPaper>
+
+            <MudPaper Class="list-panel quality-detail-panel" Elevation="0">
+                <div class="list-toolbar">
+                    <div class="list-title">
+                        <strong>@QualityDetailTitle</strong>
+                        <span>@QualityDetailSubtitle</span>
+                    </div>
+                </div>
+                @if (!_selectedQualityMonth.HasValue)
+                {
+                    <div class="empty-row">点击左侧表格【已/未上报医院数】可查看详情</div>
+                }
+                else
+                {
+                    <div class="quality-detail-filter">
+                        <MudSelect T="string" @bind-Value="_qualityDetailHospitalFilter" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem T="string" Value="@("")">全部医院</MudSelectItem>
+                            @foreach (var hospital in _hospitalOptions)
+                            {
+                                <MudSelectItem T="string" Value="@hospital.Id">@hospital.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadQualityCenterDetailAsync">查询</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetQualityDetailFilterAsync">重置</MudButton>
+                    </div>
+                    @if (_qualityHospitalDetails.Count == 0)
+                    {
+                        <div class="empty-row">未找到医院明细</div>
+                    }
+                    else
+                    {
+                        <div class="table-wrap">
+                            <table class="quality-table quality-hospital-table">
+                                <thead>
+                                    <tr>
+                                        <th>中心</th>
+                                        <th>填写时间</th>
+                                        <th>填报人</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _qualityHospitalDetails)
+                                    {
+                                        <tr>
+                                            <td>@item.HospitalName</td>
+                                            <td>@FormatDateTime(item.SubmitTime)</td>
+                                            <td>@ShowValue(item.UserName)</td>
+                                            <td class="operation-cell">
+                                                @if (item.QualityId.HasValue)
+                                                {
+                                                    <div class="quality-row-actions">
+                                                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => OpenQuality(item.QualityId.Value))">查看</MudButton>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="muted">未上报</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </MudPaper>
+        </div>
+    }
+    else
+    {
+    <MudPaper Class="list-panel quality-list-panel" Elevation="0">
+        @if (_isLoading)
+        {
+            <div class="loading-row">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                <span>正在加载质控报表</span>
+            </div>
+        }
+        else if (_reports.Count == 0)
+        {
+            <div class="empty-row">未找到质控报表</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="quality-table">
+                    <thead>
+                        <tr>
+                            <th>报表</th>
+                            <th>质控月份</th>
+                            <th>疾病类型</th>
+                            <th>医院</th>
+                            <th>质控员</th>
+                            <th>状态</th>
+                            <th>填写时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _reports)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="report-name">@item.Name</div>
+                                    <div class="muted">@item.OldQualityId</div>
+                                </td>
+                                <td>@FormatDate(item.QualityDate)</td>
+                                <td><span class="quality-cell-text" title="@ShowValue(item.TemplateName)">@ShowValue(item.TemplateName)</span></td>
+                                <td><span class="quality-cell-text" title="@ShowValue(item.HospitalName)">@ShowValue(item.HospitalName)</span></td>
+                                <td><span class="quality-cell-text" title="@ShowValue(item.QualityUserName)">@ShowValue(item.QualityUserName)</span></td>
+                                <td><span class="status-pill @GetStatusClass(item.Status)">@GetStatusText(item.Status)</span></td>
+                                <td>@FormatDateTime(item.FilledAt)</td>
+                                <td class="operation-cell">
+                                    <div class="quality-row-actions">
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Visibility"
+                                                   OnClick="@(() => OpenQuality(item.Id))">查看</MudButton>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <div class="pager quality-pager">
+            <div class="pager-total">共 @_totalCount 条</div>
+            <button type="button" class="pager-page wide" disabled="@(_pageIndex == 0 || _isLoading)" @onclick="PreviousPageAsync">上一页</button>
+            <div class="pager-summary">第 @(_pageIndex + 1) / @TotalPages 页 · 每页 @PageSize 条</div>
+            <button type="button" class="pager-page wide" disabled="@(_pageIndex + 1 >= TotalPages || _isLoading)" @onclick="NextPageAsync">下一页</button>
+        </div>
+    </MudPaper>
+    }
+</div>
+
+@code {
+    private const int PageSize = 20;
+    private const string SubmittedDetailType = "submitted";
+    private const string UnsubmittedDetailType = "unsubmitted";
+
+    private readonly List<QualityListItem> _reports = [];
+    private readonly List<QualityMonthSummary> _qualityMonthSummaries = [];
+    private readonly List<QualityHospitalDetail> _qualityHospitalDetails = [];
+    private readonly List<HospitalOption> _hospitalOptions = [];
+    private readonly List<TemplateOption> _templateOptions = [];
+    private readonly List<string> _scopeHospitalIds = [];
+    private string _keyword = "";
+    private string _hospitalFilterValue = "";
+    private string _templateFilterValue = "";
+    private string _monthValue = "";
+    private string _statusValue = "";
+    private string _exportStartMonth = "";
+    private string _exportEndMonth = "";
+    private string _exportHospitalId = "";
+    private string _exportTemplateId = "";
+    private string _qualityDetailType = "";
+    private string _qualityDetailHospitalFilter = "";
+    private int _pageIndex;
+    private int _totalCount;
+    private int _hospitalCount;
+    private int _submittedHospitalCount;
+    private int _unsubmittedHospitalCount;
+    private string _summaryMonthText = "";
+    private readonly List<string> _unsubmittedHospitals = [];
+    private bool _isLoading;
+    private bool _showExportPanel;
+    private bool _showCreateQualityModal;
+    private DateTime? _selectedQualityMonth;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    private bool IsQualityCenterMode => HasPermission(PermissionConstants.QualityManage) && !HasPermission(PermissionConstants.QualityCreate);
+
+    private string QualityDetailTitle
+        => !_selectedQualityMonth.HasValue
+            ? "医院明细"
+            : $"{_selectedQualityMonth.Value:yyyy-MM} {(_qualityDetailType == SubmittedDetailType ? "已上报医院" : "未上报医院")}";
+
+    private string QualityDetailSubtitle
+        => !_selectedQualityMonth.HasValue ? "等待选择统计项" : $"共 {_qualityHospitalDetails.Count} 家";
+
+    private bool CanExport
+        => DateTime.TryParse($"{_exportStartMonth.Trim()}-01", out var start)
+           && DateTime.TryParse($"{_exportEndMonth.Trim()}-01", out var end)
+           && start.Date <= end.Date;
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        await LoadRoleScopesAsync();
+        await LoadFilterOptionsAsync();
+        await LoadQualityReportsAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _pageIndex = 0;
+        await LoadQualityReportsAsync();
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _keyword = "";
+        _hospitalFilterValue = "";
+        _templateFilterValue = "";
+        _monthValue = "";
+        _statusValue = "";
+        _selectedQualityMonth = null;
+        _qualityDetailType = "";
+        _qualityDetailHospitalFilter = "";
+        _qualityHospitalDetails.Clear();
+        _pageIndex = 0;
+        await LoadQualityReportsAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_pageIndex == 0)
+        {
+            return;
+        }
+
+        _pageIndex--;
+        await LoadQualityReportsAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageIndex + 1 >= TotalPages)
+        {
+            return;
+        }
+
+        _pageIndex++;
+        await LoadQualityReportsAsync();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task LoadQualityReportsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            if (IsQualityCenterMode)
+            {
+                await LoadQualityCenterSummaryAsync();
+                return;
+            }
+
+            var query = _registryContext.QualityReports.AsNoTracking();
+            query = ApplyRoleScope(query);
+            var keyword = _keyword.Trim();
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                var pattern = $"%{keyword}%";
+                var matchedHospitalIds = _hospitalOptions
+                    .Where(x => x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => x.Id)
+                    .ToList();
+                var matchedTemplateIds = _templateOptions
+                    .Where(x => x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                    .Select(x => x.Id)
+                    .ToList();
+                query = query.Where(x =>
+                    EF.Functions.ILike(x.Name, pattern)
+                    || EF.Functions.ILike(x.OldQualityId, pattern)
+                    || (x.TemplateId != null && EF.Functions.ILike(x.TemplateId, pattern))
+                    || (x.HospitalId != null && EF.Functions.ILike(x.HospitalId, pattern))
+                    || (x.QualityUserId != null && EF.Functions.ILike(x.QualityUserId, pattern))
+                    || (x.HospitalId != null && matchedHospitalIds.Contains(x.HospitalId))
+                    || (x.TemplateId != null && matchedTemplateIds.Contains(x.TemplateId)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(_hospitalFilterValue))
+            {
+                query = query.Where(x => x.HospitalId == _hospitalFilterValue);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_templateFilterValue))
+            {
+                query = query.Where(x => x.TemplateId == _templateFilterValue);
+            }
+
+            if (int.TryParse(_statusValue, out var status))
+            {
+                query = query.Where(x => x.Status == status);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_monthValue))
+            {
+                if (!DateTime.TryParse($"{_monthValue.Trim()}-01", out var month))
+                {
+                    inj_snackbar.Add("月份格式不正确", Severity.Warning);
+                    return;
+                }
+
+                var nextMonth = month.AddMonths(1);
+                query = query.Where(x => x.QualityDate >= month && x.QualityDate < nextMonth);
+            }
+
+            _totalCount = await query.CountAsync();
+            if (_pageIndex >= TotalPages)
+            {
+                _pageIndex = TotalPages - 1;
+            }
+
+            var rows = await query
+                .OrderByDescending(x => x.QualityDate)
+                .ThenByDescending(x => x.CreatedAt)
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .Select(x => new QualityListItem(
+                    x.Id,
+                    x.OldQualityId,
+                    x.Name,
+                    x.QualityDate,
+                    x.TemplateId,
+                    x.HospitalId,
+                    x.QualityUserId,
+                    null,
+                    null,
+                    null,
+                    x.Status,
+                    x.CreatedAt,
+                    x.UpdatedAt))
+                .ToListAsync();
+
+            _reports.Clear();
+            var userIds = rows
+                .Select(x => TryParseGuid(x.QualityUserId))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Distinct()
+                .ToList();
+            var hospitalIds = rows
+                .Select(x => TryParseGuid(x.HospitalId))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Distinct()
+                .ToList();
+            var users = userIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemUsers.AsNoTracking()
+                    .Where(x => userIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+            var hospitals = hospitalIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemHospitals.AsNoTracking()
+                    .Where(x => hospitalIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+            var templateNames = _templateOptions.ToDictionary(x => x.Id, x => x.Name);
+
+            _reports.AddRange(rows.Select(x => new QualityListItem(
+                x.Id,
+                x.OldQualityId,
+                x.Name,
+                x.QualityDate,
+                x.TemplateId,
+                x.HospitalId,
+                x.QualityUserId,
+                x.TemplateId != null && templateNames.TryGetValue(x.TemplateId, out var templateName) ? templateName : x.TemplateId,
+                GetDisplayName(x.HospitalId, hospitals),
+                GetDisplayName(x.QualityUserId, users),
+                x.Status,
+                x.CreatedAt,
+                x.UpdatedAt)));
+
+            if (HasAnyPermission(PermissionConstants.CaseApprove, PermissionConstants.QualityManage))
+            {
+                await LoadMonthlySummaryAsync();
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadQualityCenterSummaryAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var query = _registryContext.QualityReports.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(_monthValue))
+        {
+            if (!DateTime.TryParse($"{_monthValue.Trim()}-01", out var month))
+            {
+                inj_snackbar.Add("质控时间格式不正确", Severity.Warning);
+                _qualityMonthSummaries.Clear();
+                return;
+            }
+
+            var nextMonth = month.AddMonths(1);
+            query = query.Where(x => x.QualityDate >= month && x.QualityDate < nextMonth);
+        }
+
+        var reports = await query.ToListAsync();
+        var months = reports
+            .Select(x => new DateTime(x.QualityDate.Year, x.QualityDate.Month, 1))
+            .Distinct()
+            .OrderByDescending(x => x)
+            .ToList();
+        if (months.Count == 0 && !string.IsNullOrWhiteSpace(_monthValue) && DateTime.TryParse($"{_monthValue.Trim()}-01", out var selectedMonth))
+        {
+            months.Add(new DateTime(selectedMonth.Year, selectedMonth.Month, 1));
+        }
+
+        _qualityMonthSummaries.Clear();
+        foreach (var month in months)
+        {
+            var nextMonth = month.AddMonths(1);
+            var submittedHospitalIds = reports
+                .Where(x => x.QualityDate >= month && x.QualityDate < nextMonth && x.Status == 1 && !string.IsNullOrWhiteSpace(x.HospitalId))
+                .Select(x => x.HospitalId!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _qualityMonthSummaries.Add(new QualityMonthSummary(
+                month,
+                submittedHospitalIds.Count,
+                Math.Max(0, _hospitalOptions.Count - submittedHospitalIds.Count)));
+        }
+
+        if (_selectedQualityMonth.HasValue && !_qualityMonthSummaries.Any(x => x.Month == _selectedQualityMonth.Value))
+        {
+            _selectedQualityMonth = null;
+            _qualityDetailType = "";
+            _qualityHospitalDetails.Clear();
+        }
+    }
+
+    private async Task SelectQualityDetailAsync(DateTime month, string detailType)
+    {
+        _selectedQualityMonth = month;
+        _qualityDetailType = detailType;
+        _qualityDetailHospitalFilter = "";
+        await LoadQualityCenterDetailAsync();
+    }
+
+    private async Task ResetQualityDetailFilterAsync()
+    {
+        _qualityDetailHospitalFilter = "";
+        await LoadQualityCenterDetailAsync();
+    }
+
+    private async Task LoadQualityCenterDetailAsync()
+    {
+        if (_registryContext == null || !_selectedQualityMonth.HasValue)
+        {
+            return;
+        }
+
+        var month = _selectedQualityMonth.Value;
+        var nextMonth = month.AddMonths(1);
+        var reports = await _registryContext.QualityReports.AsNoTracking()
+            .Where(x => x.QualityDate >= month && x.QualityDate < nextMonth)
+            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.CreatedAt)
+            .ToListAsync();
+        var submittedReportByHospital = reports
+            .Where(x => x.Status == 1 && !string.IsNullOrWhiteSpace(x.HospitalId))
+            .GroupBy(x => x.HospitalId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+
+        var submittedIds = reports
+            .Where(x => x.Status == 1 && !string.IsNullOrWhiteSpace(x.HospitalId))
+            .Select(x => x.HospitalId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hospitals = _hospitalOptions.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_qualityDetailHospitalFilter))
+        {
+            hospitals = hospitals.Where(x => x.Id == _qualityDetailHospitalFilter);
+        }
+
+        var userIds = reports
+            .Select(x => TryParseGuid(x.QualityUserId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var users = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => userIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+
+        _qualityHospitalDetails.Clear();
+        foreach (var hospital in hospitals.OrderBy(x => x.Name))
+        {
+            var isSubmitted = submittedIds.Contains(hospital.Id);
+            if (_qualityDetailType == SubmittedDetailType && !isSubmitted)
+            {
+                continue;
+            }
+
+            if (_qualityDetailType == UnsubmittedDetailType && isSubmitted)
+            {
+                continue;
+            }
+
+            submittedReportByHospital.TryGetValue(hospital.Id, out var report);
+            _qualityHospitalDetails.Add(new QualityHospitalDetail(
+                hospital.Id,
+                hospital.Name,
+                _qualityDetailType == SubmittedDetailType ? report?.Id : null,
+                report?.UpdatedAt ?? report?.CreatedAt,
+                GetDisplayName(report?.QualityUserId, users)));
+        }
+    }
+
+    private void OpenQuality(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.QualityDetail(id));
+
+    private void CreateQuality() => _showCreateQualityModal = true;
+
+    private void CloseCreateQualityModal() => _showCreateQualityModal = false;
+
+    private void OnQualityCreated(Guid qualityId)
+    {
+        _showCreateQualityModal = false;
+        inj_navigationManager.NavigateTo(RouteConstants.QualityDetail(qualityId));
+    }
+
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId))
+        {
+            return;
+        }
+
+        var hospitalIds = await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId.ToString())
+            .Distinct()
+            .ToListAsync();
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(hospitalIds);
+    }
+
+    private async Task LoadFilterOptionsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var hospitalQuery = _registryContext.SystemHospitals.AsNoTracking();
+        if (!HasPermission(PermissionConstants.QualityManage) && _scopeHospitalIds.Count > 0)
+        {
+            var scopeIds = _scopeHospitalIds.Select(TryParseGuid).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+            hospitalQuery = hospitalQuery.Where(x => scopeIds.Contains(x.Id));
+        }
+
+        _hospitalOptions.Clear();
+        _hospitalOptions.AddRange(await hospitalQuery
+            .OrderBy(x => x.Name)
+            .Select(x => new HospitalOption(x.Id.ToString(), x.Name))
+            .ToListAsync());
+
+        _templateOptions.Clear();
+        _templateOptions.AddRange(await _registryContext.FormTemplateMaps.AsNoTracking()
+            .Where(x => x.BusinessType == "quality")
+            .OrderBy(x => x.TemplateName)
+            .Select(x => new TemplateOption(x.SourceFollowTemplateId, x.TemplateName))
+            .Distinct()
+            .ToListAsync());
+    }
+
+    private IQueryable<QualityReport> ApplyRoleScope(IQueryable<QualityReport> query)
+    {
+        if (HasPermission(PermissionConstants.QualityManage))
+        {
+            return query;
+        }
+
+        if (_scopeHospitalIds.Count > 0)
+        {
+            query = query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
+        }
+
+        return query;
+    }
+
+    private void ToggleExportPanel()
+    {
+        _showExportPanel = !_showExportPanel;
+        if (!_showExportPanel)
+        {
+            return;
+        }
+
+        var month = DateTime.Today;
+        if (!string.IsNullOrWhiteSpace(_monthValue) && DateTime.TryParse($"{_monthValue.Trim()}-01", out var parsed))
+        {
+            month = parsed;
+        }
+
+        _exportStartMonth = string.IsNullOrWhiteSpace(_exportStartMonth) ? month.ToString("yyyy-MM") : _exportStartMonth;
+        _exportEndMonth = string.IsNullOrWhiteSpace(_exportEndMonth) ? month.ToString("yyyy-MM") : _exportEndMonth;
+        _exportHospitalId = string.IsNullOrWhiteSpace(_exportHospitalId) ? _hospitalFilterValue : _exportHospitalId;
+        _exportTemplateId = string.IsNullOrWhiteSpace(_exportTemplateId) ? _templateFilterValue : _exportTemplateId;
+    }
+
+    private string BuildExportUrl()
+    {
+        var parts = new List<string>
+        {
+            $"start={Uri.EscapeDataString(_exportStartMonth.Trim())}",
+            $"end={Uri.EscapeDataString(_exportEndMonth.Trim())}"
+        };
+        if (!string.IsNullOrWhiteSpace(_exportHospitalId))
+        {
+            parts.Add($"hospitalId={Uri.EscapeDataString(_exportHospitalId.Trim())}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_exportTemplateId))
+        {
+            parts.Add($"templateId={Uri.EscapeDataString(_exportTemplateId.Trim())}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_statusValue))
+        {
+            parts.Add($"status={Uri.EscapeDataString(_statusValue.Trim())}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_keyword))
+        {
+            parts.Add($"keyword={Uri.EscapeDataString(_keyword.Trim())}");
+        }
+
+        return $"/exports/quality.xlsx?{string.Join("&", parts)}";
+    }
+
+    private async Task LoadMonthlySummaryAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var month = DateTime.Today;
+        if (!string.IsNullOrWhiteSpace(_monthValue) && !DateTime.TryParse($"{_monthValue.Trim()}-01", out month))
+        {
+            month = DateTime.Today;
+        }
+
+        month = new DateTime(month.Year, month.Month, 1);
+        var nextMonth = month.AddMonths(1);
+        _summaryMonthText = month.ToString("yyyy-MM");
+
+        var submittedHospitalIds = await ApplyRoleScope(_registryContext.QualityReports.AsNoTracking())
+            .Where(x => x.QualityDate >= month && x.QualityDate < nextMonth && x.Status == 1 && x.HospitalId != null)
+            .Select(x => x.HospitalId!)
+            .Distinct()
+            .ToListAsync();
+        var submittedSet = submittedHospitalIds
+            .Select(TryParseGuid)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToHashSet();
+
+        _hospitalCount = _hospitalOptions.Count;
+        _submittedHospitalCount = _hospitalOptions.Count(x => Guid.TryParse(x.Id, out var id) && submittedSet.Contains(id));
+        _unsubmittedHospitals.Clear();
+        _unsubmittedHospitals.AddRange(_hospitalOptions.Where(x => !Guid.TryParse(x.Id, out var id) || !submittedSet.Contains(id)).Select(x => x.Name));
+        _unsubmittedHospitalCount = _unsubmittedHospitals.Count;
+    }
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private static string? GetDisplayName(string? id, IReadOnlyDictionary<Guid, string> names)
+    {
+        var guid = TryParseGuid(id);
+        return guid.HasValue && names.TryGetValue(guid.Value, out var name) ? name : id;
+    }
+
+    private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+
+    private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string GetStatusText(int status)
+        => status switch
+        {
+            0 => "未填报",
+            1 => "已上报",
+            2 => "已驳回",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetStatusClass(int status)
+        => status switch
+        {
+            0 => "status-draft",
+            1 => "status-submitted",
+            2 => "status-returned",
+            _ => "status-unknown"
+        };
+
+    private string GetQualityCountButtonClass(DateTime month, string detailType)
+        => _selectedQualityMonth == month && string.Equals(_qualityDetailType, detailType, StringComparison.Ordinal)
+            ? "count-link active"
+            : "count-link";
+
+    private sealed record QualityListItem(
+        Guid Id,
+        string OldQualityId,
+        string Name,
+        DateTime QualityDate,
+        string? TemplateId,
+        string? HospitalId,
+        string? QualityUserId,
+        string? TemplateName,
+        string? HospitalName,
+        string? QualityUserName,
+        int Status,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt)
+    {
+        public DateTime FilledAt => UpdatedAt ?? CreatedAt;
+    }
+
+    private sealed record QualityMonthSummary(DateTime Month, int SubmittedCount, int UnsubmittedCount)
+    {
+        public string MonthText => Month.ToString("yyyy-MM");
+    }
+
+    private sealed record QualityHospitalDetail(string HospitalId, string HospitalName, Guid? QualityId, DateTime? SubmitTime, string? UserName);
+
+    private sealed record HospitalOption(string Id, string Name);
+    private sealed record TemplateOption(string Id, string Name);
+}

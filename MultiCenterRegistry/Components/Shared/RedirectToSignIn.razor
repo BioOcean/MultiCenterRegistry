@@ -1,0 +1,9 @@
+﻿@attribute [AllowAnonymous]
+
+@code {
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(inj_navigationManager.Uri);
+        inj_navigationManager.NavigateTo($"{RouteConstants.Login}?returnUrl={returnUrl}", true);
+    }
+}

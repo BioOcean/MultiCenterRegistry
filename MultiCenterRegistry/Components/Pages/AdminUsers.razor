@@ -1,0 +1,820 @@
+﻿@page "/admin/users"
+@inherits BasePage
+
+<PageTitle>账号管理</PageTitle>
+
+<div class="admin-page admin-users-page">
+    <div class="page-header">
+        <div>
+            <h1>账号管理</h1>
+            <div class="page-subtitle">共 @_totalCount 个账号</div>
+        </div>
+        <div class="header-actions">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="StartCreateUser">创建账号</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadUsersAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    @if (_noPermission)
+    {
+        <section class="empty-panel">当前角色没有账号管理权限。</section>
+    }
+    else
+    {
+        @if (_showEditor)
+        {
+            <div class="account-dialog-mask" role="presentation">
+                <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+                    <div class="account-dialog-head">
+                        <div class="account-dialog-title">
+                            <span class="account-dialog-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.PersonAddAlt1" />
+                            </span>
+                            <span id="account-modal-title">@(_edit.Id.HasValue ? "编辑账号" : "创建账号")</span>
+                        </div>
+                        <MudIconButton Class="account-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelEdit" Disabled="@_isSaving" />
+                    </div>
+
+                    <div class="account-dialog-body">
+                        <div class="account-form">
+                            <label class="account-field">
+                                <span>账号</span>
+                                <input class="account-input" maxlength="64" @bind="_edit.Account" disabled="@_edit.Id.HasValue" />
+                            </label>
+                            <label class="account-field">
+                                <span>姓名</span>
+                                <input class="account-input" maxlength="64" @bind="_edit.DisplayName" />
+                            </label>
+                            <label class="account-field">
+                                <span>邮箱</span>
+                                <input class="account-input" maxlength="128" @bind="_edit.Email" />
+                            </label>
+                            <label class="account-field">
+                                <span>@(_edit.Id.HasValue ? "重置密码" : "初始密码")</span>
+                                <input class="account-input" type="password" maxlength="64" @bind="_edit.Password" placeholder="@(_edit.Id.HasValue ? "留空则不修改密码" : "默认 123456")" />
+                            </label>
+                            <label class="account-field">
+                                <span>医院范围</span>
+                                <select class="account-input" value="@_edit.HospitalIdText" @onchange="OnHospitalChanged">
+                                    <option value="">未设置</option>
+                                    @foreach (var hospital in _hospitals)
+                                    {
+                                        <option value="@hospital.Id">@hospital.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="account-field">
+                                <span>科室范围</span>
+                                <select class="account-input" value="@_edit.DepartmentIdText" @onchange="OnDepartmentChanged">
+                                    <option value="">全部科室</option>
+                                    @foreach (var department in FilteredDepartments)
+                                    {
+                                        <option value="@department.Id">@department.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <div class="account-flags">
+                                <label class="account-check">
+                                    <input type="checkbox" checked="@_edit.IsValid" @onchange="OnEditValidChanged" />
+                                    <span>启用账号</span>
+                                </label>
+                                <label class="account-check">
+                                    <input type="checkbox" checked="@_edit.MustChangePassword" @onchange="OnEditMustChangePasswordChanged" />
+                                    <span>首次登录修改密码</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <section class="account-role-section">
+                            <div class="account-role-title">本系统角色</div>
+                            @if (_roles.Count == 0)
+                            {
+                                <div class="muted">暂无可分配角色</div>
+                            }
+                            else
+                            {
+                                <div class="account-role-list">
+                                    @foreach (var role in _roles)
+                                    {
+                                        <label class="account-role-check">
+                                            <input type="checkbox"
+                                                   checked="@_edit.SelectedRoleIds.Contains(role.Id)"
+                                                   @onchange="@((ChangeEventArgs args) => ToggleRole(role.Id, args))" />
+                                            <span>@role.Name</span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </section>
+                    </div>
+
+                    <div class="account-dialog-actions">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="CancelEdit" Disabled="@_isSaving">取消</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveUserAsync" Disabled="@_isSaving">保存</MudButton>
+                    </div>
+                </section>
+            </div>
+        }
+
+        <section class="user-filter-panel">
+            <div class="filter-grid">
+                <div class="filter-cell keyword-cell">
+                    <MudTextField T="string"
+                                  @bind-Value="_keyword"
+                                  Label="姓名"
+                                  Placeholder="请输入姓名"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true"
+                                  OnKeyDown="OnSearchKeyDown" />
+                </div>
+                <div class="filter-cell">
+                    <MudSelect T="string" @bind-Value="_hospitalFilterValue" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem T="string" Value="@("")">全部医院</MudSelectItem>
+                        @foreach (var hospital in _hospitals)
+                        {
+                            <MudSelectItem T="string" Value="@hospital.Id.ToString()">@hospital.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div class="filter-cell">
+                    <MudSelect T="string" @bind-Value="_roleFilterValue" Label="角色" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem T="string" Value="@("")">全部角色</MudSelectItem>
+                        @foreach (var role in _roles)
+                        {
+                            <MudSelectItem T="string" Value="@role.Id.ToString()">@role.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div class="filter-actions">
+                    <div class="filter-action-bar">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetFiltersAsync">重置</MudButton>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="user-list-panel">
+            @if (_isLoading)
+            {
+                <div class="loading-row">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    <span>正在加载账号</span>
+                </div>
+            }
+            else if (_users.Count == 0)
+            {
+                <div class="empty-row">未找到账号</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="admin-table">
+                        <colgroup>
+                            <col class="col-account" />
+                            <col class="col-password" />
+                            <col class="col-name" />
+                            <col class="col-project" />
+                            <col class="col-roles" />
+                            <col class="col-hospitals" />
+                            <col class="col-email" />
+                            <col class="col-actions" />
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>用户名</th>
+                                <th>密码</th>
+                                <th>姓名</th>
+                                <th>项目名称</th>
+                                <th>角色</th>
+                                <th>医院</th>
+                                <th>邮箱</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _users)
+                            {
+                                var roleNames = string.Join("、", item.RoleNames);
+                                var hospitalNames = string.Join("、", item.HospitalNames);
+                                <tr class="@GetUserRowClass(item)">
+                                    <td>@item.Account</td>
+                                    <td>........</td>
+                                    <td>@item.DisplayName</td>
+                                    <td>
+                                        <span class="project-name">@item.ProjectName</span>
+                                    </td>
+                                    <td>
+                                        <span class="table-text-list" title="@ShowValue(roleNames)">@ShowValue(roleNames)</span>
+                                    </td>
+                                    <td>
+                                        <span class="table-text-list" title="@ShowValue(hospitalNames)">@ShowValue(hospitalNames)</span>
+                                    </td>
+                                    <td><span class="table-text-list" title="@ShowValue(item.Email)">@ShowValue(item.Email)</span></td>
+                                    <td>
+                                        <div class="row-actions">
+                                            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Disabled="@(!item.IsValid)" OnClick="@(() => EditUserAsync(item.Id))">编辑</MudButton>
+                                            <MudButton Variant="Variant.Text" Color="@(item.IsValid ? Color.Error : Color.Success)" Size="Size.Small" OnClick="@(() => ToggleUserStatusAsync(item))">@(item.IsValid ? "禁用" : "启用")</MudButton>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="pager user-pager">
+                <div class="pager-total">共 @_totalCount 条</div>
+                <div class="pager-pages">
+                    <button type="button" class="pager-page wide" disabled="@(_pageIndex == 0 || _isLoading)" @onclick="PreviousPageAsync">上一页</button>
+                    @foreach (var page in GetPagerItems())
+                    {
+                        if (page < 0)
+                        {
+                            <span class="pager-ellipsis">...</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="@GetPageButtonClass(page)" disabled="@_isLoading" @onclick="@(() => GoToPageAsync(page))">@(page + 1)</button>
+                        }
+                    }
+                    <button type="button" class="pager-page wide" disabled="@(_pageIndex + 1 >= TotalPages || _isLoading)" @onclick="NextPageAsync">下一页</button>
+                </div>
+                <div class="pager-summary">第 @(_pageIndex + 1) / @TotalPages 页 · 每页 @PageSize 条</div>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private const int PageSize = 10;
+    private const string DefaultPassword = "123456";
+    private readonly List<UserListItem> _users = [];
+    private readonly List<RoleOption> _roles = [];
+    private readonly List<HospitalOption> _hospitals = [];
+    private readonly List<DepartmentOption> _departments = [];
+    private UserEditModel _edit = new();
+    private string _keyword = "";
+    private string _hospitalFilterValue = "";
+    private string _roleFilterValue = "";
+    private int _pageIndex;
+    private int _totalCount;
+    private bool _isLoading;
+    private bool _isSaving;
+    private bool _noPermission;
+    private bool _showEditor;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    private IEnumerable<DepartmentOption> FilteredDepartments
+        => Guid.TryParse(_edit.HospitalIdText, out var hospitalId)
+            ? _departments.Where(x => x.HospitalId == hospitalId)
+            : [];
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        await LoadLookupsAsync();
+        await LoadUsersAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _pageIndex = 0;
+        await LoadUsersAsync();
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _keyword = "";
+        _hospitalFilterValue = "";
+        _roleFilterValue = "";
+        _pageIndex = 0;
+        await LoadUsersAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_pageIndex == 0)
+        {
+            return;
+        }
+
+        _pageIndex--;
+        await LoadUsersAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageIndex + 1 >= TotalPages)
+        {
+            return;
+        }
+
+        _pageIndex++;
+        await LoadUsersAsync();
+    }
+
+    private async Task GoToPageAsync(int pageIndex)
+    {
+        if (_isLoading || pageIndex == _pageIndex || pageIndex < 0 || pageIndex >= TotalPages)
+        {
+            return;
+        }
+
+        _pageIndex = pageIndex;
+        await LoadUsersAsync();
+    }
+
+    private IEnumerable<int> GetPagerItems()
+    {
+        if (TotalPages <= 7)
+        {
+            for (var i = 0; i < TotalPages; i++)
+            {
+                yield return i;
+            }
+
+            yield break;
+        }
+
+        yield return 0;
+        var start = Math.Max(1, _pageIndex - 2);
+        var end = Math.Min(TotalPages - 2, _pageIndex + 2);
+        if (start > 1)
+        {
+            yield return -1;
+        }
+
+        for (var i = start; i <= end; i++)
+        {
+            yield return i;
+        }
+
+        if (end < TotalPages - 2)
+        {
+            yield return -1;
+        }
+
+        yield return TotalPages - 1;
+    }
+
+    private string GetPageButtonClass(int pageIndex)
+        => pageIndex == _pageIndex ? "pager-page active" : "pager-page";
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        if (_registryContext == null || !HasPermission(PermissionConstants.AccountManager))
+        {
+            return;
+        }
+
+        var mcrRoleIds = await GetMcrRoleIdsAsync();
+        _roles.Clear();
+        _roles.AddRange(await _registryContext.SystemRoles.AsNoTracking()
+            .Where(x => x.IsValid && mcrRoleIds.Contains(x.Id))
+            .OrderBy(x => x.Name)
+            .Select(x => new RoleOption(x.Id, x.Name))
+            .ToListAsync());
+
+        _hospitals.Clear();
+        _hospitals.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new HospitalOption(x.Id, x.Name))
+            .ToListAsync());
+
+        _departments.Clear();
+        _departments.AddRange(await _registryContext.SystemDepartments.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new DepartmentOption(x.Id, x.HospitalId, string.IsNullOrWhiteSpace(x.DisplayName) ? x.Name : x.DisplayName!))
+            .ToListAsync());
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!HasPermission(PermissionConstants.AccountManager))
+        {
+            _noPermission = true;
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            if (_roles.Count == 0)
+            {
+                await LoadLookupsAsync();
+            }
+
+            var mcrRoleIds = _roles.Select(x => x.Id).ToList();
+            var query = _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => _registryContext.SystemMapUserRoles.Any(role => role.UserId == x.Id && mcrRoleIds.Contains(role.RoleId)));
+            var keyword = _keyword.Trim();
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                var pattern = $"%{keyword}%";
+                query = query.Where(x => EF.Functions.ILike(x.DisplayName, pattern));
+            }
+
+            if (Guid.TryParse(_roleFilterValue, out var roleFilterId))
+            {
+                query = query.Where(x => _registryContext.SystemMapUserRoles.Any(role => role.UserId == x.Id && role.RoleId == roleFilterId));
+            }
+
+            if (Guid.TryParse(_hospitalFilterValue, out var hospitalFilterId))
+            {
+                query = query.Where(x => _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId));
+            }
+
+            _totalCount = await query.CountAsync();
+            var users = await query
+                .OrderBy(x => x.Account)
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+
+            var userIds = users.Select(x => x.Id).ToList();
+            var roleRows = new List<UserRoleRow>();
+            var scopeRows = new List<UserScopeRow>();
+
+            if (userIds.Count > 0 && mcrRoleIds.Count > 0)
+            {
+                roleRows = await _registryContext.SystemMapUserRoles.AsNoTracking()
+                    .Where(x => userIds.Contains(x.UserId) && mcrRoleIds.Contains(x.RoleId))
+                    .Join(
+                        _registryContext.SystemRoles.AsNoTracking().Where(x => x.IsValid),
+                        userRole => userRole.RoleId,
+                        role => role.Id,
+                        (userRole, role) => new UserRoleRow(userRole.UserId, userRole.RoleId, role.Name))
+                    .ToListAsync();
+
+                scopeRows = await _registryContext.SystemUserRoleScopes.AsNoTracking()
+                    .Where(x => userIds.Contains(x.UserId) && mcrRoleIds.Contains(x.RoleId))
+                    .Select(x => new UserScopeRow(x.UserId, x.RoleId, x.HospitalName, x.DepartmentName))
+                    .ToListAsync();
+            }
+
+            var rolesByUser = roleRows
+                .GroupBy(x => x.UserId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(item => item.RoleName).Distinct().OrderBy(role => role).ToList());
+
+            var hospitalsByUser = scopeRows
+                .GroupBy(x => x.UserId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(item => item.HospitalName)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct()
+                        .OrderBy(x => x)
+                        .ToList());
+
+            var projectName = inj_configuration.GetValue<string>("AppSettings:SystemName") ?? "介入数据填报与管理平台";
+            _users.Clear();
+            _users.AddRange(users.Select(x => new UserListItem
+            {
+                Id = x.Id,
+                Account = x.Account,
+                DisplayName = x.DisplayName,
+                Email = x.Email,
+                ProjectName = projectName,
+                IsValid = x.IsValid,
+                RoleNames = rolesByUser.TryGetValue(x.Id, out var roles) ? roles : [],
+                HospitalNames = hospitalsByUser.TryGetValue(x.Id, out var hospitals) ? hospitals : []
+            }));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void StartCreateUser()
+    {
+        _edit = new UserEditModel
+        {
+            IsValid = true,
+            MustChangePassword = true,
+            Password = DefaultPassword
+        };
+        _showEditor = true;
+    }
+
+    private async Task EditUserAsync(Guid id)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var user = await _registryContext.SystemUsers.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+        if (user == null)
+        {
+            inj_snackbar.Add("账号不存在", Severity.Warning);
+            return;
+        }
+
+        var mcrRoleIds = _roles.Select(x => x.Id).ToList();
+        var selectedRoleIds = await _registryContext.SystemMapUserRoles.AsNoTracking()
+            .Where(x => x.UserId == id && mcrRoleIds.Contains(x.RoleId))
+            .Select(x => x.RoleId)
+            .ToListAsync();
+
+        var scope = await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == id && mcrRoleIds.Contains(x.RoleId))
+            .OrderBy(x => x.HospitalName)
+            .FirstOrDefaultAsync();
+
+        _edit = new UserEditModel
+        {
+            Id = user.Id,
+            Account = user.Account,
+            DisplayName = user.DisplayName,
+            Email = user.Email ?? "",
+            IsValid = user.IsValid,
+            MustChangePassword = user.MustChangePassword,
+            HospitalIdText = scope?.HospitalId.ToString() ?? "",
+            DepartmentIdText = scope?.DepartmentId?.ToString() ?? "",
+            SelectedRoleIds = selectedRoleIds.ToHashSet()
+        };
+        _showEditor = true;
+    }
+
+    private void CancelEdit()
+    {
+        _edit = new UserEditModel();
+        _showEditor = false;
+    }
+
+    private async Task SaveUserAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AccountManager))
+        {
+            return;
+        }
+
+        var account = _edit.Account.Trim();
+        var displayName = _edit.DisplayName.Trim();
+        var email = _edit.Email.Trim();
+        if (string.IsNullOrWhiteSpace(account) || string.IsNullOrWhiteSpace(displayName))
+        {
+            inj_snackbar.Add("账号和姓名不能为空", Severity.Warning);
+            return;
+        }
+
+        if (_edit.SelectedRoleIds.Count == 0)
+        {
+            inj_snackbar.Add("请至少选择一个本系统角色", Severity.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_edit.DepartmentIdText) && string.IsNullOrWhiteSpace(_edit.HospitalIdText))
+        {
+            inj_snackbar.Add("选择科室前必须先选择医院", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var duplicateExists = await _registryContext.SystemUsers.AsNoTracking()
+                .AnyAsync(x => EF.Functions.ILike(x.Account, account) && (!_edit.Id.HasValue || x.Id != _edit.Id.Value));
+            if (duplicateExists)
+            {
+                inj_snackbar.Add("账号已存在", Severity.Warning);
+                return;
+            }
+
+            var isNew = !_edit.Id.HasValue;
+            var user = isNew
+                ? new SystemUser { Id = Guid.NewGuid(), SourceType = "mcr", CanGrantToOther = false }
+                : await _registryContext.SystemUsers.FirstOrDefaultAsync(x => x.Id == _edit.Id!.Value);
+
+            if (user == null)
+            {
+                inj_snackbar.Add("账号不存在", Severity.Warning);
+                return;
+            }
+
+            user.Account = account;
+            user.DisplayName = displayName;
+            user.Email = string.IsNullOrWhiteSpace(email) ? null : email;
+            user.IsValid = _edit.IsValid;
+            user.MustChangePassword = _edit.MustChangePassword;
+            user.SourceType = string.IsNullOrWhiteSpace(user.SourceType) ? "mcr" : user.SourceType;
+
+            var password = _edit.Password.Trim();
+            if (isNew || !string.IsNullOrWhiteSpace(password))
+            {
+                user.Password = new PasswordHasher().Hash(string.IsNullOrWhiteSpace(password) ? DefaultPassword : password);
+                user.MustChangePassword = true;
+            }
+
+            if (isNew)
+            {
+                _registryContext.SystemUsers.Add(user);
+            }
+
+            await SaveUserRolesAsync(user.Id);
+            await SaveUserScopesAsync(user.Id);
+            _registryContext.OperationLogs.Add(CreateOperationLog("账号管理", isNew ? "创建账号" : "编辑账号", "system.sys_user", user.Id));
+            await _registryContext.SaveChangesAsync();
+
+            inj_snackbar.Add(isNew ? "账号已创建，初始密码为 123456" : "账号已保存", Severity.Success);
+            CancelEdit();
+            await LoadUsersAsync();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task SaveUserRolesAsync(Guid userId)
+    {
+        var mcrRoleIds = _roles.Select(x => x.Id).ToList();
+        var existing = await _registryContext!.SystemMapUserRoles
+            .Where(x => x.UserId == userId && mcrRoleIds.Contains(x.RoleId))
+            .ToListAsync();
+        _registryContext.SystemMapUserRoles.RemoveRange(existing);
+
+        foreach (var roleId in _edit.SelectedRoleIds)
+        {
+            _registryContext.SystemMapUserRoles.Add(new SystemMapUserRole { UserId = userId, RoleId = roleId });
+        }
+    }
+
+    private async Task SaveUserScopesAsync(Guid userId)
+    {
+        var mcrRoleIds = _roles.Select(x => x.Id).ToList();
+        var existing = await _registryContext!.SystemUserRoleScopes
+            .Where(x => x.UserId == userId && mcrRoleIds.Contains(x.RoleId))
+            .ToListAsync();
+        _registryContext.SystemUserRoleScopes.RemoveRange(existing);
+
+        if (!Guid.TryParse(_edit.HospitalIdText, out var hospitalId))
+        {
+            return;
+        }
+
+        var hospital = _hospitals.FirstOrDefault(x => x.Id == hospitalId);
+        if (hospital == null)
+        {
+            return;
+        }
+
+        Guid? departmentId = null;
+        string? departmentName = null;
+        if (Guid.TryParse(_edit.DepartmentIdText, out var parsedDepartmentId))
+        {
+            var department = _departments.FirstOrDefault(x => x.Id == parsedDepartmentId && x.HospitalId == hospitalId);
+            if (department != null)
+            {
+                departmentId = department.Id;
+                departmentName = department.Name;
+            }
+        }
+
+        foreach (var roleId in _edit.SelectedRoleIds)
+        {
+            _registryContext.SystemUserRoleScopes.Add(new SystemUserRoleScope
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                RoleId = roleId,
+                HospitalId = hospital.Id,
+                HospitalName = hospital.Name,
+                DepartmentId = departmentId,
+                DepartmentName = departmentName,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    private async Task ToggleUserStatusAsync(UserListItem item)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AccountManager))
+        {
+            return;
+        }
+
+        if (Guid.TryParse(CurrentUserId, out var currentUserId) && currentUserId == item.Id && item.IsValid)
+        {
+            inj_snackbar.Add("不能禁用当前登录账号", Severity.Warning);
+            return;
+        }
+
+        var action = item.IsValid ? "禁用" : "启用";
+        var confirmed = await inj_dialogService.ShowMessageBox($"{action}账号", $"确定要{action}账号 [{item.Account}] 吗？", yesText: "确定", cancelText: "取消");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var user = await _registryContext.SystemUsers.FirstOrDefaultAsync(x => x.Id == item.Id);
+        if (user == null)
+        {
+            inj_snackbar.Add("账号不存在", Severity.Warning);
+            return;
+        }
+
+        user.IsValid = !item.IsValid;
+        _registryContext.OperationLogs.Add(CreateOperationLog("账号管理", action, "system.sys_user", user.Id));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add($"账号已{action}", Severity.Success);
+        await LoadUsersAsync();
+    }
+
+    private async Task<List<Guid>> GetMcrRoleIdsAsync()
+        => await _registryContext!.SystemMapRolePermissions.AsNoTracking()
+            .Join(
+                _registryContext.SystemPermissions.AsNoTracking(),
+                rolePermission => rolePermission.PermissionId,
+                permission => permission.Id,
+                (rolePermission, permission) => new { rolePermission.RoleId, permission.Code })
+            .Where(x => x.Code != null && x.Code.StartsWith("Power-MCR-"))
+            .Select(x => x.RoleId)
+            .Distinct()
+            .ToListAsync();
+
+    private void OnHospitalChanged(ChangeEventArgs args)
+    {
+        _edit.HospitalIdText = args.Value?.ToString() ?? "";
+        _edit.DepartmentIdText = "";
+    }
+
+    private void OnDepartmentChanged(ChangeEventArgs args)
+        => _edit.DepartmentIdText = args.Value?.ToString() ?? "";
+
+    private void OnEditValidChanged(ChangeEventArgs args)
+        => _edit.IsValid = args.Value is bool value && value;
+
+    private void OnEditMustChangePasswordChanged(ChangeEventArgs args)
+        => _edit.MustChangePassword = args.Value is bool value && value;
+
+    private void ToggleRole(Guid roleId, ChangeEventArgs args)
+    {
+        if (args.Value is bool isChecked && isChecked)
+        {
+            _edit.SelectedRoleIds.Add(roleId);
+            return;
+        }
+
+        _edit.SelectedRoleIds.Remove(roleId);
+    }
+
+    private static string ShowValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string GetUserRowClass(UserListItem item)
+        => item.IsValid ? "" : "disabled-row";
+
+    private sealed class UserEditModel
+    {
+        public Guid? Id { get; set; }
+        public string Account { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public bool IsValid { get; set; } = true;
+        public bool MustChangePassword { get; set; } = true;
+        public string HospitalIdText { get; set; } = "";
+        public string DepartmentIdText { get; set; } = "";
+        public HashSet<Guid> SelectedRoleIds { get; set; } = [];
+    }
+
+    private sealed class UserListItem
+    {
+        public Guid Id { get; set; }
+        public string Account { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string? Email { get; set; }
+        public string ProjectName { get; set; } = "";
+        public bool IsValid { get; set; }
+        public List<string> RoleNames { get; set; } = [];
+        public List<string> HospitalNames { get; set; } = [];
+    }
+
+    private sealed record RoleOption(Guid Id, string Name);
+    private sealed record HospitalOption(Guid Id, string Name);
+    private sealed record DepartmentOption(Guid Id, Guid HospitalId, string Name);
+    private sealed record UserRoleRow(Guid UserId, Guid RoleId, string RoleName);
+    private sealed record UserScopeRow(Guid UserId, Guid RoleId, string HospitalName, string? DepartmentName);
+}

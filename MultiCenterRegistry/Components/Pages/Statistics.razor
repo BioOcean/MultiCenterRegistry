@@ -1,0 +1,754 @@
+﻿@page "/statistics"
+@inherits BasePage
+
+<PageTitle>数据统计</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="statistics-page">
+    <div class="page-header">
+        <div>
+            <h1>数据统计</h1>
+            <div class="page-subtitle">病例、质控、会议、评审和介入专项分布</div>
+        </div>
+        <div class="header-actions">
+            @if (HasAnyPermission(PermissionConstants.DataStatistics, PermissionConstants.QualityManage))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Href="/exports/ecmo.xlsx" Target="_blank">专项导出</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    <MudPaper Class="filter-panel" Elevation="0">
+        <MudTextField T="string"
+                      @bind-Value="_startDateValue"
+                      Label="开始日期"
+                      Placeholder="yyyy-MM-dd"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense" />
+        <MudTextField T="string"
+                      @bind-Value="_endDateValue"
+                      Label="结束日期"
+                      Placeholder="yyyy-MM-dd"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadAsync">查询</MudButton>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载统计</span>
+        </MudPaper>
+    }
+    else
+    {
+        <div class="metric-grid">
+            <MudPaper Class="metric-card" Elevation="0">
+                <span>病例</span>
+                <strong>@_caseCount</strong>
+            </MudPaper>
+            <MudPaper Class="metric-card" Elevation="0">
+                <span>质控</span>
+                <strong>@_qualityCount</strong>
+            </MudPaper>
+            <MudPaper Class="metric-card" Elevation="0">
+                <span>会议</span>
+                <strong>@_meetingCount</strong>
+            </MudPaper>
+            <MudPaper Class="metric-card" Elevation="0">
+                <span>评审</span>
+                <strong>@_appraiseCount</strong>
+            </MudPaper>
+        </div>
+
+        <div class="panel-grid">
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>病例状态</h2>
+                @foreach (var item in _caseStatus)
+                {
+                    <div class="stat-row"><span>@GetCaseStatusText(item.Key)</span><strong>@item.Value</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>质控状态</h2>
+                @foreach (var item in _qualityStatus)
+                {
+                    <div class="stat-row"><span>@GetQualityStatusText(item.Key)</span><strong>@item.Value</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>会议状态</h2>
+                @foreach (var item in _meetingStatus)
+                {
+                    <div class="stat-row"><span>@GetMeetingStatusText(item.Key)</span><strong>@item.Value</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>评审状态</h2>
+                @foreach (var item in _appraiseStatus)
+                {
+                    <div class="stat-row"><span>@GetAppraiseStatusText(item.Key)</span><strong>@item.Value</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>月度病例趋势</h2>
+                @foreach (var item in _monthlyCases)
+                {
+                    <div class="stat-row"><span>@item.Name</span><strong>@item.Count</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel" Elevation="0">
+                <h2>医院病例数</h2>
+                @foreach (var item in _hospitalCases)
+                {
+                    <div class="stat-row"><span>@item.Name</span><strong>@item.Count</strong></div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel wide-panel" Elevation="0">
+                <h2>介入专项统计</h2>
+                @if (_specialPanels.Count == 0)
+                {
+                    <div class="muted">暂无可统计专项数据</div>
+                }
+                else
+                {
+                    <div class="special-grid">
+                        @foreach (var panel in _specialPanels)
+                        {
+                            <div class="special-card">
+                                <h3>@panel.Title <span>@panel.TotalCount</span></h3>
+                                @if (panel.Items.Count == 0)
+                                {
+                                    <div class="muted">暂无数据</div>
+                                }
+                                else
+                                {
+                                    @foreach (var item in panel.Items)
+                                    {
+                                        <div class="bar-row">
+                                            <div class="bar-label">
+                                                <span>@item.Name</span>
+                                                <strong>@item.Count (@GetPercent(item.Count, panel.TotalCount))</strong>
+                                            </div>
+                                            <div class="bar-track">
+                                                <div class="bar-fill" style="@GetBarStyle(item.Count, panel.MaxCount)"></div>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </MudPaper>
+            <MudPaper Class="stat-panel wide-panel" Elevation="0">
+                <h2>题目答案分布</h2>
+                @if (_fieldStatistics.Count == 0)
+                {
+                    <div class="muted">暂无可统计题目答案</div>
+                }
+                else
+                {
+                    @foreach (var field in _fieldStatistics)
+                    {
+                        <div class="field-stat">
+                            <h3>@field.FieldName <span>@field.TotalCount</span></h3>
+                            @foreach (var option in field.Options)
+                            {
+                                <div class="stat-row">
+                                    <span>@option.Value</span>
+                                    <strong>@option.Count (@option.Percent)</strong>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </MudPaper>
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private int _caseCount;
+    private int _qualityCount;
+    private int _meetingCount;
+    private int _appraiseCount;
+    private readonly List<StatusCount> _caseStatus = [];
+    private readonly List<StatusCount> _qualityStatus = [];
+    private readonly List<StatusCount> _meetingStatus = [];
+    private readonly List<StatusCount> _appraiseStatus = [];
+    private readonly List<NamedCount> _monthlyCases = [];
+    private readonly List<NamedCount> _hospitalCases = [];
+    private readonly List<StatisticPanel> _specialPanels = [];
+    private readonly List<FieldStatistic> _fieldStatistics = [];
+    private readonly List<string> _scopeHospitalIds = [];
+    private readonly List<string> _scopeDepartmentIds = [];
+    private string _startDateValue = "";
+    private string _endDateValue = "";
+    private bool _isLoading = true;
+    private bool _hasHospitalWideScope;
+
+    private static readonly HashSet<string> SpecialFieldNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "手术类型",
+        "性别",
+        "年龄",
+        "是否急诊介入",
+        "是否组织医院或科室并发症讨论",
+        "离院方式",
+        "死亡原因",
+        "住院科室",
+        "术者"
+    };
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        await LoadRoleScopesAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!HasAnyPermission(PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.QualityManage, PermissionConstants.DataStatistics))
+        {
+            inj_snackbar.Add("当前账号没有数据统计权限", Severity.Warning);
+            _isLoading = false;
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            var caseQuery = ApplyRoleScope(_registryContext.Cases.AsNoTracking());
+            DateTime? startDateValue = null;
+            DateTime? endDateValue = null;
+
+            if (!string.IsNullOrWhiteSpace(_startDateValue))
+            {
+                if (!DateTime.TryParse(_startDateValue.Trim(), out var startDate))
+                {
+                    inj_snackbar.Add("开始日期格式不正确", Severity.Warning);
+                    return;
+                }
+
+                startDateValue = startDate.Date;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_endDateValue))
+            {
+                if (!DateTime.TryParse(_endDateValue.Trim(), out var endDate))
+                {
+                    inj_snackbar.Add("结束日期格式不正确", Severity.Warning);
+                    return;
+                }
+
+                endDateValue = endDate.Date.AddDays(1);
+            }
+
+            if (startDateValue.HasValue)
+            {
+                var start = startDateValue.Value;
+                caseQuery = caseQuery.Where(x =>
+                    (x.OperationTime.HasValue && x.OperationTime.Value >= start)
+                    || (!x.OperationTime.HasValue && x.AdmissionTime.HasValue && x.AdmissionTime.Value >= start)
+                    || (!x.OperationTime.HasValue && !x.AdmissionTime.HasValue && x.CreatedAt >= start));
+            }
+
+            if (endDateValue.HasValue)
+            {
+                var end = endDateValue.Value;
+                caseQuery = caseQuery.Where(x =>
+                    (x.OperationTime.HasValue && x.OperationTime.Value < end)
+                    || (!x.OperationTime.HasValue && x.AdmissionTime.HasValue && x.AdmissionTime.Value < end)
+                    || (!x.OperationTime.HasValue && !x.AdmissionTime.HasValue && x.CreatedAt < end));
+            }
+
+            var caseRows = await caseQuery
+                .Select(x => new CaseStatisticRow(
+                    x.Id,
+                    x.Status,
+                    x.HospitalId,
+                    x.DepartmentId,
+                    x.OperatorId,
+                    x.DiseaseId,
+                    x.PatientSex,
+                    x.PatientAge,
+                    x.OperationTime ?? x.AdmissionTime ?? x.CreatedAt))
+                .ToListAsync();
+            var caseIds = caseRows.Select(x => x.Id).ToList();
+            _caseCount = caseRows.Count;
+            var qualityRows = await _registryContext.QualityReports.AsNoTracking()
+                .Select(x => x.Status)
+                .ToListAsync();
+            var meetingRows = await _registryContext.ReviewMeetings.AsNoTracking()
+                .Select(x => x.Status)
+                .ToListAsync();
+            var appraiseRows = await _registryContext.CaseAppraises.AsNoTracking()
+                .Select(x => x.Status)
+                .ToListAsync();
+            _qualityCount = qualityRows.Count;
+            _meetingCount = meetingRows.Count;
+            _appraiseCount = appraiseRows.Count;
+
+            _caseStatus.Clear();
+            _caseStatus.AddRange(caseRows
+                .GroupBy(x => x.Status)
+                .Select(x => new StatusCount(x.Key, x.Count()))
+                .OrderBy(x => x.Key));
+
+            _qualityStatus.Clear();
+            _qualityStatus.AddRange(qualityRows
+                .GroupBy(x => x)
+                .Select(x => new StatusCount(x.Key, x.Count()))
+                .OrderBy(x => x.Key));
+
+            _meetingStatus.Clear();
+            _meetingStatus.AddRange(meetingRows
+                .GroupBy(x => x)
+                .Select(x => new StatusCount(x.Key, x.Count()))
+                .OrderBy(x => x.Key));
+
+            _appraiseStatus.Clear();
+            _appraiseStatus.AddRange(appraiseRows
+                .GroupBy(x => x)
+                .Select(x => new StatusCount(x.Key, x.Count()))
+                .OrderBy(x => x.Key));
+
+            _monthlyCases.Clear();
+            _monthlyCases.AddRange(caseRows
+                .GroupBy(x => x.StatisticDate.ToString("yyyy-MM", CultureInfo.InvariantCulture))
+                .OrderByDescending(x => x.Key)
+                .Take(12)
+                .OrderBy(x => x.Key)
+                .Select(x => new NamedCount(x.Key, x.Count())));
+
+            var hospitalCounts = caseRows
+                .Where(x => !string.IsNullOrWhiteSpace(x.HospitalId))
+                .GroupBy(x => x.HospitalId!)
+                .Select(x => new { HospitalId = x.Key, Count = x.Count() })
+                .OrderByDescending(x => x.Count)
+                .Take(10)
+                .ToList();
+            var hospitalIds = hospitalCounts
+                .Select(x => Guid.TryParse(x.HospitalId, out var id) ? id : Guid.Empty)
+                .Where(x => x != Guid.Empty)
+                .ToList();
+            var hospitals = hospitalIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemHospitals.AsNoTracking()
+                    .Where(x => hospitalIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+            _hospitalCases.Clear();
+            _hospitalCases.AddRange(hospitalCounts.Select(x =>
+            {
+                var name = Guid.TryParse(x.HospitalId, out var id) && hospitals.TryGetValue(id, out var hospitalName)
+                    ? hospitalName
+                    : x.HospitalId;
+                return new NamedCount(name, x.Count);
+            }));
+
+            await LoadFieldStatisticsAsync(caseIds);
+            await LoadSpecialStatisticsAsync(caseRows, caseIds);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId))
+        {
+            return;
+        }
+
+        var scopes = await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => new { x.HospitalId, x.DepartmentId })
+            .ToListAsync();
+
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(scopes
+            .Select(x => x.HospitalId.ToString())
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        _scopeDepartmentIds.Clear();
+        _scopeDepartmentIds.AddRange(scopes
+            .Where(x => x.DepartmentId.HasValue)
+            .Select(x => x.DepartmentId!.Value.ToString())
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        _hasHospitalWideScope = scopes.Any(x => !x.DepartmentId.HasValue);
+    }
+
+    private IQueryable<RegistryCase> ApplyRoleScope(IQueryable<RegistryCase> query)
+    {
+        if (HasPermission(PermissionConstants.QualityManage) || HasPermission(PermissionConstants.DataStatistics))
+        {
+            return query;
+        }
+
+        if (HasPermission(PermissionConstants.CaseApprove))
+        {
+            if (_scopeHospitalIds.Count > 0)
+            {
+                query = query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
+            }
+
+            if (_scopeDepartmentIds.Count > 0 && !_hasHospitalWideScope)
+            {
+                query = query.Where(x => x.DepartmentId != null && _scopeDepartmentIds.Contains(x.DepartmentId));
+            }
+
+            return query;
+        }
+
+        if (HasPermission(PermissionConstants.CaseSubmit))
+        {
+            query = query.Where(x => x.OperatorId == CurrentUserId);
+        }
+
+        return query;
+    }
+
+    private async Task LoadSpecialStatisticsAsync(List<CaseStatisticRow> caseRows, List<Guid> caseIds)
+    {
+        _specialPanels.Clear();
+        if (_registryContext == null || caseRows.Count == 0)
+        {
+            return;
+        }
+
+        var diseaseNameRows = await _registryContext.FormTemplateMaps.AsNoTracking()
+            .Where(x => x.BusinessType == "case" && x.TemplateName != "基本信息")
+            .GroupBy(x => x.SourceFollowTemplateId)
+            .Select(x => new { DiseaseId = x.Key, Name = x.Min(item => item.TemplateName) ?? "" })
+            .ToListAsync();
+        var diseaseNames = diseaseNameRows.ToDictionary(x => x.DiseaseId, x => x.Name, StringComparer.OrdinalIgnoreCase);
+
+        var operatorIds = caseRows
+            .Select(x => TryParseGuid(x.OperatorId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var operatorNames = operatorIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => operatorIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Account : x.DisplayName);
+
+        var fieldValues = await LoadCaseFieldValuesAsync(caseIds, SpecialFieldNames.ToList());
+
+        AddSpecialPanel("介入类型分布", BuildNamedCounts(caseRows.Select(x => GetMappedName(x.DiseaseId, diseaseNames)), 8));
+        AddSpecialPanel("性别分布", BuildFieldCounts(fieldValues, "性别", NormalizeSpecialFieldValue, 6));
+        AddSpecialPanel("年龄层分布", BuildAgeCounts(fieldValues, caseRows));
+        AddSpecialPanel("是否急诊介入", BuildFieldCounts(fieldValues, "是否急诊介入", NormalizeSpecialFieldValue, 4));
+        AddSpecialPanel("并发症讨论", BuildFieldCounts(fieldValues, "是否组织医院或科室并发症讨论", NormalizeSpecialFieldValue, 4));
+        AddSpecialPanel("离院方式", BuildFieldCounts(fieldValues, "离院方式", NormalizeSpecialFieldValue, 10));
+        AddSpecialPanel("住院科室 Top 10", BuildFieldCounts(fieldValues, "住院科室", NormalizeSpecialFieldValue, 10));
+        AddSpecialPanel("经办人 Top 10", BuildNamedCounts(caseRows.Select(x => GetDisplayName(x.OperatorId, operatorNames)), 10));
+        AddSpecialPanel("死亡原因 Top 10", BuildFieldCounts(fieldValues, "死亡原因", NormalizeSpecialFieldValue, 10));
+    }
+
+    private async Task<List<CaseFieldValue>> LoadCaseFieldValuesAsync(List<Guid> caseIds, IReadOnlyCollection<string> fieldNames)
+    {
+        if (_registryContext == null || caseIds.Count == 0 || fieldNames.Count == 0)
+        {
+            return [];
+        }
+
+        var instances = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == "case" && caseIds.Contains(x.OwnerId))
+            .Select(x => new { x.Id, x.OwnerId })
+            .ToListAsync();
+        if (instances.Count == 0)
+        {
+            return [];
+        }
+
+        var instanceById = instances.ToDictionary(x => x.Id, x => x.OwnerId);
+        var instanceIds = instances.Select(x => x.Id).ToList();
+        var values = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instanceIds.Contains(x.FormInstanceId)
+                        && fieldNames.Contains(x.FieldName)
+                        && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
+            .Select(x => new { x.FormInstanceId, x.FieldName, x.FieldText, x.FieldValue })
+            .ToListAsync();
+
+        return values
+            .Select(x => new CaseFieldValue(instanceById[x.FormInstanceId], x.FieldName, NormalizeValue(x.FieldName, x.FieldText, x.FieldValue)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .ToList();
+    }
+
+    private async Task LoadFieldStatisticsAsync(List<Guid> caseIds)
+    {
+        _fieldStatistics.Clear();
+        if (_registryContext == null || caseIds.Count == 0)
+        {
+            return;
+        }
+
+        var instances = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == "case" && caseIds.Contains(x.OwnerId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (instances.Count == 0)
+        {
+            return;
+        }
+
+        var values = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instances.Contains(x.FormInstanceId) && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
+            .Select(x => new { x.FieldName, x.FieldText, x.FieldValue })
+            .ToListAsync();
+        var normalizedValues = values
+            .Select(x => new FieldValueItem(x.FieldName, NormalizeValue(x.FieldName, x.FieldText, x.FieldValue)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .Where(x => !SpecialFieldNames.Contains(x.FieldName.Trim()))
+            .ToList();
+        var topFields = normalizedValues
+            .GroupBy(x => x.FieldName)
+            .OrderByDescending(x => x.Count())
+            .ThenBy(x => x.Key)
+            .Take(8)
+            .ToList();
+
+        foreach (var field in topFields)
+        {
+            var total = field.Count();
+            var options = field
+                .GroupBy(x => x.Value)
+                .OrderByDescending(x => x.Count())
+                .ThenBy(x => x.Key)
+                .Take(8)
+                .Select(x => new FieldStatisticOption(
+                    x.Key,
+                    x.Count(),
+                    $"{Math.Round(x.Count() * 100d / total, 1).ToString("0.#", CultureInfo.InvariantCulture)}%"))
+                .ToList();
+            _fieldStatistics.Add(new FieldStatistic(field.Key, total, options));
+        }
+    }
+
+    private static string GetCaseStatusText(int status)
+        => status switch
+        {
+            0 => "待审核",
+            1 => "已回退",
+            2 => "已上报",
+            3 => "待填写",
+            4 => "审核失败",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetQualityStatusText(int status)
+        => status switch
+        {
+            0 => "未填报",
+            1 => "已上报",
+            2 => "已驳回",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetMeetingStatusText(int status)
+        => status switch
+        {
+            0 => "未开始",
+            1 => "已开始",
+            2 => "已发布",
+            3 => "已结束",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetAppraiseStatusText(int status)
+        => status switch
+        {
+            0 => "待评审",
+            1 => "已评审",
+            _ => $"状态 {status}"
+        };
+
+    private sealed record StatusCount(int Key, int Value);
+
+    private sealed record NamedCount(string Name, int Count);
+
+    private sealed record StatisticPanel(string Title, int TotalCount, int MaxCount, List<NamedCount> Items);
+
+    private sealed record CaseStatisticRow(
+        Guid Id,
+        int Status,
+        string? HospitalId,
+        string? DepartmentId,
+        string? OperatorId,
+        string? DiseaseId,
+        string? PatientSex,
+        string? PatientAge,
+        DateTime StatisticDate);
+
+    private sealed record CaseFieldValue(Guid CaseId, string FieldName, string Value);
+
+    private sealed record FieldValueItem(string FieldName, string Value);
+
+    private sealed record FieldStatistic(string FieldName, int TotalCount, List<FieldStatisticOption> Options);
+
+    private sealed record FieldStatisticOption(string Value, int Count, string Percent);
+
+    private static string NormalizeValue(string fieldName, string? text, string? value)
+        => FormValueDisplayMapper.GetDisplayText(fieldName, text, value);
+
+    private void AddSpecialPanel(string title, List<NamedCount> items)
+    {
+        var total = items.Sum(x => x.Count);
+        var max = items.Count == 0 ? 0 : items.Max(x => x.Count);
+        _specialPanels.Add(new StatisticPanel(title, total, max, items));
+    }
+
+    private static List<NamedCount> BuildNamedCounts(IEnumerable<string> values, int take)
+        => values
+            .Select(NormalizeDisplayText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new NamedCount(x.First(), x.Count()))
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Name)
+            .Take(take)
+            .ToList();
+
+    private static List<NamedCount> BuildFieldCounts(
+        IEnumerable<CaseFieldValue> values,
+        string fieldName,
+        Func<string, string, string> normalizer,
+        int take)
+        => BuildNamedCounts(
+            values
+                .Where(x => x.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase))
+                .Select(x => normalizer(fieldName, x.Value)),
+            take);
+
+    private static List<NamedCount> BuildAgeCounts(IEnumerable<CaseFieldValue> values, IReadOnlyCollection<CaseStatisticRow> caseRows)
+    {
+        var ages = values
+            .Where(x => x.FieldName.Equals("年龄", StringComparison.OrdinalIgnoreCase))
+            .Select(x => TryParseAge(x.Value))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .ToList();
+        if (ages.Count == 0)
+        {
+            ages = caseRows
+                .Select(x => TryParseAge(x.PatientAge))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .ToList();
+        }
+
+        var buckets = new Dictionary<string, int>
+        {
+            ["18岁以下"] = 0,
+            ["18-44岁"] = 0,
+            ["45-59岁"] = 0,
+            ["60-74岁"] = 0,
+            ["75岁及以上"] = 0
+        };
+
+        foreach (var age in ages)
+        {
+            var key = age < 18
+                ? "18岁以下"
+                : age < 45
+                    ? "18-44岁"
+                    : age < 60
+                        ? "45-59岁"
+                        : age < 75
+                            ? "60-74岁"
+                            : "75岁及以上";
+            buckets[key]++;
+        }
+
+        return buckets
+            .Where(x => x.Value > 0)
+            .Select(x => new NamedCount(x.Key, x.Value))
+            .ToList();
+    }
+
+    private static string NormalizeSpecialFieldValue(string fieldName, string value)
+    {
+        var text = NormalizeDisplayText(value);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "";
+        }
+
+        text = FormValueDisplayMapper.Normalize(fieldName, text);
+
+        if (Guid.TryParse(text, out _))
+        {
+            return $"未映射选项 {text[..8]}";
+        }
+
+        return text;
+    }
+
+    private static string GetMappedName(string? id, IReadOnlyDictionary<string, string> names)
+    {
+        var text = NormalizeDisplayText(id);
+        if (!string.IsNullOrWhiteSpace(text) && names.TryGetValue(text, out var name))
+        {
+            return name;
+        }
+
+        return NormalizeSpecialFieldValue("", text);
+    }
+
+    private static string GetDisplayName(string? id, IReadOnlyDictionary<Guid, string> names)
+    {
+        if (Guid.TryParse(id, out var guid) && names.TryGetValue(guid, out var name))
+        {
+            return name;
+        }
+
+        return NormalizeSpecialFieldValue("", id ?? "");
+    }
+
+    private static string NormalizeDisplayText(string? value)
+        => value?.Trim() ?? "";
+
+    private static Guid? TryParseGuid(string? value)
+        => Guid.TryParse(value, out var id) ? id : null;
+
+    private static int? TryParseAge(string? value)
+    {
+        var text = NormalizeDisplayText(value);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var numberText = new string(text.TakeWhile(x => char.IsDigit(x) || x == '.').ToArray());
+        if (double.TryParse(numberText, NumberStyles.Number, CultureInfo.InvariantCulture, out var age))
+        {
+            return (int)Math.Floor(age);
+        }
+
+        return null;
+    }
+
+    private static string GetPercent(int count, int total)
+        => total <= 0 ? "0%" : $"{Math.Round(count * 100d / total, 1).ToString("0.#", CultureInfo.InvariantCulture)}%";
+
+    private static string GetBarStyle(int count, int max)
+    {
+        var width = max <= 0 ? 0 : Math.Clamp(count * 100d / max, 2, 100);
+        return $"width: {width.ToString("0.#", CultureInfo.InvariantCulture)}%;";
+    }
+}

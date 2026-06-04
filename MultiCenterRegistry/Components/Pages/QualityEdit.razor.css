@@ -1,0 +1,26 @@
+﻿.form-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 14px;
+    padding: 18px;
+}
+
+.form-panel ::deep .mud-input-control {
+    margin: 0;
+}
+
+.actions {
+    grid-column: 1 / -1;
+    min-height: 44px;
+}
+
+.actions ::deep .mud-button-root {
+    min-width: 96px;
+    height: 40px;
+}
+
+@media (max-width: 760px) {
+    .form-panel {
+        grid-template-columns: 1fr;
+    }
+}

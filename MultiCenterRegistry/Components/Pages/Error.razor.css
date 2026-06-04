@@ -1,0 +1,50 @@
+﻿.error-page {
+    min-height: 100vh;
+    padding: 14px 16px 16px;
+    background-color: var(--mcr-bg);
+    background-image:
+        linear-gradient(90deg, rgba(17, 113, 166, .025) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(17, 113, 166, .02) 1px, transparent 1px),
+        linear-gradient(135deg, rgba(231, 248, 255, .96) 0%, rgba(248, 253, 255, .98) 46%, rgba(238, 251, 247, .94) 100%);
+    background-size: 42px 42px, 42px 42px, auto;
+}
+
+.empty-panel {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 12px;
+    min-height: 360px;
+    color: var(--mcr-muted);
+    text-align: center;
+    border: 1px solid var(--mcr-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(247, 252, 255, .78)),
+        linear-gradient(135deg, rgba(29, 111, 242, .04), rgba(10, 165, 133, .035));
+    box-shadow: var(--mcr-shadow-soft);
+}
+
+h1 {
+    margin: 0;
+    color: var(--mcr-text);
+    font-size: 24px;
+    font-weight: 800;
+}
+
+p,
+.request-id {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.request-id {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--mcr-border-light);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .7);
+}

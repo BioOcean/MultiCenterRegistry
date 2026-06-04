@@ -1,0 +1,12 @@
+﻿.loading-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 360px;
+    color: var(--mcr-muted);
+    border: 1px solid var(--mcr-border);
+    border-radius: var(--mcr-radius);
+    background: var(--mcr-surface);
+    box-shadow: var(--mcr-shadow-soft);
+}

@@ -1,0 +1,975 @@
+﻿@page "/admin/{AdminSection}"
+@inherits BasePage
+
+<PageTitle>@CurrentPageTitle</PageTitle>
+
+<div class="admin-page admin-content-page">
+    <div class="page-header">
+        <div>
+            <h1>@CurrentPageTitle</h1>
+            <div class="page-subtitle">@CurrentPageSubtitle</div>
+        </div>
+        <div class="header-actions">
+            @if (_activeSection == SectionIntroduction)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="StartCreateArticle">新增文献</MudButton>
+            }
+            else if (_activeSection == SectionMessage)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="StartCreateMessage">新增消息</MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="StartEditPortalConfig">编辑配置</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshCurrentSectionAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    @if (_noPermission)
+    {
+        <MudPaper Class="empty-panel" Elevation="0">当前角色没有@CurrentPageTitle权限。</MudPaper>
+    }
+    else if (_schemaMissing)
+    {
+        <MudPaper Class="empty-panel" Elevation="0">后台文献消息表不存在，请先执行 Script\13_extend_admin_content.sql。</MudPaper>
+    }
+    else
+    {
+        @if (_activeSection == SectionIntroduction)
+        {
+            <div class="article-stat-grid">
+                <button type="button" class="@GetArticleStatCardClass(DraftStatusText)" @onclick="@(() => ChangeArticleStatusAsync(DraftStatusText))">
+                    <span>未发布</span>
+                    <strong>@_draftArticleCount</strong>
+                </button>
+                <button type="button" class="@GetArticleStatCardClass(PublishedStatusText)" @onclick="@(() => ChangeArticleStatusAsync(PublishedStatusText))">
+                    <span>已发布</span>
+                    <strong>@_publishedArticleCount</strong>
+                </button>
+                <button type="button" class="@GetArticleStatCardClass(AllStatusText)" @onclick="@(() => ChangeArticleStatusAsync(AllStatusText))">
+                    <span>全部</span>
+                    <strong>@_allArticleCount</strong>
+                </button>
+            </div>
+
+            <section class="article-filter-panel">
+                <div class="article-filter-grid">
+                    <div class="article-search-cell">
+                        <MudTextField T="string"
+                                      @bind-Value="_articleKeyword"
+                                      Placeholder="标题、正文"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Search"
+                                      Immediate="true"
+                                      OnKeyDown="OnArticleSearchKeyDown" />
+                    </div>
+                    <div class="article-filter-actions">
+                        <div class="filter-action-bar">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchArticlesAsync">查询</MudButton>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            @if (_showArticleEditor)
+            {
+                <div class="content-dialog-mask" role="presentation">
+                <section class="content-dialog content-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="article-modal-title">
+                    <div class="content-dialog-head">
+                        <div class="content-dialog-title">
+                            <span class="content-dialog-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.Article" />
+                            </span>
+                            <span id="article-modal-title">@(_articleEdit.Id.HasValue ? "编辑文献介绍" : "新增文献介绍")</span>
+                        </div>
+                        <MudIconButton Class="content-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelArticleEdit" Disabled="@_isSaving" />
+                    </div>
+
+                    <div class="content-dialog-body">
+                        <div class="content-form content-form-two">
+                            <div class="content-field">
+                                <MudTextField T="string" @bind-Value="_articleEdit.Title" Label="标题" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </div>
+                            <div class="content-field">
+                                <MudSelect T="int" @bind-Value="_articleEdit.Status" Label="状态" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="int" Value="0">未发布</MudSelectItem>
+                                    <MudSelectItem T="int" Value="1">已发布</MudSelectItem>
+                                </MudSelect>
+                            </div>
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_articleEdit.Cover" Label="封面地址" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </div>
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_articleEdit.Content" Label="正文" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="10" />
+                            </div>
+                        </div>
+
+                        @if (_showArticlePreview)
+                        {
+                            <div class="preview-panel modal-preview-panel">
+                                <div class="article-cover-preview">
+                                    @if (string.IsNullOrWhiteSpace(_articleEdit.Cover))
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Image" />
+                                    }
+                                    else
+                                    {
+                                        <img src="@_articleEdit.Cover" alt="封面" />
+                                    }
+                                </div>
+                                <div>
+                                    <div class="preview-title">@ShowValue(_articleEdit.Title)</div>
+                                    <div class="preview-content">@ShowValue(_articleEdit.Content)</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="content-dialog-actions">
+                        <MudButton Variant="Variant.Outlined" OnClick="CancelArticleEdit" Disabled="@_isSaving">取消</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Visibility" OnClick="ToggleArticlePreview" Disabled="@_isSaving">预览</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="@(() => SaveArticleAsync(DraftStatus))" Disabled="@_isSaving">保存草稿</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Publish" OnClick="@(() => SaveArticleAsync(PublishedStatus))" Disabled="@_isSaving">发布</MudButton>
+                    </div>
+                </section>
+                </div>
+            }
+
+            <MudPaper Class="list-panel article-list-panel" Elevation="0">
+                @if (_isLoadingArticles)
+                {
+                    <div class="loading-row">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <span>正在加载门户介绍</span>
+                    </div>
+                }
+                else if (_articles.Count == 0)
+                {
+                    <div class="empty-row">未找到门户介绍</div>
+                }
+                else
+                {
+                    <div class="article-list">
+                        @foreach (var item in _articles)
+                        {
+                            <div class="article-card">
+                                <div class="article-cover">
+                                    @if (string.IsNullOrWhiteSpace(item.Cover))
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Article" />
+                                    }
+                                    else
+                                    {
+                                        <img src="@item.Cover" alt="封面" />
+                                    }
+                                </div>
+                                <div class="article-main">
+                                    <div class="article-title-row">
+                                        <h2>@ShowValue(item.Title)</h2>
+                                        <span class="status-pill @GetArticleStatusClass(item.Status)">@GetArticleStatusText(item.Status)</span>
+                                    </div>
+                                    <p>@GetSnippet(item.Content)</p>
+                                    <div class="article-meta">创建时间：@ShowDateTime(item.CreatedAt)</div>
+                                </div>
+                                <div class="row-actions article-actions">
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => EditArticleAsync(item.Id))">编辑</MudButton>
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteArticleAsync(item.Id))">删除</MudButton>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="pager content-pager">
+                    <button type="button" class="pager-page wide" disabled="@(_articlePageIndex == 0 || _isLoadingArticles)" @onclick="PreviousArticlePageAsync">上一页</button>
+                    <div class="pager-summary">第 @(_articlePageIndex + 1) / @ArticleTotalPages 页，共 @_articleTotalCount 条</div>
+                    <button type="button" class="pager-page wide" disabled="@(_articlePageIndex + 1 >= ArticleTotalPages || _isLoadingArticles)" @onclick="NextArticlePageAsync">下一页</button>
+                </div>
+            </MudPaper>
+        }
+        else if (_activeSection == SectionMessage)
+        {
+            <div class="message-layout single">
+                <MudPaper Class="list-panel message-history message-list-panel" Elevation="0">
+                    @if (_isLoadingMessages)
+                    {
+                        <div class="loading-row">
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                            <span>正在加载系统消息</span>
+                        </div>
+                    }
+                    else if (_messages.Count == 0)
+                    {
+                        <div class="empty-row">暂无系统消息</div>
+                    }
+                    else
+                    {
+                        <div class="message-list">
+                            @foreach (var item in _messages)
+                            {
+                                <div class="message-row">
+                                    <div>
+                                        <div class="message-time">@ShowDateTime(item.CreatedAt)</div>
+                                        <div class="message-content">@item.Content</div>
+                                        <div class="message-user">发布人：@ShowValue(item.CreatedBy)</div>
+                                    </div>
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteMessageAsync(item.Id))">删除</MudButton>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="pager content-pager">
+                        <button type="button" class="pager-page wide" disabled="@(_messagePageIndex == 0 || _isLoadingMessages)" @onclick="PreviousMessagePageAsync">上一页</button>
+                        <div class="pager-summary">第 @(_messagePageIndex + 1) / @MessageTotalPages 页，共 @_messageTotalCount 条</div>
+                        <button type="button" class="pager-page wide" disabled="@(_messagePageIndex + 1 >= MessageTotalPages || _isLoadingMessages)" @onclick="NextMessagePageAsync">下一页</button>
+                    </div>
+                </MudPaper>
+            </div>
+
+            @if (_showMessageEditor)
+            {
+                <div class="content-dialog-mask" role="presentation">
+                <section class="content-dialog" role="dialog" aria-modal="true" aria-labelledby="message-modal-title">
+                    <div class="content-dialog-head">
+                        <div class="content-dialog-title">
+                            <span class="content-dialog-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.Campaign" />
+                            </span>
+                            <span id="message-modal-title">新增系统消息</span>
+                        </div>
+                        <MudIconButton Class="content-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelMessageEdit" Disabled="@_isSaving" />
+                    </div>
+                    <div class="content-dialog-body">
+                        <div class="content-form single">
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_messageContent" Label="消息内容" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="16" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="content-dialog-actions">
+                        <MudButton Variant="Variant.Outlined" OnClick="CancelMessageEdit" Disabled="@_isSaving">取消</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Send" OnClick="PublishMessageAsync" Disabled="@_isSaving">发布消息</MudButton>
+                    </div>
+                </section>
+                </div>
+            }
+        }
+        else
+        {
+            <MudPaper Class="list-panel portal-config-view" Elevation="0">
+                <div class="content-panel-title">门户介绍配置</div>
+                <div class="portal-config-grid">
+                    <div>
+                        <span>门户标题</span>
+                        <strong>@ShowValue(_portalTitle)</strong>
+                    </div>
+                    <div>
+                        <span>门户介绍</span>
+                        <p>@ShowValue(_portalContent)</p>
+                    </div>
+                    <div>
+                        <span>登录公告</span>
+                        <p>@ShowValue(_portalAnnouncement)</p>
+                    </div>
+                </div>
+            </MudPaper>
+
+            @if (_showPortalEditor)
+            {
+                <div class="content-dialog-mask" role="presentation">
+                <section class="content-dialog content-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="portal-modal-title">
+                    <div class="content-dialog-head">
+                        <div class="content-dialog-title">
+                            <span class="content-dialog-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.Settings" />
+                            </span>
+                            <span id="portal-modal-title">编辑门户介绍配置</span>
+                        </div>
+                        <MudIconButton Class="content-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelPortalEdit" Disabled="@_isSaving" />
+                    </div>
+                    <div class="content-dialog-body">
+                        <div class="content-form single">
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_portalTitle" Label="门户标题" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </div>
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_portalContent" Label="门户介绍" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="12" />
+                            </div>
+                            <div class="content-field full">
+                                <MudTextField T="string" @bind-Value="_portalAnnouncement" Label="登录公告" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="5" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="content-dialog-actions">
+                        <MudButton Variant="Variant.Outlined" OnClick="CancelPortalEdit" Disabled="@_isSaving">取消</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SavePortalConfigAsync" Disabled="@_isSaving">保存</MudButton>
+                    </div>
+                </section>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? AdminSection { get; set; }
+
+    private const string SectionIntroduction = "introduction";
+    private const string SectionMessage = "message";
+    private const string SectionPortalConfig = "portal-config";
+    private const int ArticleTypeIntroduction = 1;
+    private const int ArticleTypeMessage = 2;
+    private const int DraftStatus = 0;
+    private const int PublishedStatus = 1;
+    private const string AllStatusText = "";
+    private const string DraftStatusText = "0";
+    private const string PublishedStatusText = "1";
+    private const int ArticlePageSize = 8;
+    private const int MessagePageSize = 8;
+    private const string PortalTitleCode = PortalConfigConstants.LoginTitle;
+    private const string PortalContentCode = PortalConfigConstants.LoginContent;
+    private const string PortalAnnouncementCode = PortalConfigConstants.Announcement;
+
+    private readonly List<RegistryArticle> _articles = [];
+    private readonly List<RegistryArticle> _messages = [];
+    private ArticleEditModel _articleEdit = new();
+    private string _activeSection = SectionIntroduction;
+    private string _articleStatusValue = DraftStatusText;
+    private string _articleKeyword = "";
+    private string _messageContent = "";
+    private string _portalTitle = "";
+    private string _portalContent = "";
+    private string _portalAnnouncement = "";
+    private int _allArticleCount;
+    private int _draftArticleCount;
+    private int _publishedArticleCount;
+    private int _articlePageIndex;
+    private int _articleTotalCount;
+    private int _messagePageIndex;
+    private int _messageTotalCount;
+    private bool _showArticleEditor;
+    private bool _showArticlePreview;
+    private bool _showMessageEditor;
+    private bool _showPortalEditor;
+    private bool _isLoadingArticles;
+    private bool _isLoadingMessages;
+    private bool _isSaving;
+    private bool _noPermission;
+    private bool _schemaMissing;
+
+    private int ArticleTotalPages => Math.Max(1, (int)Math.Ceiling(_articleTotalCount / (double)ArticlePageSize));
+    private int MessageTotalPages => Math.Max(1, (int)Math.Ceiling(_messageTotalCount / (double)MessagePageSize));
+
+    private string CurrentPageTitle
+        => _activeSection switch
+        {
+            SectionMessage => "系统消息",
+            SectionPortalConfig => "门户介绍",
+            _ => "文献介绍"
+        };
+
+    private string CurrentPageSubtitle
+        => _activeSection switch
+        {
+            SectionMessage => "发布和维护系统公告消息",
+            SectionPortalConfig => "维护登录页标题、门户介绍和公告",
+            _ => "维护未发布和已发布的文献介绍"
+        };
+
+    protected override Task OnPageInitializedAsync() => LoadAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_registryContext == null)
+        {
+            await base.OnParametersSetAsync();
+            return;
+        }
+
+        var previousSection = _activeSection;
+        SetActiveSectionFromRoute();
+        if (!string.Equals(previousSection, _activeSection, StringComparison.Ordinal))
+        {
+            await RefreshCurrentSectionAsync();
+        }
+
+        await base.OnParametersSetAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        SetActiveSectionFromRoute();
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!HasPermission(PermissionConstants.MessageManager))
+        {
+            _noPermission = true;
+            return;
+        }
+
+        try
+        {
+            await RefreshCurrentSectionAsync();
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+    }
+
+    private void SetActiveSectionFromRoute()
+    {
+        if (string.Equals(AdminSection, "messages", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeSection = SectionMessage;
+            return;
+        }
+
+        if (string.Equals(AdminSection, "portal", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeSection = SectionPortalConfig;
+            return;
+        }
+
+        _activeSection = SectionIntroduction;
+    }
+
+    private async Task RefreshCurrentSectionAsync()
+    {
+        if (_registryContext == null || _noPermission || _schemaMissing)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_activeSection == SectionIntroduction)
+            {
+                await LoadArticlesAsync();
+            }
+            else if (_activeSection == SectionMessage)
+            {
+                await LoadMessagesAsync();
+            }
+            else
+            {
+                await LoadPortalConfigAsync();
+            }
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+    }
+
+    private async Task ChangeArticleStatusAsync(string status)
+    {
+        _articleStatusValue = status;
+        _articlePageIndex = 0;
+        await LoadArticlesAsync();
+    }
+
+    private async Task SearchArticlesAsync()
+    {
+        _articlePageIndex = 0;
+        await LoadArticlesAsync();
+    }
+
+    private async Task PreviousArticlePageAsync()
+    {
+        if (_articlePageIndex == 0)
+        {
+            return;
+        }
+
+        _articlePageIndex--;
+        await LoadArticlesAsync();
+    }
+
+    private async Task NextArticlePageAsync()
+    {
+        if (_articlePageIndex + 1 >= ArticleTotalPages)
+        {
+            return;
+        }
+
+        _articlePageIndex++;
+        await LoadArticlesAsync();
+    }
+
+    private async Task PreviousMessagePageAsync()
+    {
+        if (_messagePageIndex == 0)
+        {
+            return;
+        }
+
+        _messagePageIndex--;
+        await LoadMessagesAsync();
+    }
+
+    private async Task NextMessagePageAsync()
+    {
+        if (_messagePageIndex + 1 >= MessageTotalPages)
+        {
+            return;
+        }
+
+        _messagePageIndex++;
+        await LoadMessagesAsync();
+    }
+
+    private async Task OnArticleSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SearchArticlesAsync();
+        }
+    }
+
+    private async Task LoadArticlesAsync()
+    {
+        if (_registryContext == null || _schemaMissing)
+        {
+            return;
+        }
+
+        _isLoadingArticles = true;
+        try
+        {
+            var query = _registryContext.Articles.AsNoTracking().Where(x => x.Type == ArticleTypeIntroduction);
+
+            var keyword = _articleKeyword.Trim();
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                var pattern = $"%{keyword}%";
+                query = query.Where(x => EF.Functions.ILike(x.Title, pattern) || EF.Functions.ILike(x.Content, pattern));
+            }
+
+            await LoadArticleStatusCountsAsync(query);
+
+            if (int.TryParse(_articleStatusValue, out var status))
+            {
+                query = query.Where(x => x.Status == status);
+            }
+
+            _articleTotalCount = await query.CountAsync();
+            _articles.Clear();
+            _articles.AddRange(await query
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.Id)
+                .Skip(_articlePageIndex * ArticlePageSize)
+                .Take(ArticlePageSize)
+                .ToListAsync());
+        }
+        finally
+        {
+            _isLoadingArticles = false;
+        }
+    }
+
+    private async Task LoadArticleStatusCountsAsync(IQueryable<RegistryArticle> query)
+    {
+        _allArticleCount = await query.CountAsync();
+        _draftArticleCount = await query.CountAsync(x => x.Status == DraftStatus);
+        _publishedArticleCount = await query.CountAsync(x => x.Status == PublishedStatus);
+    }
+
+    private async Task LoadMessagesAsync()
+    {
+        if (_registryContext == null || _schemaMissing)
+        {
+            return;
+        }
+
+        _isLoadingMessages = true;
+        try
+        {
+            var query = _registryContext.Articles.AsNoTracking().Where(x => x.Type == ArticleTypeMessage);
+            _messageTotalCount = await query.CountAsync();
+            _messages.Clear();
+            _messages.AddRange(await query
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.Id)
+                .Skip(_messagePageIndex * MessagePageSize)
+                .Take(MessagePageSize)
+                .ToListAsync());
+        }
+        finally
+        {
+            _isLoadingMessages = false;
+        }
+    }
+
+    private async Task LoadPortalConfigAsync()
+    {
+        if (_registryContext == null || _schemaMissing)
+        {
+            return;
+        }
+
+        var codes = new[] { PortalTitleCode, PortalContentCode, PortalAnnouncementCode };
+        var configs = await _registryContext.PortalConfigs.AsNoTracking()
+            .Where(x => codes.Contains(x.Code))
+            .ToListAsync();
+
+        _portalTitle = configs.FirstOrDefault(x => x.Code == PortalTitleCode)?.Value ?? "";
+        _portalContent = configs.FirstOrDefault(x => x.Code == PortalContentCode)?.Value ?? "";
+        _portalAnnouncement = configs.FirstOrDefault(x => x.Code == PortalAnnouncementCode)?.Value ?? "";
+    }
+
+    private void StartCreateArticle()
+    {
+        _articleEdit = new ArticleEditModel();
+        _showArticlePreview = false;
+        _showArticleEditor = true;
+    }
+
+    private async Task EditArticleAsync(Guid id)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var article = await _registryContext.Articles.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.Type == ArticleTypeIntroduction);
+        if (article == null)
+        {
+            inj_snackbar.Add("文献介绍不存在", Severity.Warning);
+            return;
+        }
+
+        _articleEdit = new ArticleEditModel
+        {
+            Id = article.Id,
+            Title = article.Title,
+            Content = article.Content,
+            Cover = article.Cover ?? "",
+            Status = article.Status
+        };
+        _showArticlePreview = false;
+        _showArticleEditor = true;
+    }
+
+    private void CancelArticleEdit()
+    {
+        _articleEdit = new ArticleEditModel();
+        _showArticleEditor = false;
+        _showArticlePreview = false;
+    }
+
+    private void StartCreateMessage()
+    {
+        _messageContent = "";
+        _showMessageEditor = true;
+    }
+
+    private void CancelMessageEdit()
+    {
+        _messageContent = "";
+        _showMessageEditor = false;
+    }
+
+    private void StartEditPortalConfig()
+    {
+        _showPortalEditor = true;
+    }
+
+    private async Task CancelPortalEdit()
+    {
+        _showPortalEditor = false;
+        await LoadPortalConfigAsync();
+    }
+
+    private void ToggleArticlePreview()
+    {
+        _showArticlePreview = !_showArticlePreview;
+    }
+
+    private async Task SaveArticleAsync(int status)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.MessageManager))
+        {
+            return;
+        }
+
+        var title = _articleEdit.Title.Trim();
+        var content = _articleEdit.Content.Trim();
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(content))
+        {
+            inj_snackbar.Add("标题和正文不能为空", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var isNew = !_articleEdit.Id.HasValue;
+            var articleId = _articleEdit.Id.GetValueOrDefault();
+            var article = isNew
+                ? new RegistryArticle
+                {
+                    Type = ArticleTypeIntroduction,
+                    CreatedAt = DateTime.Now,
+                    CreatedBy = CurrentUserId
+                }
+                : await _registryContext.Articles.FirstOrDefaultAsync(x => x.Id == articleId && x.Type == ArticleTypeIntroduction);
+
+            if (article == null)
+            {
+                inj_snackbar.Add("文献介绍不存在", Severity.Warning);
+                return;
+            }
+
+            article.Title = title;
+            article.Content = content;
+            article.Cover = string.IsNullOrWhiteSpace(_articleEdit.Cover) ? null : _articleEdit.Cover.Trim();
+            article.Status = status;
+            article.UpdatedAt = DateTime.Now;
+            article.UpdatedBy = CurrentUserId;
+
+            if (isNew)
+            {
+                _registryContext.Articles.Add(article);
+            }
+
+            _registryContext.OperationLogs.Add(CreateOperationLog("文献介绍", isNew ? "新增文献介绍" : "更新文献介绍", "article", article.Id));
+            await _registryContext.SaveChangesAsync();
+            inj_snackbar.Add(status == PublishedStatus ? "文献介绍已发布" : "文献介绍已保存", Severity.Success);
+            CancelArticleEdit();
+            await LoadArticlesAsync();
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteArticleAsync(Guid id)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.MessageManager))
+        {
+            return;
+        }
+
+        var confirmed = await inj_dialogService.ShowMessageBox("删除文献介绍", "确定要删除这条文献介绍吗？", yesText: "确定", cancelText: "取消");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var article = await _registryContext.Articles.FirstOrDefaultAsync(x => x.Id == id && x.Type == ArticleTypeIntroduction);
+            if (article == null)
+            {
+                inj_snackbar.Add("文献介绍不存在", Severity.Warning);
+                return;
+            }
+
+            _registryContext.Articles.Remove(article);
+            _registryContext.OperationLogs.Add(CreateOperationLog("文献介绍", "删除文献介绍", "article", article.Id));
+            await _registryContext.SaveChangesAsync();
+            inj_snackbar.Add("文献介绍已删除", Severity.Success);
+            await LoadArticlesAsync();
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+    }
+
+    private async Task PublishMessageAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.MessageManager))
+        {
+            return;
+        }
+
+        var content = _messageContent.Trim();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            inj_snackbar.Add("消息内容不能为空", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            var message = new RegistryArticle
+            {
+                Type = ArticleTypeMessage,
+                Status = DraftStatus,
+                Title = "系统消息",
+                Content = content,
+                CreatedAt = DateTime.Now,
+                CreatedBy = CurrentUserId
+            };
+            _registryContext.Articles.Add(message);
+            _registryContext.OperationLogs.Add(CreateOperationLog("系统消息", "发布系统消息", "article", message.Id));
+            await _registryContext.SaveChangesAsync();
+            _messageContent = "";
+            _showMessageEditor = false;
+            inj_snackbar.Add("系统消息已发布", Severity.Success);
+            await LoadMessagesAsync();
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task DeleteMessageAsync(Guid id)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.MessageManager))
+        {
+            return;
+        }
+
+        var confirmed = await inj_dialogService.ShowMessageBox("删除系统消息", "确定要删除这条系统消息吗？", yesText: "确定", cancelText: "取消");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var message = await _registryContext.Articles.FirstOrDefaultAsync(x => x.Id == id && x.Type == ArticleTypeMessage);
+            if (message == null)
+            {
+                inj_snackbar.Add("系统消息不存在", Severity.Warning);
+                return;
+            }
+
+            _registryContext.Articles.Remove(message);
+            _registryContext.OperationLogs.Add(CreateOperationLog("系统消息", "删除系统消息", "article", message.Id));
+            await _registryContext.SaveChangesAsync();
+            inj_snackbar.Add("系统消息已删除", Severity.Success);
+            await LoadMessagesAsync();
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+    }
+
+    private async Task SavePortalConfigAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.MessageManager))
+        {
+            return;
+        }
+
+        var title = _portalTitle.Trim();
+        var content = _portalContent.Trim();
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(content))
+        {
+            inj_snackbar.Add("门户标题和门户介绍不能为空", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            await UpsertPortalConfigAsync(PortalTitleCode, "门户标题", title);
+            await UpsertPortalConfigAsync(PortalContentCode, "门户介绍", content);
+            await UpsertPortalConfigAsync(PortalAnnouncementCode, "登录公告", _portalAnnouncement.Trim());
+            _registryContext.OperationLogs.Add(CreateOperationLog("门户介绍", "保存门户介绍配置", "portal_config", Guid.Empty));
+            await _registryContext.SaveChangesAsync();
+            _showPortalEditor = false;
+            inj_snackbar.Add("门户介绍配置已保存", Severity.Success);
+        }
+        catch (Exception ex) when (IsMissingAdminContentTable(ex))
+        {
+            MarkSchemaMissing();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task UpsertPortalConfigAsync(string code, string title, string value)
+    {
+        var config = await _registryContext!.PortalConfigs.FirstOrDefaultAsync(x => x.Code == code);
+        if (config == null)
+        {
+            _registryContext.PortalConfigs.Add(new PortalConfig
+            {
+                Code = code,
+                Title = title,
+                Value = value,
+                UpdatedAt = DateTime.Now,
+                UpdatedBy = CurrentUserId
+            });
+            return;
+        }
+
+        config.Title = title;
+        config.Value = value;
+        config.UpdatedAt = DateTime.Now;
+        config.UpdatedBy = CurrentUserId;
+    }
+
+    private string GetArticleStatCardClass(string status)
+        => _articleStatusValue == status ? "article-stat-card active" : "article-stat-card";
+
+    private static string GetArticleStatusText(int status)
+        => status == PublishedStatus ? "已发布" : "未发布";
+
+    private static string GetArticleStatusClass(int status)
+        => status == PublishedStatus ? "published" : "draft";
+
+    private static string ShowDateTime(DateTime? value)
+        => value.HasValue ? value.Value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "-";
+
+    private static string ShowValue(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string GetSnippet(string? value)
+    {
+        var text = System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Replace(value ?? "", "<[^>]+>", " "));
+        text = System.Text.RegularExpressions.Regex.Replace(text, "\\s+", " ").Trim();
+        return text.Length <= 80 ? text : $"{text[..80]}...";
+    }
+
+    private void MarkSchemaMissing()
+    {
+        _schemaMissing = true;
+        inj_snackbar.Add("后台文献消息表不存在，请先执行 Script\\13_extend_admin_content.sql", Severity.Error);
+    }
+
+    private static bool IsMissingAdminContentTable(Exception ex)
+    {
+        var text = ex.ToString();
+        return text.Contains("mcr.article", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("mcr.portal_config", StringComparison.OrdinalIgnoreCase)
+               || (text.Contains("relation", StringComparison.OrdinalIgnoreCase)
+                   && text.Contains("does not exist", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class ArticleEditModel
+    {
+        public Guid? Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Content { get; set; } = "";
+        public string Cover { get; set; } = "";
+        public int Status { get; set; } = DraftStatus;
+    }
+}

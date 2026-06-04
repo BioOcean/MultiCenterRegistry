@@ -1,0 +1,422 @@
+﻿@page "/login"
+@layout FullScreenLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>用户登录</PageTitle>
+
+<div class="login-container">
+    <div class="login-bg" style="background-image: url('@_loginBgUrl');"></div>
+
+    @if (!string.IsNullOrWhiteSpace(_hospitalLogoUrl))
+    {
+        <img src="@_hospitalLogoUrl" class="login-top-logo" alt="logo" />
+    }
+
+    <div class="login-shell">
+        <aside class="login-side">
+            <div class="side-tag">Multi Center Registry</div>
+            <h1>@_loginHospitalTitle</h1>
+            @if (_isShowSecondTitle)
+            {
+                <p>@_subTitle</p>
+            }
+            <button type="button" class="side-link" @onclick="OpenPortal">
+                <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" />
+                门户首页
+            </button>
+
+            @if (_announcements.Count > 0)
+            {
+                <div class="notice-panel">
+                    <div class="notice-title">系统公告</div>
+                    @foreach (var item in _announcements)
+                    {
+                        <div class="notice-item">
+                            <time>@ShowDate(item.CreatedAt)</time>
+                            <span>@GetSnippet(item.Content, 68)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </aside>
+
+        <div class="login-card">
+            <div class="card-header">
+                @if (_isShowLogo && !string.IsNullOrWhiteSpace(_hospitalLogoUrl))
+                {
+                    <img src="@_hospitalLogoUrl" alt="logo" class="card-logo" />
+                }
+                <div class="card-title">@_loginHospitalTitle</div>
+                @if (_isShowSecondTitle)
+                {
+                    <div class="card-subtitle">@_subTitle</div>
+                }
+            </div>
+
+            <div class="card-form">
+                <div class="input-group">
+                    <span class="input-icon">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                    </span>
+                    <input type="text"
+                           class="login-input"
+                           placeholder="请输入用户名"
+                           maxlength="32"
+                           @bind-value="Account"
+                           @onblur="LoadRolesAsync" />
+                </div>
+
+                <div class="input-group">
+                    <span class="input-icon">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                    </span>
+                    <input type="@(_showPassword ? "text" : "password")"
+                           class="login-input"
+                           placeholder="请输入密码"
+                           maxlength="32"
+                           @bind-value="Password"
+                           @bind-value:event="oninput"
+                           @onblur="LoadRolesAsync"
+                           @onkeypress="HandleKeyPressAsync" />
+                    <span class="input-icon-right" @onclick="SwitchPasswordVisibility">
+                        <MudIcon Icon="@(_showPassword ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)" Size="Size.Small" />
+                    </span>
+                </div>
+
+                <div class="input-group">
+                    <span class="input-icon">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" />
+                    </span>
+                    <select class="login-input login-select" @bind="_selectedRoleId" disabled="@(_isLoadingRoles || _roles.Count == 0)">
+                        <option value="">@GetRolePlaceholder()</option>
+                        @foreach (var role in _roles)
+                        {
+                            <option value="@role.Id">@role.Name</option>
+                        }
+                    </select>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div class="error-msg">@_message</div>
+                }
+
+                <button class="login-btn" type="button" disabled="@_isSigningIn" @onclick="SignInAsync">@(_isSigningIn ? "正在登录..." : "登录")</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_hospitalLogoUrl))
+            {
+                <div class="card-footer">
+                    <img src="@_hospitalLogoUrl" alt="logo" />
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private const int ArticleTypeMessage = 2;
+
+    private string _account = "";
+    private string _password = "";
+    private string _message = "";
+    private string _hospitalLogoUrl = "";
+    private string _loginBgUrl = "";
+    private string _loginHospitalTitle = "";
+    private string _subTitle = "";
+    private string _selectedRoleId = "";
+    private string _loadedRoleKey = "";
+    private readonly List<LoginRoleItem> _roles = [];
+    private readonly List<LoginNotice> _announcements = [];
+    private bool _showPassword;
+    private bool _isShowLogo = true;
+    private bool _isShowSecondTitle;
+    private bool _isInitialized;
+    private bool _isLoadingRoles;
+    private bool _isSigningIn;
+
+    private ILogger<Login> Logger => inj_loggerFactory.CreateLogger<Login>();
+
+    private string Account
+    {
+        get => _account;
+        set
+        {
+            _account = value;
+            ClearRoles();
+            ClearMessage();
+        }
+    }
+
+    private string Password
+    {
+        get => _password;
+        set
+        {
+            _password = value;
+            ClearRoles();
+            ClearMessage();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        if (_isInitialized)
+        {
+            return;
+        }
+
+        var authenticationState = await inj_authenticationStateProvider.GetAuthenticationStateAsync();
+        if (authenticationState.User.Identity?.IsAuthenticated == true)
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Home, true);
+            return;
+        }
+
+        _isInitialized = true;
+        _hospitalLogoUrl = inj_configuration.GetValue<string>("AppSettings:hospitalLogo") ?? "";
+        _loginBgUrl = inj_configuration.GetValue<string>("AppSettings:loginBg") ?? "";
+        _isShowLogo = inj_configuration.GetValue("AppSettings:showLoginTitleLogo", true);
+        _loginHospitalTitle = inj_configuration.GetValue<string>("AppSettings:loginHospitalTitle") ?? "介入数据填报与管理平台";
+        _subTitle = inj_configuration.GetValue<string>("AppSettings:subTitle") ?? "";
+        _isShowSecondTitle = !string.IsNullOrWhiteSpace(_subTitle);
+        await LoadPortalConfigAsync();
+    }
+
+    private async Task LoadPortalConfigAsync()
+    {
+        try
+        {
+            await using var dbContext = await inj_registryDbContextFactory.CreateDbContextAsync();
+            var codes = new[]
+            {
+                PortalConfigConstants.LoginTitle,
+                PortalConfigConstants.LoginContent,
+                PortalConfigConstants.Announcement
+            };
+            var configs = await dbContext.PortalConfigs.AsNoTracking()
+                .Where(x => codes.Contains(x.Code))
+                .ToDictionaryAsync(x => x.Code, x => x.Value);
+            if (configs.TryGetValue(PortalConfigConstants.LoginTitle, out var title) && !string.IsNullOrWhiteSpace(title))
+            {
+                _loginHospitalTitle = title;
+            }
+
+            if (configs.TryGetValue(PortalConfigConstants.LoginContent, out var content) && !string.IsNullOrWhiteSpace(content))
+            {
+                _subTitle = content;
+            }
+
+            _announcements.Clear();
+            if (configs.TryGetValue(PortalConfigConstants.Announcement, out var announcement) && !string.IsNullOrWhiteSpace(announcement))
+            {
+                _announcements.Add(new LoginNotice(announcement, DateTime.Now));
+            }
+
+            var messages = await dbContext.Articles.AsNoTracking()
+                .Where(x => x.Type == ArticleTypeMessage)
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.Id)
+                .Take(3)
+                .Select(x => new LoginNotice(x.Content, x.CreatedAt))
+                .ToListAsync();
+            _announcements.AddRange(messages);
+
+            _isShowSecondTitle = !string.IsNullOrWhiteSpace(_subTitle);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "读取登录页门户配置失败");
+        }
+    }
+
+    private async Task SignInAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_account) || string.IsNullOrWhiteSpace(_password))
+        {
+            _message = "请输入正确的用户名和密码";
+            return;
+        }
+
+        if (_roles.Count == 0)
+        {
+            await LoadRolesAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedRoleId))
+        {
+            _message = "请选择登录角色";
+            return;
+        }
+
+        _isSigningIn = true;
+        try
+        {
+            var result = await inj_jsRuntime.InvokeAsync<LoginResult>("bioAuthLogin", inj_navigationManager.BaseUri, _account, _password);
+            if (result.Success)
+            {
+                var roleResult = await inj_jsRuntime.InvokeAsync<LoginResult>("mcrSetSelectedRole", inj_navigationManager.BaseUri, _selectedRoleId);
+                if (!roleResult.Success)
+                {
+                    await inj_jsRuntime.InvokeVoidAsync("bioAuthLogout", inj_navigationManager.BaseUri);
+                    _message = roleResult.Message ?? "角色权限验证失败";
+                    return;
+                }
+
+                inj_navigationManager.NavigateTo(RouteConstants.Home, true);
+                return;
+            }
+
+            _message = result.Status switch
+            {
+                401 => "用户名或密码错误",
+                403 => "账号已被禁用",
+                500 => "服务器错误，请稍后重试",
+                0 => result.Message ?? "网络错误，请检查网络连接",
+                _ => result.Message ?? "登录失败，请稍后重试"
+            };
+        }
+        catch (OperationCanceledException ex)
+        {
+            Logger.LogWarning(ex, "登录请求超时");
+            _message = "登录请求超时，请重试";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "登录失败");
+            _message = "登录失败，请稍后重试";
+        }
+        finally
+        {
+            _isSigningIn = false;
+        }
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_account) || string.IsNullOrWhiteSpace(_password) || _isLoadingRoles)
+        {
+            return;
+        }
+
+        var roleKey = $"{_account.Trim()}\n{_password}";
+        if (_loadedRoleKey == roleKey && _roles.Count > 0)
+        {
+            return;
+        }
+
+        _isLoadingRoles = true;
+        try
+        {
+            var result = await inj_jsRuntime.InvokeAsync<RoleListResult>("mcrGetRoleList", inj_navigationManager.BaseUri, _account, _password);
+            _roles.Clear();
+            _selectedRoleId = "";
+            _loadedRoleKey = roleKey;
+
+            if (!result.Success)
+            {
+                _message = result.Message ?? "角色列表获取失败";
+                return;
+            }
+
+            _roles.AddRange(result.Roles);
+            if (_roles.Count == 1)
+            {
+                _selectedRoleId = _roles[0].Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "角色列表获取失败");
+            _message = "角色列表获取失败，请稍后重试";
+        }
+        finally
+        {
+            _isLoadingRoles = false;
+        }
+    }
+
+    private void SwitchPasswordVisibility()
+    {
+        _showPassword = !_showPassword;
+    }
+
+    private void OpenPortal()
+    {
+        inj_navigationManager.NavigateTo(RouteConstants.Portal);
+    }
+
+    private void ClearMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(_message))
+        {
+            _message = "";
+        }
+    }
+
+    private void ClearRoles()
+    {
+        _roles.Clear();
+        _selectedRoleId = "";
+        _loadedRoleKey = "";
+    }
+
+    private string GetRolePlaceholder()
+    {
+        if (_isLoadingRoles)
+        {
+            return "正在加载角色...";
+        }
+
+        return _roles.Count == 0 ? "请输入账号密码后选择角色" : "请选择角色";
+    }
+
+    private async Task HandleKeyPressAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SignInAsync();
+        }
+    }
+
+    private static string GetSnippet(string? value, int length)
+    {
+        var text = ToPlainText(value);
+        return text.Length <= length ? text : $"{text[..length]}...";
+    }
+
+    private static string ToPlainText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var noTags = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        return System.Net.WebUtility.HtmlDecode(noTags).Trim();
+    }
+
+    private static string ShowDate(DateTime value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private class LoginResult
+    {
+        public bool Success { get; set; }
+        public int Status { get; set; }
+        public string? Message { get; set; }
+    }
+
+    private sealed class RoleListResult : LoginResult
+    {
+        public List<LoginRoleItem> Roles { get; set; } = [];
+    }
+
+    private sealed class LoginRoleItem
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? Describe { get; set; }
+    }
+
+    private sealed record LoginNotice(string Content, DateTime CreatedAt);
+}

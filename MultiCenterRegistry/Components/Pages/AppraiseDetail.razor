@@ -1,0 +1,1089 @@
+﻿@page "/meetings/{MeetingId:guid}/cases/{CaseId:guid}/appraise"
+@inherits BasePage
+
+<PageTitle>@(_case == null ? "病例评审" : $"{_case.PatientName} - 病例评审")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="appraise-page">
+    <div class="detail-header">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToMeeting">返回</MudButton>
+        <div>
+            <h1>@(_case?.PatientName ?? "病例评审")</h1>
+            <div class="page-subtitle">@(_meeting?.Title ?? "")</div>
+        </div>
+        <MudSpacer />
+        @if (_case != null)
+        {
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       Href="@($"/exports/appraise/{MeetingId}/{CaseId}.pdf")"
+                       Target="_blank">下载PDF</MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Description"
+                       OnClick="OpenCase">查看病例</MudButton>
+            <span class="status-pill">@GetSubStatusText(_case.SubStatus)</span>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载病例评审</span>
+        </MudPaper>
+    }
+    else if (_meeting == null || _case == null)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">未找到会议或病例</MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="summary-panel" Elevation="0">
+            @foreach (var item in BuildSummaryItems())
+            {
+                <div class="summary-item">
+                    <div class="summary-label">@item.Label</div>
+                    <div class="summary-value">@ShowValue(item.Value)</div>
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="case-preview-panel" Elevation="0">
+            <div class="panel-title">
+                <div>
+                    <h2>病例对照</h2>
+                    <div class="page-subtitle">评审时可对照查看病例表单原始内容</div>
+                </div>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                           OnClick="OpenCase">完整病例</MudButton>
+            </div>
+            @if (_caseForms.Count == 0)
+            {
+                <div class="empty-line">该病例暂无表单数据</div>
+            }
+            else
+            {
+                <div class="case-form-layout">
+                    <nav class="case-form-nav">
+                        @for (var i = 0; i < _caseForms.Count; i++)
+                        {
+                            <a href="@($"#case-preview-{i}")">@_caseForms[i].Name</a>
+                        }
+                    </nav>
+                    <div class="case-preview-list">
+                        @for (var i = 0; i < _caseForms.Count; i++)
+                        {
+                            var form = _caseForms[i];
+                            <div class="case-preview-form" id="@($"case-preview-{i}")">
+                                <div class="form-title">
+                                    <div>
+                                        <h3>@form.Name</h3>
+                                        <div class="page-subtitle">创建时间 @FormatDateTime(form.CreatedAt)</div>
+                                    </div>
+                                    <span>@form.Fields.Count 个字段</span>
+                                </div>
+                                <div class="field-grid">
+                                    @foreach (var field in form.Fields)
+                                    {
+                                        if (field.IsSection)
+                                        {
+                                            <div class="section-title">@field.FieldName</div>
+                                        }
+                                        else
+                                        {
+                                            <div class="field-card">
+                                                <div class="field-name">@field.FieldName</div>
+                                                <div class="field-value">@GetDisplayValue(field)</div>
+                                                @if (field.Files.Count > 0)
+                                                {
+                                                    <div class="file-list">
+                                                        @foreach (var file in field.Files)
+                                                        {
+                                                            <div class="file-item">
+                                                                <span title="@file.FilePath">@file.FileName</span>
+                                                                <span class="muted">@FormatSize(file.FileSize)</span>
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                                               Size="Size.Small"
+                                                                               Color="Color.Primary"
+                                                                               Href="@GetFileUrl(file, false)"
+                                                                               Target="_blank" />
+                                                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                                               Size="Size.Small"
+                                                                               Color="Color.Primary"
+                                                                               Href="@GetFileUrl(file, true)"
+                                                                               Target="_blank" />
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="section-panel" Elevation="0">
+            <div class="panel-title">
+                <h2>评审汇总</h2>
+                <span>@_summaries.Count 条</span>
+            </div>
+            @if (_summaries.Count == 0)
+            {
+                <div class="empty-line">暂无汇总</div>
+            }
+            else
+            {
+                <div class="summary-list">
+                    @foreach (var summary in _summaries)
+                    {
+                        <div class="summary-note">
+                            <div class="note-head">
+                                <strong>@ShowValue(summary.ExpertName)</strong>
+                                <span>@GetSummaryStatusText(summary.Status)</span>
+                            </div>
+                            @if (CanEditSummary(summary))
+                            {
+                                <MudTextField T="string"
+                                              @bind-Value="summary.Content"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Lines="4" />
+                                <div class="inline-actions">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="@(() => SaveSummaryAsync(summary))">保存汇总</MudButton>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" OnClick="@(() => SubmitSummaryAsync(summary))">提交汇总</MudButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="note-content">@ShowValue(summary.Content)</div>
+                            }
+                            <div class="muted">@FormatDateTime(summary.CreatedAt)</div>
+                        </div>
+                    }
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="section-panel" Elevation="0">
+            <div class="panel-title">
+                <h2>答案统计</h2>
+                <span>@_statistics.Count 个字段</span>
+            </div>
+            @if (_statistics.Count == 0)
+            {
+                <div class="empty-line">暂无可统计答案</div>
+            }
+            else
+            {
+                <div class="stat-grid">
+                    @foreach (var item in _statistics)
+                    {
+                        <div class="stat-card">
+                            <div class="field-name">@item.FieldName</div>
+                            @foreach (var option in item.Options)
+                            {
+                                <div class="stat-row">
+                                    <span>@option.Text</span>
+                                    <em>@option.Count 人</em>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="section-panel" Elevation="0">
+            <div class="panel-title">
+                <h2>专家评审</h2>
+                <span>@_appraises.Count 条</span>
+            </div>
+            <div class="inline-actions">
+                @if (CanEditCurrentAppraise)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
+                        @(_isEditing ? "取消编辑" : "编辑评审表单")
+                    </MudButton>
+                }
+                @if (_isEditing && CanEditCurrentAppraise)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAppraiseFormsAsync">保存评审表单</MudButton>
+                }
+            </div>
+            @if (_appraises.Count == 0)
+            {
+                <div class="empty-line">暂无评审</div>
+            }
+            else
+            {
+                <div class="appraise-list">
+                    @foreach (var appraise in _appraises)
+                    {
+                        <details class="appraise-item" open="@appraise.IsFirst">
+                            <summary>
+                                <span>@ShowValue(appraise.ExpertName)</span>
+                                <em>@GetAppraiseStatusText(appraise.Status)</em>
+                                <small>@FormatDateTime(appraise.UpdatedAt ?? appraise.CreatedAt)</small>
+                            </summary>
+                            @if (appraise.CanEdit)
+                            {
+                                <div class="inline-actions appraise-actions">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" OnClick="@(() => SubmitAppraiseAsync(appraise.Id))">提交评审</MudButton>
+                                </div>
+                            }
+                            @if (appraise.Forms.Count == 0)
+                            {
+                                <div class="empty-line">该专家暂无评审表单数据</div>
+                            }
+                            else
+                            {
+                                @foreach (var form in appraise.Forms)
+                                {
+                                    <div class="form-block">
+                                        <div class="form-title">
+                                            <h3>@form.Name</h3>
+                                            <span>@form.Fields.Count 个字段</span>
+                                        </div>
+                                        <div class="field-grid">
+                                            @foreach (var field in form.Fields)
+                                            {
+                                                if (field.IsSection)
+                                                {
+                                                    <div class="section-title">@field.FieldName</div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="field-card">
+                                                        <div class="field-name">@field.FieldName</div>
+                                                        @if (_isEditing && appraise.CanEdit && !field.IsFile)
+                                                        {
+                                                            <MudTextField T="string"
+                                                                          @bind-Value="field.EditValue"
+                                                                          Variant="Variant.Outlined"
+                                                                          Margin="Margin.Dense"
+                                                                          Lines="3" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="field-value">@GetDisplayValue(field)</div>
+                                                        }
+                                                        @if (field.Files.Count > 0)
+                                                        {
+                                                            <div class="file-list">
+                                                                @foreach (var file in field.Files)
+                                                                {
+                                                                    <div class="file-item">
+                                                                        <span title="@file.FilePath">@file.FileName</span>
+                                                                        <span class="muted">@FormatSize(file.FileSize)</span>
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                                                       Size="Size.Small"
+                                                                                       Color="Color.Primary"
+                                                                                       Href="@GetFileUrl(file, false)"
+                                                                                       Target="_blank" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                                                       Size="Size.Small"
+                                                                                       Color="Color.Primary"
+                                                                                       Href="@GetFileUrl(file, true)"
+                                                                                       Target="_blank" />
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </details>
+                    }
+                </div>
+            }
+        </MudPaper>
+
+        @if (_votes.Count > 0)
+        {
+            <MudPaper Class="section-panel" Elevation="0">
+                <div class="panel-title">
+                    <h2>投票记录</h2>
+                    <span>@_votes.Count 条</span>
+                </div>
+                <div class="vote-list">
+                    @foreach (var vote in _votes)
+                    {
+                        <div class="vote-item">
+                            <strong>@ShowValue(vote.ExpertName)</strong>
+                            <span>@(vote.Agreed ? "同意" : "不同意")</span>
+                            <em>@ShowValue(vote.Content)</em>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid MeetingId { get; set; }
+
+    [Parameter]
+    public Guid CaseId { get; set; }
+
+    private ReviewMeeting? _meeting;
+    private RegistryCase? _case;
+    private readonly List<FormBlock> _caseForms = [];
+    private readonly List<AppraiseBlock> _appraises = [];
+    private readonly List<CaseSummary> _summaries = [];
+    private readonly List<CaseVote> _votes = [];
+    private readonly List<FieldStatistic> _statistics = [];
+    private string? _hospitalName;
+    private string? _departmentName;
+    private bool _isLoading = true;
+    private bool _isEditing;
+    private bool _isMeetingLeader;
+
+    protected override Task OnPageInitializedAsync() => LoadAppraiseAsync();
+
+    private async Task LoadAppraiseAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _meeting = await _registryContext.ReviewMeetings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == MeetingId);
+            _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
+            _caseForms.Clear();
+            _appraises.Clear();
+            _summaries.Clear();
+            _votes.Clear();
+            _statistics.Clear();
+            _hospitalName = null;
+            _departmentName = null;
+            _isMeetingLeader = false;
+            if (_meeting == null || _case == null)
+            {
+                return;
+            }
+
+            await LoadCaseNamesAsync();
+            await LoadLeaderStateAsync();
+            await LoadCaseFormsAsync();
+
+            var appraises = await _registryContext.CaseAppraises.AsNoTracking()
+                .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
+                .OrderBy(x => x.Status)
+                .ThenBy(x => x.CreatedAt)
+                .ToListAsync();
+            appraises = appraises
+                .OrderByDescending(x => IsCurrentUser(x.ExpertId))
+                .ThenBy(x => x.Status)
+                .ThenBy(x => x.CreatedAt)
+                .ToList();
+            var appraiseIds = appraises.Select(x => x.Id).ToList();
+
+            var summaries = await _registryContext.CaseSummaries.AsNoTracking()
+                .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync();
+            _summaries.AddRange(summaries);
+
+            var summaryIds = summaries.Select(x => x.Id).ToList();
+            if (summaryIds.Count > 0)
+            {
+                var votes = await _registryContext.CaseVotes.AsNoTracking()
+                    .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId && summaryIds.Contains(x.SummaryId))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ToListAsync();
+                _votes.AddRange(votes);
+            }
+
+            var users = await LoadUserNamesAsync(appraises.Select(x => x.ExpertId));
+            var instances = appraiseIds.Count == 0
+                ? []
+                : await _registryContext.FormInstances.AsNoTracking()
+                    .Where(x => x.OwnerType == "appraise" && appraiseIds.Contains(x.OwnerId))
+                    .OrderBy(x => x.CreatedAt)
+                    .ToListAsync();
+            var instanceIds = instances.Select(x => x.Id).ToList();
+
+            var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
+            var templates = templateIds.Count == 0
+                ? new Dictionary<Guid, RegistryFormTemplate>()
+                : await _registryContext.FormTemplates.AsNoTracking()
+                    .Where(x => templateIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id);
+
+            var values = instanceIds.Count == 0
+                ? []
+                : await _registryContext.FormFieldValues.AsNoTracking()
+                    .Where(x => instanceIds.Contains(x.FormInstanceId))
+                    .OrderBy(x => x.Sort)
+                    .ThenBy(x => x.StorageKey)
+                    .ToListAsync();
+
+            var definitionIds = values
+                .Where(x => x.FormFieldDefinitionId.HasValue)
+                .Select(x => x.FormFieldDefinitionId!.Value)
+                .Distinct()
+                .ToList();
+            var definitions = definitionIds.Count == 0
+                ? new Dictionary<Guid, RegistryFormFieldDefinition>()
+                : await _registryContext.FormFieldDefinitions.AsNoTracking()
+                    .Where(x => definitionIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id);
+
+            var valueIds = values.Select(x => x.Id).ToList();
+            var files = valueIds.Count == 0
+                ? []
+                : await _registryContext.Files.AsNoTracking()
+                    .Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId))
+                    .OrderBy(x => x.CreatedAt)
+                    .ThenBy(x => x.FileName)
+                    .ToListAsync();
+            var filesByValue = files
+                .GroupBy(x => x.OwnerId)
+                .ToDictionary(x => x.Key, x => x.ToList());
+
+            BuildAppraiseBlocks(appraises, users, instances, templates, values, definitions, filesByValue);
+            BuildStatistics(values, definitions);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadCaseNamesAsync()
+    {
+        if (_registryContext == null || _case == null)
+        {
+            return;
+        }
+
+        var hospitalId = TryParseGuid(_case.HospitalId);
+        if (hospitalId.HasValue)
+        {
+            _hospitalName = await _registryContext.SystemHospitals.AsNoTracking()
+                .Where(x => x.Id == hospitalId.Value)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync();
+        }
+
+        var departmentId = TryParseGuid(_case.DepartmentId);
+        if (departmentId.HasValue)
+        {
+            _departmentName = await _registryContext.SystemDepartments.AsNoTracking()
+                .Where(x => x.Id == departmentId.Value)
+                .Select(x => x.DisplayName ?? x.Name)
+                .FirstOrDefaultAsync();
+        }
+    }
+
+    private async Task LoadLeaderStateAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isMeetingLeader = await _registryContext.MeetingExperts.AsNoTracking()
+            .AnyAsync(x => x.MeetingId == MeetingId && x.Level == 1 && x.ExpertId == CurrentUserId);
+    }
+
+    private async Task LoadCaseFormsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var instances = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+        var instanceIds = instances.Select(x => x.Id).ToList();
+        if (instanceIds.Count == 0)
+        {
+            return;
+        }
+
+        var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
+        var templates = await _registryContext.FormTemplates.AsNoTracking()
+            .Where(x => templateIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        var values = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instanceIds.Contains(x.FormInstanceId))
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.StorageKey)
+            .ToListAsync();
+
+        var definitionIds = values
+            .Where(x => x.FormFieldDefinitionId.HasValue)
+            .Select(x => x.FormFieldDefinitionId!.Value)
+            .Distinct()
+            .ToList();
+        var definitions = definitionIds.Count == 0
+            ? new Dictionary<Guid, RegistryFormFieldDefinition>()
+            : await _registryContext.FormFieldDefinitions.AsNoTracking()
+                .Where(x => definitionIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id);
+
+        var valueIds = values.Select(x => x.Id).ToList();
+        var files = valueIds.Count == 0
+            ? []
+            : await _registryContext.Files.AsNoTracking()
+                .Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId))
+                .OrderBy(x => x.CreatedAt)
+                .ThenBy(x => x.FileName)
+                .ToListAsync();
+        var filesByValue = files
+            .GroupBy(x => x.OwnerId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var instance in instances)
+        {
+            var fields = values
+                .Where(x => x.FormInstanceId == instance.Id)
+                .Select(value => CreateFieldItem(value, definitions, filesByValue))
+                .ToList();
+
+            var name = templates.TryGetValue(instance.FormTemplateId, out var template)
+                ? template.FormName
+                : "病例表单";
+            _caseForms.Add(new FormBlock(name, fields, instance.CreatedAt));
+        }
+    }
+
+    private async Task<Dictionary<Guid, string>> LoadUserNamesAsync(IEnumerable<string?> rawIds)
+    {
+        if (_registryContext == null)
+        {
+            return [];
+        }
+
+        var ids = rawIds
+            .Select(TryParseGuid)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        return ids.Count == 0
+            ? []
+            : await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => ids.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+    }
+
+    private void BuildAppraiseBlocks(
+        List<CaseAppraise> appraises,
+        IReadOnlyDictionary<Guid, string> users,
+        List<RegistryFormInstance> instances,
+        IReadOnlyDictionary<Guid, RegistryFormTemplate> templates,
+        List<RegistryFormFieldValue> values,
+        IReadOnlyDictionary<Guid, RegistryFormFieldDefinition> definitions,
+        IReadOnlyDictionary<Guid, List<RegistryFile>> filesByValue)
+    {
+        for (var i = 0; i < appraises.Count; i++)
+        {
+            var appraise = appraises[i];
+            var forms = new List<FormBlock>();
+            foreach (var instance in instances.Where(x => x.OwnerId == appraise.Id))
+            {
+                var fields = values
+                    .Where(x => x.FormInstanceId == instance.Id)
+                    .Select(value => CreateFieldItem(value, definitions, filesByValue))
+                    .ToList();
+
+                var name = templates.TryGetValue(instance.FormTemplateId, out var template)
+                    ? template.FormName
+                    : "评审表单";
+                forms.Add(new FormBlock(name, fields));
+            }
+
+            var canEdit = HasPermission(PermissionConstants.AppraiseEdit)
+                && appraise.Status == 0
+                && IsCurrentUser(appraise.ExpertId);
+            _appraises.Add(new AppraiseBlock(
+                appraise.Id,
+                appraise.ExpertId,
+                GetUserName(appraise.ExpertId, users),
+                appraise.Status,
+                appraise.CreatedAt,
+                appraise.UpdatedAt,
+                IsCurrentUser(appraise.ExpertId),
+                canEdit,
+                i == 0,
+                forms));
+        }
+    }
+
+    private static FieldItem CreateFieldItem(
+        RegistryFormFieldValue value,
+        IReadOnlyDictionary<Guid, RegistryFormFieldDefinition> definitions,
+        IReadOnlyDictionary<Guid, List<RegistryFile>> filesByValue)
+    {
+        RegistryFormFieldDefinition? definition = null;
+        if (value.FormFieldDefinitionId.HasValue)
+        {
+            definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
+        }
+
+        filesByValue.TryGetValue(value.Id, out var fieldFiles);
+        return new FieldItem(
+            value.Id,
+            value.FieldName,
+            value.FieldValue,
+            value.FieldText,
+            definition?.ControlType,
+            definition?.Level ?? 2,
+            value.Sort,
+            fieldFiles ?? []);
+    }
+
+    private void BuildStatistics(
+        List<RegistryFormFieldValue> values,
+        IReadOnlyDictionary<Guid, RegistryFormFieldDefinition> definitions)
+    {
+        var rows = values
+            .Select(value =>
+            {
+                RegistryFormFieldDefinition? definition = null;
+                if (value.FormFieldDefinitionId.HasValue)
+                {
+                    definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
+                }
+
+                return new
+                {
+                    value.FieldName,
+                    Value = FormValueDisplayMapper.GetDisplayText(value.FieldName, value.FieldText, value.FieldValue),
+                    Level = definition?.Level ?? 2,
+                    value.Sort
+                };
+            })
+            .Where(x => x.Level > 1 && !string.IsNullOrWhiteSpace(x.Value))
+            .ToList();
+
+        var statistics = rows
+            .GroupBy(x => x.FieldName)
+            .Select(group => new
+            {
+                FieldName = group.Key,
+                Sort = group.Min(x => x.Sort),
+                Options = group
+                    .GroupBy(x => x.Value!.Trim())
+                    .Select(x => new FieldStatisticOption(x.Key, x.Count()))
+                    .OrderByDescending(x => x.Count)
+                    .ThenBy(x => x.Text)
+                    .Take(8)
+                    .ToList()
+            })
+            .Where(x => x.Options.Count > 0)
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.FieldName)
+            .Take(80)
+            .Select(x => new FieldStatistic(x.FieldName, x.Options))
+            .ToList();
+
+        _statistics.AddRange(statistics);
+    }
+
+    private void BackToMeeting() => inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(MeetingId));
+
+    private void OpenCase() => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(CaseId));
+
+    private AppraiseBlock? CurrentAppraise => _appraises.FirstOrDefault(x => x.IsCurrentUser);
+
+    private bool CanEditCurrentAppraise => CurrentAppraise?.CanEdit == true;
+
+    private bool CanEditSummary(CaseSummary summary)
+        => summary.Status == 0
+           && HasPermission(PermissionConstants.AppraiseEdit)
+           && (_isMeetingLeader || IsCurrentUser(summary.CreatedBy));
+
+    private void ToggleEdit()
+    {
+        if (!CanEditCurrentAppraise)
+        {
+            return;
+        }
+
+        _isEditing = !_isEditing;
+        foreach (var field in CurrentAppraise!.Forms.SelectMany(x => x.Fields))
+        {
+            field.EditValue = string.IsNullOrWhiteSpace(field.FieldText) ? field.FieldValue : field.FieldText;
+        }
+    }
+
+    private async Task SaveAppraiseFormsAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AppraiseEdit))
+        {
+            return;
+        }
+
+        var appraise = CurrentAppraise;
+        if (appraise?.CanEdit != true)
+        {
+            inj_snackbar.Add("只能保存本人未提交的评审表单", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认保存当前评审表单修改？"))
+        {
+            return;
+        }
+
+        var canSave = await _registryContext.CaseAppraises.AsNoTracking()
+            .AnyAsync(x => x.Id == appraise.Id && x.MeetingId == MeetingId && x.CaseId == CaseId && x.ExpertId == CurrentUserId && x.Status == 0);
+        if (!canSave)
+        {
+            inj_snackbar.Add("当前评审状态已变化，请刷新后重试", Severity.Warning);
+            await LoadAppraiseAsync();
+            return;
+        }
+
+        var fields = appraise.Forms.SelectMany(x => x.Fields).Where(x => !x.IsFile).ToList();
+        var ids = fields.Select(x => x.Id).ToList();
+        var values = await _registryContext.FormFieldValues.Where(x => ids.Contains(x.Id)).ToListAsync();
+        foreach (var value in values)
+        {
+            var field = fields.First(x => x.Id == value.Id);
+            value.FieldValue = field.EditValue;
+            value.FieldText = field.EditValue;
+            value.UpdatedAt = DateTime.Now;
+            value.UpdatedBy = CurrentUserId;
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "保存表单", "case", CaseId));
+        await _registryContext.SaveChangesAsync();
+        _isEditing = false;
+        inj_snackbar.Add("评审表单已保存", Severity.Success);
+        await LoadAppraiseAsync();
+    }
+
+    private async Task SubmitAppraiseAsync(Guid appraiseId)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AppraiseEdit))
+        {
+            return;
+        }
+
+        var appraise = await _registryContext.CaseAppraises
+            .FirstOrDefaultAsync(x => x.Id == appraiseId && x.MeetingId == MeetingId && x.CaseId == CaseId && x.ExpertId == CurrentUserId);
+        if (appraise == null)
+        {
+            inj_snackbar.Add("只能提交本人评审", Severity.Warning);
+            return;
+        }
+
+        if (appraise.Status != 0)
+        {
+            inj_snackbar.Add("当前评审已提交，不能重复提交", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认提交当前评审？提交后状态会变为已评审。"))
+        {
+            return;
+        }
+
+        appraise.Status = 1;
+        appraise.UpdatedAt = DateTime.Now;
+        appraise.UpdatedBy = CurrentUserId;
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "提交评审", "appraise", appraiseId));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("评审已提交", Severity.Success);
+        await LoadAppraiseAsync();
+    }
+
+    private async Task SaveSummaryAsync(CaseSummary summary)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AppraiseEdit) || !await RequireLeaderAsync(summary))
+        {
+            return;
+        }
+
+        if (summary.Status != 0)
+        {
+            inj_snackbar.Add("已提交的汇总不能修改", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(summary.Content))
+        {
+            inj_snackbar.Add("请先填写评审汇总", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认保存评审汇总？"))
+        {
+            return;
+        }
+
+        var affected = await _registryContext.CaseSummaries
+            .Where(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId && x.Status == 0)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Content, summary.Content ?? "")
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        if (affected == 0)
+        {
+            inj_snackbar.Add("汇总状态已变化，请刷新后重试", Severity.Warning);
+            await LoadAppraiseAsync();
+            return;
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "保存汇总", "summary", summary.Id));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("汇总已保存", Severity.Success);
+        await LoadAppraiseAsync();
+    }
+
+    private async Task SubmitSummaryAsync(CaseSummary summary)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AppraiseEdit) || !await RequireLeaderAsync(summary))
+        {
+            return;
+        }
+
+        if (summary.Status != 0)
+        {
+            inj_snackbar.Add("已提交的汇总不能重复提交", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(summary.Content))
+        {
+            inj_snackbar.Add("请先填写评审汇总", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认提交评审汇总？提交后病例会标记为已评审。"))
+        {
+            return;
+        }
+
+        var affected = await _registryContext.CaseSummaries
+            .Where(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId && x.Status == 0)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Content, summary.Content ?? "")
+                .SetProperty(x => x.Status, 1)
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        if (affected == 0)
+        {
+            inj_snackbar.Add("汇总状态已变化，请刷新后重试", Severity.Warning);
+            await LoadAppraiseAsync();
+            return;
+        }
+
+        await _registryContext.Cases.Where(x => x.Id == CaseId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.SubStatus, 2)
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+
+        var meetingCaseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId)
+            .Select(x => x.CaseId)
+            .Distinct()
+            .ToListAsync();
+        var submittedCaseIds = await _registryContext.CaseSummaries.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId && x.Status == 1)
+            .Select(x => x.CaseId)
+            .Distinct()
+            .ToListAsync();
+        if (meetingCaseIds.Count > 0 && meetingCaseIds.All(x => submittedCaseIds.Contains(x)))
+        {
+            await _registryContext.ReviewMeetings.Where(x => x.Id == MeetingId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Status, 2)
+                    .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                    .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "提交汇总", "summary", summary.Id));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("汇总已提交", Severity.Success);
+        await LoadAppraiseAsync();
+    }
+
+    private async Task<bool> RequireLeaderAsync(CaseSummary summary)
+    {
+        if (_registryContext == null)
+        {
+            return false;
+        }
+
+        var isMeetingLeader = await _registryContext.MeetingExperts.AsNoTracking()
+            .AnyAsync(x => x.MeetingId == MeetingId && x.Level == 1 && x.ExpertId == CurrentUserId);
+        if (isMeetingLeader)
+        {
+            return true;
+        }
+
+        var createdBy = await _registryContext.CaseSummaries.AsNoTracking()
+            .Where(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId)
+            .Select(x => x.CreatedBy)
+            .FirstOrDefaultAsync();
+        if (IsCurrentUser(createdBy))
+        {
+            return true;
+        }
+
+        inj_snackbar.Add("只有汇总创建人或当前会议组长可以维护评审汇总", Severity.Warning);
+        return false;
+    }
+
+    private IEnumerable<SummaryItem> BuildSummaryItems()
+    {
+        if (_case == null)
+        {
+            yield break;
+        }
+
+        yield return new("性别/年龄", $"{ShowValue(_case.PatientSex)} / {ShowValue(_case.PatientAge)}");
+        yield return new("病案号", _case.PatientNumber);
+        yield return new("所属医院", _hospitalName ?? _case.HospitalId);
+        yield return new("所属科室", _departmentName ?? _case.DepartmentId);
+        yield return new("入院时间", FormatDate(_case.AdmissionTime));
+        yield return new("手术时间", FormatDate(_case.OperationTime));
+    }
+
+    private static string GetDisplayValue(FieldItem field)
+    {
+        if (field.ControlType == 7)
+        {
+            return field.Files.Count == 0 ? "-" : $"{field.Files.Count} 个附件";
+        }
+
+        return ShowValue(FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue));
+    }
+
+    private static string GetFileUrl(RegistryFile file, bool download)
+        => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private bool IsCurrentUser(string? id) => string.Equals(id, CurrentUserId, StringComparison.OrdinalIgnoreCase);
+
+    private static string GetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
+    {
+        var userId = TryParseGuid(id);
+        return userId.HasValue && users.TryGetValue(userId.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+
+    private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string FormatSize(long? size)
+    {
+        if (!size.HasValue || size.Value <= 0)
+        {
+            return "-";
+        }
+
+        var value = size.Value;
+        if (value < 1024)
+        {
+            return $"{value} B";
+        }
+
+        if (value < 1024 * 1024)
+        {
+            return $"{value / 1024d:0.#} KB";
+        }
+
+        return $"{value / 1024d / 1024d:0.#} MB";
+    }
+
+    private static string GetSubStatusText(int status)
+        => status switch
+        {
+            0 => "待分配",
+            1 => "待评审",
+            2 => "已评审",
+            _ => $"子状态 {status}"
+        };
+
+    private static string GetAppraiseStatusText(int status)
+        => status switch
+        {
+            0 => "待评审",
+            1 => "已评审",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetSummaryStatusText(int status)
+        => status switch
+        {
+            0 => "未提交",
+            1 => "已提交",
+            _ => $"状态 {status}"
+        };
+
+    private sealed record SummaryItem(string Label, string? Value);
+
+    private sealed record AppraiseBlock(
+        Guid Id,
+        string ExpertId,
+        string ExpertName,
+        int Status,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt,
+        bool IsCurrentUser,
+        bool CanEdit,
+        bool IsFirst,
+        List<FormBlock> Forms);
+
+    private sealed record FormBlock(string Name, List<FieldItem> Fields, DateTime? CreatedAt = null);
+
+    private sealed class FieldItem(
+        Guid id,
+        string fieldName,
+        string? fieldValue,
+        string? fieldText,
+        int? controlType,
+        int level,
+        int sort,
+        List<RegistryFile> files)
+    {
+        public Guid Id { get; } = id;
+        public string FieldName { get; } = fieldName;
+        public string? FieldValue { get; set; } = fieldValue;
+        public string? FieldText { get; set; } = fieldText;
+        public string? EditValue { get; set; } = string.IsNullOrWhiteSpace(fieldText) ? fieldValue : fieldText;
+        public int? ControlType { get; } = controlType;
+        public int Level { get; } = level;
+        public int Sort { get; } = sort;
+        public List<RegistryFile> Files { get; } = files;
+        public bool IsSection => Level <= 1;
+        public bool IsFile => ControlType == 7;
+    }
+
+    private sealed record FieldStatistic(string FieldName, List<FieldStatisticOption> Options);
+
+    private sealed record FieldStatisticOption(string Text, int Count);
+}

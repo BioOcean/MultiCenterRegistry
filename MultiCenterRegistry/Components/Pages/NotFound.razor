@@ -1,0 +1,12 @@
+﻿@page "/not-found"
+@layout MainLayout
+@attribute [AllowAnonymous]
+
+<div class="not-found-page">
+    <section class="empty-panel">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Primary" />
+        <h1>页面不存在</h1>
+        <p>请检查访问地址是否正确。</p>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Home" Href="/">返回首页</MudButton>
+    </section>
+</div>

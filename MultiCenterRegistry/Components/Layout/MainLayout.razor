@@ -1,0 +1,359 @@
+﻿@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="false" Class="app-bar-custom">
+        <div class="brand-cluster">
+            <button type="button" class="brand-mark brand-home-button" title="首页" @onclick="NavigateToDefaultPage">
+                <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" />
+            </button>
+            <div class="brand-copy">
+                <MudText Typo="Typo.h6" Class="system-name">@SystemName</MudText>
+                <span>介入数据填报与管理</span>
+            </div>
+        </div>
+        <MudSpacer />
+        <div class="user-info" @onclick="LogoutAsync">
+            <div class="user-avatar">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+            </div>
+            <div class="user-text">
+                <span class="greeting-text">@GetGreeting()！@UserName</span>
+            </div>
+            <MudIcon Icon="@Icons.Material.Filled.ExitToApp" Size="Size.Small" Class="logout-icon" />
+        </div>
+    </MudAppBar>
+
+    @if (ShowSidebar)
+    {
+        <MudDrawer Open="true" Variant="DrawerVariant.Mini" ClipMode="DrawerClipMode.Always" Width="200px" Elevation="1" Class="main-drawer">
+            <div class="drawer-heading">
+                <span>工作台</span>
+                <strong>功能菜单</strong>
+            </div>
+            <MudNavMenu Dense="true" Class="nav-menu">
+                @if (_menus.Count == 0)
+                {
+                    <div class="empty-menu">暂无菜单</div>
+                }
+                else
+                {
+                    @foreach (var menu in _menus)
+                    {
+                        <MudNavLink Href="@menu.Href" Icon="@menu.Icon" Match="NavLinkMatch.Prefix">
+                            <span class="nav-link-content">
+                                <span>@menu.Title</span>
+                                @if (menu.Key == "followups" && _followupBadgeCount > 0)
+                                {
+                                    <span class="nav-badge">@ShowBadge(_followupBadgeCount)</span>
+                                }
+                            </span>
+                        </MudNavLink>
+                    }
+                }
+            </MudNavMenu>
+        </MudDrawer>
+    }
+
+    <MudMainContent Class="main-content">
+        <div class="@ContentShellClass">
+            @Body
+        </div>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    发生未处理错误。
+    <a href="." class="reload">重新加载</a>
+    <span class="dismiss">关闭</span>
+</div>
+
+@code {
+    private static readonly string[] FollowupStartSubjectIds = ["BB3035F7-C1C8-4665-A4C3-FD5A2185D6B1"];
+    private static readonly string[] FollowupThirtySubjectIds = ["61F2CE95-83BA-4A53-B363-904650DB3522"];
+    private static readonly string[] FollowupOneYearSubjectIds = ["A04B3C29-D29E-4949-81CB-59B3C408CA29"];
+    private static readonly string[] FollowupStartFieldNames = ["ECMO开始时间", "手术时间", "介入时间"];
+    private static readonly string[] FollowupThirtyFieldNames = ["30天结果（自ECMO安装之日起）", "30天结果", "30天随访结果"];
+    private static readonly string[] FollowupOneYearFieldNames = ["一年结果（自ECMO安装之日起）", "一年结果", "1年结果", "一年随访结果"];
+    private readonly List<FeatureItem> _menus = [];
+    private readonly HashSet<string> _permissionCodes = new(StringComparer.OrdinalIgnoreCase);
+    private ClaimsPrincipal? _currentUser;
+    private string _systemName = "";
+    private int _followupBadgeCount;
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#1D6FF2",
+            Secondary = "#00A8C8",
+            AppbarBackground = "#F9FCFF",
+            DrawerBackground = "#FFFFFF",
+            Background = "#F6FBFF",
+            Surface = "#FFFFFF"
+        }
+    };
+
+    private string SystemName
+        => !string.IsNullOrWhiteSpace(_systemName)
+            ? _systemName
+            : inj_configuration["AppSettings:loginHospitalTitle"] ?? inj_configuration["AppSettings:SystemName"] ?? "介入数据填报与管理平台";
+
+    private bool ShowSidebar
+        => !string.IsNullOrWhiteSpace(inj_navigationManager.ToBaseRelativePath(inj_navigationManager.Uri).Trim('/'));
+
+    private string ContentShellClass
+        => ShowSidebar ? "content-shell with-sidebar" : "content-shell";
+
+    private string UserName
+        => _currentUser?.FindFirst("displayName")?.Value
+           ?? _currentUser?.Identity?.Name
+           ?? inj_httpContextAccessor.HttpContext?.User.FindFirst("displayName")?.Value
+           ?? inj_httpContextAccessor.HttpContext?.User.Identity?.Name
+           ?? "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authenticationState = await inj_authenticationStateProvider.GetAuthenticationStateAsync();
+        _currentUser = authenticationState.User;
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadMenusAsync();
+        await base.OnParametersSetAsync();
+    }
+
+    private async Task LoadMenusAsync()
+    {
+        if (_currentUser == null)
+        {
+            var authenticationState = await inj_authenticationStateProvider.GetAuthenticationStateAsync();
+            _currentUser = authenticationState.User;
+        }
+
+        var isAuthenticated = _currentUser?.Identity?.IsAuthenticated == true;
+        if (!isAuthenticated)
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+            return;
+        }
+
+        if (!Guid.TryParse(GetCurrentUserId(), out var userId))
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+            return;
+        }
+
+        if (!Guid.TryParse(inj_httpContextAccessor.HttpContext?.Request.Cookies["mcr_selected_role_id"], out var selectedRoleId))
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+            return;
+        }
+
+        await using var dbContext = await inj_registryDbContextFactory.CreateDbContextAsync();
+        await LoadSystemNameAsync(dbContext);
+        var permissions = await dbContext.SystemMapUserRoles.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == selectedRoleId)
+            .Join(
+                dbContext.SystemRoles.AsNoTracking().Where(x => x.IsValid),
+                userRole => userRole.RoleId,
+                role => role.Id,
+                (userRole, role) => role.Id)
+            .Join(
+                dbContext.SystemMapRolePermissions.AsNoTracking(),
+                roleId => roleId,
+                rolePermission => rolePermission.RoleId,
+                (roleId, rolePermission) => rolePermission.PermissionId)
+            .Join(
+                dbContext.SystemPermissions.AsNoTracking(),
+                permissionId => permissionId,
+                permission => permission.Id,
+                (permissionId, permission) => permission.Code)
+            .Where(x => !string.IsNullOrWhiteSpace(x) && x.StartsWith("Power-MCR-"))
+            .Distinct()
+            .ToListAsync();
+
+        _menus.Clear();
+        _permissionCodes.Clear();
+        foreach (var permission in permissions)
+        {
+            if (!string.IsNullOrWhiteSpace(permission))
+            {
+                _permissionCodes.Add(permission);
+            }
+        }
+
+        var currentPath = new Uri(inj_navigationManager.Uri).AbsolutePath;
+        _menus.AddRange(FeatureCatalog.GetMenus(currentPath, _permissionCodes));
+        _followupBadgeCount = _permissionCodes.Contains(PermissionConstants.CaseSubmit)
+            ? await CountFollowupRemindersAsync(dbContext)
+            : 0;
+    }
+
+    private async Task LoadSystemNameAsync(RegistryDbContext dbContext)
+    {
+        var title = await dbContext.PortalConfigs.AsNoTracking()
+            .Where(x => x.Code == PortalConfigConstants.LoginTitle)
+            .Select(x => x.Value)
+            .FirstOrDefaultAsync();
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            _systemName = title;
+        }
+    }
+
+    private void NavigateToDefaultPage()
+    {
+        var targetPath = FeatureCatalog.GetDefaultPath(_permissionCodes);
+        inj_navigationManager.NavigateTo(string.IsNullOrWhiteSpace(targetPath) ? RouteConstants.Login : targetPath, true);
+    }
+
+    private static async Task<int> CountFollowupRemindersAsync(RegistryDbContext dbContext)
+    {
+        var caseIds = new HashSet<Guid>();
+        if (await HasFollowupConfigAsync(dbContext, FollowupThirtySubjectIds, FollowupThirtyFieldNames))
+        {
+            foreach (var caseId in await QueryDueFollowupCaseIdsAsync(dbContext, 30, FollowupThirtySubjectIds, FollowupThirtyFieldNames))
+            {
+                caseIds.Add(caseId);
+            }
+        }
+
+        if (await HasFollowupConfigAsync(dbContext, FollowupOneYearSubjectIds, FollowupOneYearFieldNames))
+        {
+            foreach (var caseId in await QueryDueFollowupCaseIdsAsync(dbContext, 365, FollowupOneYearSubjectIds, FollowupOneYearFieldNames))
+            {
+                caseIds.Add(caseId);
+            }
+        }
+
+        return caseIds.Count;
+    }
+
+    private static async Task<bool> HasFollowupConfigAsync(RegistryDbContext dbContext, string[] sourceIds, string[] fieldNames)
+    {
+        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
+        return await dbContext.FormFieldDefinitions.AsNoTracking()
+            .AnyAsync(x =>
+                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
+                || fieldNames.Contains(x.FieldName));
+    }
+
+    private static async Task<List<Guid>> QueryDueFollowupCaseIdsAsync(RegistryDbContext dbContext, int days, string[] resultSubjectIds, string[] resultFieldNames)
+    {
+        var deadline = DateTime.Now.Date.AddDays(-days);
+        var resultValues = await QueryFollowupValuesAsync(dbContext, resultSubjectIds, resultFieldNames);
+        var startValues = await QueryFollowupValuesAsync(dbContext, FollowupStartSubjectIds, FollowupStartFieldNames);
+        var resultByCase = resultValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
+        var startByCase = startValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
+        var cases = await dbContext.Cases.AsNoTracking()
+            .Select(x => new { x.Id, x.OperationTime, x.AdmissionTime })
+            .ToListAsync();
+        var dueCaseIds = new List<Guid>();
+        foreach (var item in cases)
+        {
+            var startText = startByCase.TryGetValue(item.Id, out var startValue) ? startValue.Value : null;
+            var startTime = TryParseDate(startText) ?? item.OperationTime ?? item.AdmissionTime;
+            if (!startTime.HasValue || startTime.Value.Date > deadline)
+            {
+                continue;
+            }
+
+            resultByCase.TryGetValue(item.Id, out var result);
+            if (IsUnfilledFollowup(result?.Value, days))
+            {
+                dueCaseIds.Add(item.Id);
+            }
+        }
+
+        return dueCaseIds;
+    }
+
+    private static async Task<List<FollowupFieldValue>> QueryFollowupValuesAsync(RegistryDbContext dbContext, string[] sourceIds, string[] fieldNames)
+    {
+        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
+        return await dbContext.FormInstances.AsNoTracking()
+            .Where(instance => instance.OwnerType == "case")
+            .Join(
+                dbContext.FormFieldValues.AsNoTracking(),
+                instance => instance.Id,
+                value => value.FormInstanceId,
+                (instance, value) => new
+                {
+                    CaseId = instance.OwnerId,
+                    value.SourceSubjectId,
+                    value.FieldName,
+                    value.FieldValue,
+                    value.FieldText
+                })
+            .Where(x =>
+                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
+                || fieldNames.Contains(x.FieldName))
+            .Select(x => new FollowupFieldValue(x.CaseId, x.FieldText == null || x.FieldText == "" ? x.FieldValue : x.FieldText))
+            .ToListAsync();
+    }
+
+    private static DateTime? TryParseDate(string? value)
+        => DateTime.TryParse(value, out var result) ? result : null;
+
+    private static bool IsUnfilledFollowup(string? value, int days)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        return days == 30
+            ? value.Contains("未满30天", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase)
+            : value.Contains("未满1年", StringComparison.OrdinalIgnoreCase) || value.Contains("未满一年", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ShowBadge(int value) => value > 99 ? "99+" : value.ToString(CultureInfo.InvariantCulture);
+
+    private string? GetCurrentUserId()
+        => _currentUser?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+           ?? _currentUser?.FindFirst("userId")?.Value
+           ?? _currentUser?.FindFirst("id")?.Value
+           ?? _currentUser?.Identity?.Name
+           ?? inj_httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+           ?? inj_httpContextAccessor.HttpContext?.User.FindFirst("userId")?.Value
+           ?? inj_httpContextAccessor.HttpContext?.User.FindFirst("id")?.Value
+           ?? inj_httpContextAccessor.HttpContext?.User.Identity?.Name;
+
+    private string GetGreeting()
+    {
+        var hour = DateTime.Now.Hour;
+        return hour switch
+        {
+            >= 5 and < 9 => "早上好",
+            >= 9 and < 12 => "上午好",
+            >= 12 and < 14 => "中午好",
+            >= 14 and < 18 => "下午好",
+            _ => "晚上好"
+        };
+    }
+
+    private async Task LogoutAsync()
+    {
+        var confirmed = await inj_dialogService.ShowMessageBox(
+            "退出登录",
+            "确定要退出登录吗？",
+            yesText: "确定",
+            cancelText: "取消");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await inj_jsRuntime.InvokeVoidAsync("mcrClearSelectedRole", inj_navigationManager.BaseUri);
+        await inj_jsRuntime.InvokeVoidAsync("bioAuthLogout", inj_navigationManager.BaseUri);
+        inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+    }
+
+    private sealed record FollowupFieldValue(Guid CaseId, string? Value);
+}

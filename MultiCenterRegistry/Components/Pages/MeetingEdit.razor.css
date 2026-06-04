@@ -1,0 +1,53 @@
+﻿.form-panel,
+.user-panel {
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+}
+
+.form-panel {
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+}
+
+.form-panel ::deep .mud-input-control {
+    margin: 0;
+}
+
+.actions {
+    grid-column: 1 / -1;
+    min-height: 44px;
+}
+
+.actions ::deep .mud-button-root {
+    min-width: 96px;
+    height: 40px;
+}
+
+.user-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.user-item {
+    display: grid;
+    gap: 4px;
+    min-height: 74px;
+    padding: 10px;
+    border: 1px solid var(--mcr-border);
+    border-radius: var(--mcr-radius);
+    background: var(--mcr-surface-soft);
+}
+
+.user-item span {
+    color: var(--mcr-muted);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+    .form-panel,
+    .user-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,480 @@
+﻿@page "/meetings"
+@inherits BasePage
+
+<PageTitle>评审会议</PageTitle>
+
+<div class="meeting-page meeting-list-page">
+    <div class="page-header">
+        <div>
+            <h1>评审会议</h1>
+            <div class="page-subtitle">共 @_totalCount 场会议</div>
+        </div>
+        <div class="header-actions">
+            @if (HasPermission(PermissionConstants.QualityManage))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateMeeting">新建会议</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Href="/exports/meetings.xlsx" Target="_blank">导出</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadMeetingsAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    @if (_showCreateMeetingModal)
+    {
+        <div class="meeting-dialog-mask" role="presentation">
+            <section class="meeting-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="meeting-create-modal-title">
+                <MeetingEdit IsModal="true" Saved="OnMeetingCreated" Cancelled="CloseCreateMeetingModal" />
+            </section>
+        </div>
+    }
+
+    @if (_showEditMeetingModal && _editMeetingId.HasValue)
+    {
+        <div class="meeting-dialog-mask" role="presentation">
+            <section class="meeting-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="meeting-edit-modal-title">
+                <MeetingEdit MeetingId="@_editMeetingId" IsModal="true" Saved="OnMeetingSavedAsync" Cancelled="CloseEditMeetingModal" />
+            </section>
+        </div>
+    }
+
+    <MudPaper Class="filter-panel meeting-filter-panel" Elevation="0">
+        <MudTextField T="string"
+                      @bind-Value="_title"
+                      Label="主题"
+                      Placeholder="请输入"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      OnKeyDown="OnSearchKeyDown" />
+        <MudTextField T="string" @bind-Value="_meetingStart" Label="讨论开始时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
+        <MudTextField T="string" @bind-Value="_meetingEnd" Label="讨论结束时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
+        <MudTextField T="string" @bind-Value="_place" Label="讨论地点" Placeholder="请输入" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
+        <div class="meeting-filter-actions">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetFiltersAsync">重置</MudButton>
+        </div>
+    </MudPaper>
+
+    <div class="review-tabs">
+        <button type="button" class="@GetReviewTabClass(PendingMeetingTab)" @onclick="@(() => ChangeMeetingTabAsync(PendingMeetingTab))">待评审</button>
+        <button type="button" class="@GetReviewTabClass(EndedMeetingTab)" @onclick="@(() => ChangeMeetingTabAsync(EndedMeetingTab))">已结束</button>
+    </div>
+
+    <MudPaper Class="list-panel meeting-list-panel" Elevation="0">
+        @if (_isLoading)
+        {
+            <div class="loading-row">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                <span>正在加载会议</span>
+            </div>
+        }
+        else if (_meetings.Count == 0)
+        {
+            <div class="empty-row">未找到会议</div>
+        }
+        else
+        {
+            <div class="review-card-grid">
+                @foreach (var item in _meetings)
+                {
+                    <article class="review-card @GetMeetingCardClass(item.Status)">
+                        <div class="review-status @GetMeetingStatusBlockClass(item.Status)">@GetStatusText(item.Status)</div>
+                        <div class="review-card-body">
+                            <div class="review-line review-title">
+                                <span>评审主题：</span>
+                                <strong>@item.Title</strong>
+                            </div>
+                            <div class="review-line">
+                                <span>评审开始时间：</span>
+                                <em>@FormatDateTime(item.MeetingTime)</em>
+                            </div>
+                            <div class="review-line">
+                                <span>评审结束时间：</span>
+                                <em>@FormatDateTime(item.EndTime)</em>
+                            </div>
+                            <div class="review-line">
+                                <span>评审地点：</span>
+                                <em>@ShowValue(item.Place)</em>
+                            </div>
+                            <div class="review-line">
+                                <span>评审组长：</span>
+                                <em>@ShowValue(item.LeaderName)</em>
+                            </div>
+                            <div class="review-line">
+                                <span>评审组员：</span>
+                                <em>@ShowValue(item.ExpertNames)</em>
+                            </div>
+                            <div class="review-line">
+                                <span>本次评审病例数：</span>
+                                <em>@item.CaseCount 例</em>
+                            </div>
+                            <div class="review-actions">
+                                @if (HasPermission(PermissionConstants.QualityManage) && item.Status is 0 or 1)
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => EditMeeting(item.Id))">编辑会议</MudButton>
+                                }
+                                @if (HasPermission(PermissionConstants.QualityManage) && item.Status == 1)
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="@(() => CloseMeetingAsync(item.Id))">关闭会议</MudButton>
+                                }
+                                @if (item.Status != 0 || HasPermission(PermissionConstants.QualityManage))
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenMeeting(item.Id))">@(item.Status == 1 ? "进入评审" : "查看详情")</MudButton>
+                                }
+                                @if (HasPermission(PermissionConstants.QualityManage) && item.Status == 0)
+                                {
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteMeetingAsync(item.Id))">删除</MudButton>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        <div class="pager meeting-pager">
+            <div class="pager-total">共 @_totalCount 场</div>
+            <button type="button" class="pager-page wide" disabled="@(_pageIndex == 0 || _isLoading)" @onclick="PreviousPageAsync">上一页</button>
+            <div class="pager-summary">第 @(_pageIndex + 1) / @TotalPages 页 · 每页 @PageSize 条</div>
+            <button type="button" class="pager-page wide" disabled="@(_pageIndex + 1 >= TotalPages || _isLoading)" @onclick="NextPageAsync">下一页</button>
+        </div>
+    </MudPaper>
+</div>
+
+@code {
+    private const int PageSize = 20;
+    private const string PendingMeetingTab = "pending";
+    private const string EndedMeetingTab = "ended";
+
+    private readonly List<MeetingListItem> _meetings = [];
+    private string _title = "";
+    private string _place = "";
+    private string _meetingStart = "";
+    private string _meetingEnd = "";
+    private string _meetingTab = PendingMeetingTab;
+    private int _pageIndex;
+    private int _totalCount;
+    private bool _isLoading;
+    private bool _showCreateMeetingModal;
+    private bool _showEditMeetingModal;
+    private Guid? _editMeetingId;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    protected override Task OnPageInitializedAsync() => LoadMeetingsAsync();
+
+    private async Task SearchAsync()
+    {
+        _pageIndex = 0;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task ResetFiltersAsync()
+    {
+        _title = "";
+        _place = "";
+        _meetingStart = "";
+        _meetingEnd = "";
+        _pageIndex = 0;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task ChangeMeetingTabAsync(string value)
+    {
+        _meetingTab = value;
+        _pageIndex = 0;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_pageIndex == 0)
+        {
+            return;
+        }
+
+        _pageIndex--;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_pageIndex + 1 >= TotalPages)
+        {
+            return;
+        }
+
+        _pageIndex++;
+        await LoadMeetingsAsync();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
+
+    private async Task LoadMeetingsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            var query = _registryContext.ReviewMeetings.AsNoTracking();
+            var title = _title.Trim();
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                var pattern = $"%{title}%";
+                query = query.Where(x => EF.Functions.ILike(x.Title, pattern) || EF.Functions.ILike(x.OldMeetingId, pattern));
+            }
+
+            var place = _place.Trim();
+            if (!string.IsNullOrWhiteSpace(place))
+            {
+                var pattern = $"%{place}%";
+                query = query.Where(x => x.Place != null && EF.Functions.ILike(x.Place, pattern));
+            }
+
+            if (!string.IsNullOrWhiteSpace(_meetingStart))
+            {
+                if (!DateTime.TryParse(_meetingStart, out var start))
+                {
+                    inj_snackbar.Add("讨论开始时间格式不正确", Severity.Warning);
+                    return;
+                }
+
+                query = query.Where(x => x.MeetingTime >= start);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_meetingEnd))
+            {
+                if (!DateTime.TryParse(_meetingEnd, out var end))
+                {
+                    inj_snackbar.Add("讨论结束时间格式不正确", Severity.Warning);
+                    return;
+                }
+
+                query = query.Where(x => x.MeetingTime <= end);
+            }
+
+            query = _meetingTab == EndedMeetingTab
+                ? query.Where(x => x.Status == 2 || x.Status == 3)
+                : query.Where(x => x.Status == 0 || x.Status == 1);
+            if (!HasPermission(PermissionConstants.QualityManage) && Guid.TryParse(CurrentUserId, out var currentUserGuid))
+            {
+                var currentUserId = currentUserGuid.ToString();
+                var visibleMeetingIds = await _registryContext.MeetingExperts.AsNoTracking()
+                    .Where(x => x.ExpertId == currentUserId)
+                    .Select(x => x.MeetingId)
+                    .ToListAsync();
+                query = query.Where(x => visibleMeetingIds.Contains(x.Id));
+            }
+
+            _totalCount = await query.CountAsync();
+            if (_pageIndex >= TotalPages)
+            {
+                _pageIndex = TotalPages - 1;
+            }
+
+            var meetings = await query
+                .OrderByDescending(x => x.MeetingTime)
+                .ThenBy(x => x.Title)
+                .Skip(_pageIndex * PageSize)
+                .Take(PageSize)
+                .ToListAsync();
+
+            var meetingIds = meetings.Select(x => x.Id).ToList();
+            var experts = meetingIds.Count == 0
+                ? []
+                : await _registryContext.MeetingExperts.AsNoTracking()
+                    .Where(x => meetingIds.Contains(x.MeetingId))
+                    .ToListAsync();
+            var caseCounts = meetingIds.Count == 0
+                ? new Dictionary<Guid, int>()
+                : await _registryContext.CaseAppraises.AsNoTracking()
+                    .Where(x => meetingIds.Contains(x.MeetingId))
+                    .GroupBy(x => x.MeetingId)
+                    .Select(x => new { MeetingId = x.Key, Count = x.Select(y => y.CaseId).Distinct().Count() })
+                    .ToDictionaryAsync(x => x.MeetingId, x => x.Count);
+
+            var expertIds = experts
+                .Select(x => TryParseGuid(x.ExpertId))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Distinct()
+                .ToList();
+            var users = expertIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemUsers.AsNoTracking()
+                    .Where(x => expertIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+
+            _meetings.Clear();
+            foreach (var meeting in meetings)
+            {
+                var meetingExperts = experts.Where(x => x.MeetingId == meeting.Id).ToList();
+                var leader = meetingExperts.FirstOrDefault(x => x.Level == 1);
+                var expertNames = string.Join("、", meetingExperts.Select(x => GetUserName(x.ExpertId, users)));
+                _meetings.Add(new MeetingListItem(
+                    meeting.Id,
+                    meeting.OldMeetingId,
+                    meeting.Title,
+                    meeting.Place,
+                    meeting.GroupInfo,
+                    meeting.MeetingTime,
+                    meeting.EndTime,
+                    meeting.Status,
+                    leader == null ? null : GetUserName(leader.ExpertId, users),
+                    expertNames,
+                    meetingExperts.Count,
+                    caseCounts.TryGetValue(meeting.Id, out var count) ? count : 0));
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void OpenMeeting(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(id));
+
+    private void CreateMeeting() => _showCreateMeetingModal = true;
+
+    private void CloseCreateMeetingModal() => _showCreateMeetingModal = false;
+
+    private void OnMeetingCreated(Guid meetingId)
+    {
+        _showCreateMeetingModal = false;
+        inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(meetingId));
+    }
+
+    private void EditMeeting(Guid meetingId)
+    {
+        _editMeetingId = meetingId;
+        _showEditMeetingModal = true;
+    }
+
+    private void CloseEditMeetingModal()
+    {
+        _showEditMeetingModal = false;
+        _editMeetingId = null;
+    }
+
+    private async Task OnMeetingSavedAsync(Guid meetingId)
+    {
+        CloseEditMeetingModal();
+        await LoadMeetingsAsync();
+    }
+
+    private async Task CloseMeetingAsync(Guid meetingId)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("请确认是否关闭此会议？"))
+        {
+            return;
+        }
+
+        await _registryContext.ReviewMeetings
+            .Where(x => x.Id == meetingId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, 3)
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "关闭会议", "meeting", meetingId));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("会议已关闭", Severity.Success);
+        await LoadMeetingsAsync();
+    }
+
+    private async Task DeleteMeetingAsync(Guid meetingId)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("确认删除该会议？会议专家、评审、汇总和投票都会删除。"))
+        {
+            return;
+        }
+
+        await _registryContext.CaseVotes.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
+        await _registryContext.CaseSummaries.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
+        await _registryContext.CaseAppraises.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
+        await _registryContext.MeetingExperts.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
+        await _registryContext.ReviewMeetings.Where(x => x.Id == meetingId).ExecuteDeleteAsync();
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "删除", "meeting", meetingId));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("会议已删除", Severity.Success);
+        await LoadMeetingsAsync();
+    }
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private static string GetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
+    {
+        var userId = TryParseGuid(id);
+        return userId.HasValue && users.TryGetValue(userId.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string GetStatusText(int status)
+        => status switch
+        {
+            0 => "未开始",
+            1 => "待评审",
+            2 => "已评审",
+            3 => "已关闭",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetStatusClass(int status)
+        => status switch
+        {
+            0 => "status-draft",
+            1 => "status-running",
+            2 => "status-published",
+            3 => "status-ended",
+            _ => "status-unknown"
+        };
+
+    private string GetReviewTabClass(string value)
+        => _meetingTab == value ? "review-tab active" : "review-tab";
+
+    private static string GetMeetingCardClass(int status)
+        => status switch
+        {
+            1 => "review-card-running",
+            2 => "review-card-finished",
+            0 or 3 => "review-card-idle",
+            _ => "review-card-idle"
+        };
+
+    private static string GetMeetingStatusBlockClass(int status)
+        => status switch
+        {
+            1 => "review-status-running",
+            2 => "review-status-finished",
+            0 or 3 => "review-status-idle",
+            _ => "review-status-idle"
+        };
+
+    private sealed record MeetingListItem(
+        Guid Id,
+        string OldMeetingId,
+        string Title,
+        string? Place,
+        string? GroupInfo,
+        DateTime MeetingTime,
+        DateTime? EndTime,
+        int Status,
+        string? LeaderName,
+        string? ExpertNames,
+        int ExpertCount,
+        int CaseCount);
+}

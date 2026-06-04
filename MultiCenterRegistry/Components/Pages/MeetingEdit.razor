@@ -1,0 +1,447 @@
+﻿@page "/meetings/new"
+@page "/meetings/{MeetingId:guid}/edit"
+@inherits BasePage
+
+<PageTitle>@(IsNew ? "新建会议" : "编辑会议")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="@PageClass">
+    @if (IsModal)
+    {
+        <div class="panel-title">
+            <span id="@(IsNew ? "meeting-create-modal-title" : "meeting-edit-modal-title")">@(IsNew ? "新建会议" : "编辑会议")</span>
+            <button type="button" class="modal-close" title="关闭" @onclick="Back">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="detail-header">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="Back">返回</MudButton>
+            <div>
+                <h1>@(IsNew ? "新建会议" : "编辑会议")</h1>
+                <div class="page-subtitle">保存后会同步会议专家配置</div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载会议</span>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="form-panel" Elevation="0">
+            <MudTextField T="string" @bind-Value="_title" Label="会议主题" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_meetingTime" Label="开始时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_endTime" Label="结束时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_place" Label="会议地点" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_groupInfo" Label="分组" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudSelect T="int" @bind-Value="_status" Label="状态" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="int" Value="0">未开始</MudSelectItem>
+                <MudSelectItem T="int" Value="1">已开始</MudSelectItem>
+                <MudSelectItem T="int" Value="2">已发布</MudSelectItem>
+                <MudSelectItem T="int" Value="3">已结束</MudSelectItem>
+            </MudSelect>
+            <MudTextField T="string" @bind-Value="_leaderId" Label="组长用户 ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_expertIds" Label="专家用户 ID" Placeholder="多个用户 ID 用逗号分隔" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+            <MudTextField T="string" @bind-Value="_description" Label="说明" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
+
+            <div class="actions editor-actions">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">保存</MudButton>
+            </div>
+        </MudPaper>
+
+        @if (_users.Count > 0)
+        {
+            <MudPaper Class="user-panel" Elevation="0">
+                <div class="panel-title">
+                    <h2>用户 ID 参考</h2>
+                    <span>@_users.Count 人</span>
+                </div>
+                <div class="user-grid">
+                    @foreach (var user in _users)
+                    {
+                        <div class="user-item">
+                            <strong>@user.DisplayName</strong>
+                            <span>@user.Id</span>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid? MeetingId { get; set; }
+
+    [Parameter]
+    public bool IsModal { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> Saved { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+    private readonly List<SystemUser> _users = [];
+    private string _title = "";
+    private string _meetingTime = "";
+    private string _endTime = "";
+    private string _place = "";
+    private string _groupInfo = "";
+    private string _description = "";
+    private string _leaderId = "";
+    private string _expertIds = "";
+    private int _status;
+    private bool _isLoading = true;
+
+    private bool IsNew => !MeetingId.HasValue || MeetingId.Value == Guid.Empty;
+
+    private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
+
+    protected override Task OnPageInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _users.Clear();
+            _users.AddRange(await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => x.DisplayName != "")
+                .OrderBy(x => x.DisplayName)
+                .Take(200)
+                .ToListAsync());
+
+            if (IsNew)
+            {
+                _meetingTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                return;
+            }
+
+            var meeting = await _registryContext.ReviewMeetings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == MeetingId);
+            if (meeting == null)
+            {
+                return;
+            }
+
+            _title = meeting.Title;
+            _meetingTime = meeting.MeetingTime.ToString("yyyy-MM-dd HH:mm");
+            _endTime = meeting.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "";
+            _place = meeting.Place ?? "";
+            _groupInfo = meeting.GroupInfo ?? "";
+            _description = meeting.Description ?? "";
+            _status = meeting.Status;
+
+            var experts = await _registryContext.MeetingExperts.AsNoTracking()
+                .Where(x => x.MeetingId == meeting.Id)
+                .OrderBy(x => x.Level)
+                .ThenBy(x => x.ExpertId)
+                .ToListAsync();
+            _leaderId = experts.FirstOrDefault(x => x.Level == 1)?.ExpertId ?? "";
+            _expertIds = string.Join(", ", experts.Select(x => x.ExpertId));
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_title) || !DateTime.TryParse(_meetingTime, out var meetingTime))
+        {
+            inj_snackbar.Add("请填写会议主题和正确的开始时间", Severity.Warning);
+            return;
+        }
+
+        DateTime? endTime = null;
+        if (!string.IsNullOrWhiteSpace(_endTime))
+        {
+            if (!DateTime.TryParse(_endTime, out var parsedEndTime))
+            {
+                inj_snackbar.Add("结束时间格式不正确", Severity.Warning);
+                return;
+            }
+
+            endTime = parsedEndTime;
+        }
+
+        if (!await ConfirmAsync("确认保存会议信息？"))
+        {
+            return;
+        }
+
+        var meetingId = IsNew ? Guid.NewGuid() : MeetingId!.Value;
+        var now = DateTime.Now;
+        var meeting = IsNew
+            ? new ReviewMeeting
+            {
+                Id = meetingId,
+                OldMeetingId = meetingId.ToString(),
+                CreatedAt = now,
+                CreatedBy = CurrentUserId
+            }
+            : await _registryContext.ReviewMeetings.FirstAsync(x => x.Id == meetingId);
+
+        meeting.Title = _title.Trim();
+        meeting.MeetingTime = meetingTime;
+        meeting.EndTime = endTime;
+        meeting.Place = string.IsNullOrWhiteSpace(_place) ? null : _place.Trim();
+        meeting.GroupInfo = string.IsNullOrWhiteSpace(_groupInfo) ? null : _groupInfo.Trim();
+        meeting.Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim();
+        meeting.Status = _status;
+        meeting.UpdatedAt = now;
+        meeting.UpdatedBy = CurrentUserId;
+
+        if (IsNew)
+        {
+            _registryContext.ReviewMeetings.Add(meeting);
+        }
+
+        var expertIds = ParseIds(_expertIds);
+        if (!string.IsNullOrWhiteSpace(_leaderId) && !expertIds.Contains(_leaderId.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            expertIds.Insert(0, _leaderId.Trim());
+        }
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var currentExperts = await _registryContext.MeetingExperts.Where(x => x.MeetingId == meetingId).ToListAsync();
+        var currentExpertIds = currentExperts.Select(x => x.ExpertId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var removedExpertIds = currentExpertIds.Except(expertIds, StringComparer.OrdinalIgnoreCase).ToList();
+        var addedExpertIds = expertIds.Except(currentExpertIds, StringComparer.OrdinalIgnoreCase).ToList();
+
+        _registryContext.MeetingExperts.RemoveRange(currentExperts);
+        foreach (var expertId in expertIds)
+        {
+            _registryContext.MeetingExperts.Add(new MeetingExpert
+            {
+                MeetingId = meetingId,
+                ExpertId = expertId,
+                Level = expertId.Equals(_leaderId.Trim(), StringComparison.OrdinalIgnoreCase) ? 1 : 2
+            });
+        }
+
+        if (!IsNew)
+        {
+            await SyncAppraisesForExpertChangesAsync(meetingId, addedExpertIds, removedExpertIds, now);
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", IsNew ? "新建" : "编辑", "meeting", meetingId));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("会议已保存", Severity.Success);
+        if (IsModal)
+        {
+            await Saved.InvokeAsync(meetingId);
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(meetingId));
+    }
+
+    private async Task Back()
+    {
+        if (IsModal)
+        {
+            await Cancelled.InvokeAsync();
+            return;
+        }
+
+        if (IsNew)
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.MeetingList);
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(MeetingId!.Value));
+    }
+
+    private static List<string> ParseIds(string value)
+        => value.Split([',', '，', ';', '；', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private async Task SyncAppraisesForExpertChangesAsync(
+        Guid meetingId,
+        List<string> addedExpertIds,
+        List<string> removedExpertIds,
+        DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (removedExpertIds.Count > 0)
+        {
+            var removedAppraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
+                .Where(x => x.MeetingId == meetingId && removedExpertIds.Contains(x.ExpertId))
+                .Select(x => x.Id)
+                .ToListAsync();
+            await DeleteAppraiseFormsAsync(removedAppraiseIds);
+            await _registryContext.CaseVotes.Where(x => x.MeetingId == meetingId && x.CreatedBy != null && removedExpertIds.Contains(x.CreatedBy)).ExecuteDeleteAsync();
+            await _registryContext.CaseAppraises.Where(x => x.MeetingId == meetingId && removedExpertIds.Contains(x.ExpertId)).ExecuteDeleteAsync();
+        }
+
+        if (addedExpertIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingAppraises = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId)
+            .Select(x => new { x.CaseId, x.ExpertId })
+            .ToListAsync();
+        var caseIds = existingAppraises.Select(x => x.CaseId).Distinct().ToList();
+        if (caseIds.Count == 0)
+        {
+            return;
+        }
+
+        var cases = await _registryContext.Cases.AsNoTracking()
+            .Where(x => caseIds.Contains(x.Id))
+            .ToListAsync();
+        var appraiseTemplateMaps = await _registryContext.FormTemplateMaps.AsNoTracking()
+            .Where(x => x.BusinessType == "appraise")
+            .ToListAsync();
+        var templateMapByDisease = appraiseTemplateMaps
+            .Where(x => !string.IsNullOrWhiteSpace(x.SourceFollowTemplateId))
+            .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+        var templateIds = cases
+            .Where(x => !string.IsNullOrWhiteSpace(x.DiseaseId) && templateMapByDisease.ContainsKey(x.DiseaseId))
+            .Select(x => templateMapByDisease[x.DiseaseId!].FormTemplateId)
+            .Distinct()
+            .ToList();
+        List<RegistryFormFieldDefinition> definitions = templateIds.Count == 0
+            ? []
+            : await _registryContext.FormFieldDefinitions.AsNoTracking()
+                .Where(x => templateIds.Contains(x.FormTemplateId))
+                .OrderBy(x => x.Sort)
+                .ThenBy(x => x.StorageKey)
+                .ToListAsync();
+        var definitionsByTemplate = definitions
+            .GroupBy(x => x.FormTemplateId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var expertId in addedExpertIds)
+        {
+            foreach (var item in cases)
+            {
+                if (existingAppraises.Any(x => x.CaseId == item.Id && x.ExpertId.Equals(expertId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                var appraise = new CaseAppraise
+                {
+                    MeetingId = meetingId,
+                    CaseId = item.Id,
+                    ExpertId = expertId,
+                    Status = 0,
+                    CreatedAt = now
+                };
+                _registryContext.CaseAppraises.Add(appraise);
+
+                if (!string.IsNullOrWhiteSpace(item.DiseaseId) && templateMapByDisease.TryGetValue(item.DiseaseId, out var templateMap))
+                {
+                    AddAppraiseForm(appraise.Id, templateMap, definitionsByTemplate, now);
+                }
+            }
+        }
+    }
+
+    private async Task DeleteAppraiseFormsAsync(List<Guid> appraiseIds)
+    {
+        if (_registryContext == null || appraiseIds.Count == 0)
+        {
+            return;
+        }
+
+        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == "appraise" && appraiseIds.Contains(x.OwnerId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (instanceIds.Count == 0)
+        {
+            return;
+        }
+
+        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instanceIds.Contains(x.FormInstanceId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (valueIds.Count > 0)
+        {
+            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
+            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+
+        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
+    }
+
+    private void AddAppraiseForm(
+        Guid appraiseId,
+        RegistryFormTemplateMap templateMap,
+        IReadOnlyDictionary<Guid, List<RegistryFormFieldDefinition>> definitionsByTemplate,
+        DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var instance = new RegistryFormInstance
+        {
+            OwnerType = "appraise",
+            OwnerId = appraiseId,
+            FormTemplateId = templateMap.FormTemplateId,
+            FormTemplateMapId = templateMap.Id,
+            SourceCustomFormId = templateMap.SourceCustomFormId,
+            SourceFollowTemplateId = templateMap.SourceFollowTemplateId,
+            Status = 0,
+            CreatedAt = now,
+            CreatedBy = CurrentUserId
+        };
+        _registryContext.FormInstances.Add(instance);
+
+        if (!definitionsByTemplate.TryGetValue(templateMap.FormTemplateId, out var definitions))
+        {
+            return;
+        }
+
+        foreach (var definition in definitions)
+        {
+            _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
+            {
+                FormInstanceId = instance.Id,
+                FormFieldDefinitionId = definition.Id,
+                StorageKey = definition.StorageKey,
+                SourceSubjectId = definition.SourceSubjectId,
+                FieldCode = definition.FieldCode,
+                FieldName = definition.FieldName,
+                Sort = definition.Sort,
+                CreatedAt = now,
+                CreatedBy = CurrentUserId
+            });
+        }
+    }
+}

@@ -1,0 +1,49 @@
+﻿@namespace MultiCenterRegistry.Components
+// 系统标准库
+@using System
+@using System.Globalization
+@using System.Net.Http
+@using System.Net.Http.Json
+@using System.Text
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using System.Security.Claims
+// Microsoft 相关
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Configuration
+@using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
+// Bio 现架构基础模型
+@using Bio.Core.Authentication.Extension
+@using Bio.Models
+// 第三方 UI
+@using MudBlazor
+@using MudBlazor.Services
+// 项目命名空间
+@using MultiCenterRegistry
+@using MultiCenterRegistry.Components
+@using MultiCenterRegistry.Components.Layout
+@using MultiCenterRegistry.Components.Shared
+@using MultiCenterRegistry.Constants
+@using MultiCenterRegistry.Data
+@using MultiCenterRegistry.Data.Entities
+@using MultiCenterRegistry.Services
+@attribute [Authorize]
+@inject NavigationManager inj_navigationManager
+@inject IHttpContextAccessor inj_httpContextAccessor
+@inject IDbContextFactory<CubeDbContext> inj_dbContextFactory
+@inject IDbContextFactory<RegistryDbContext> inj_registryDbContextFactory
+@inject IJSRuntime inj_jsRuntime
+@inject IConfiguration inj_configuration
+@inject ISnackbar inj_snackbar
+@inject IDialogService inj_dialogService
+@inject ILoggerFactory inj_loggerFactory
+@inject AuthenticationStateProvider inj_authenticationStateProvider

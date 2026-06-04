@@ -1,0 +1,619 @@
+﻿@page "/cases/{CaseId:guid}"
+@inherits BasePage
+
+<PageTitle>@(_case == null ? "病例详情" : $"{_case.PatientName} - 病例详情")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="detail-page">
+    <div class="detail-header">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToList">返回</MudButton>
+        <div>
+            <h1>@(_case?.PatientName ?? "病例详情")</h1>
+            <div class="page-subtitle">@(_case == null ? "" : $"{ShowValue(_case.PatientSex)} / {ShowValue(_case.PatientAge)}")</div>
+        </div>
+        <MudSpacer />
+        @if (_case != null)
+        {
+            <span class="status-pill">@GetStatusText(_case.Status)</span>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载病例详情</span>
+        </MudPaper>
+    }
+    else if (_case == null)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">未找到病例</MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="summary-panel" Elevation="0">
+            @foreach (var item in BuildSummaryItems())
+            {
+                <div class="summary-item">
+                    <div class="summary-label">@item.Label</div>
+                    <div class="summary-value">@ShowValue(item.Value)</div>
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="action-panel" Elevation="0">
+            @if (HasPermission(PermissionConstants.CaseEdit))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
+                    @(_isEditing ? "取消编辑" : "编辑表单")
+                </MudButton>
+            }
+            @if (_isEditing && HasPermission(PermissionConstants.CaseEdit))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveFormsAsync">保存表单</MudButton>
+            }
+            @if ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" OnClick="SubmitCaseAsync">提交审核</MudButton>
+            }
+            @if (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="ApproveCaseAsync">审核通过</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => RejectCaseAsync(0))">审核不通过</MudButton>
+            }
+            @if (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Reply" OnClick="@(() => RejectCaseAsync(1))">质控退回</MudButton>
+            }
+            @if (HasPermission(PermissionConstants.CaseDelete))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCaseAsync">删除病例</MudButton>
+            }
+        </MudPaper>
+
+        @if (_advices.Count > 0)
+        {
+            <MudPaper Class="advice-panel" Elevation="0">
+                <div class="panel-title">
+                    <h2>审核意见</h2>
+                    <span>@_advices.Count 条</span>
+                </div>
+                <div class="advice-list">
+                    @foreach (var advice in _advices)
+                    {
+                        <div class="advice-item">
+                            <div>@ShowValue(advice.Content)</div>
+                            <span>@GetAdviceTypeText(advice.AdviceType) · @FormatDateTime(advice.CreatedAt)</span>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        }
+
+        @if (_forms.Count == 0)
+        {
+            <MudPaper Class="loading-panel" Elevation="0">该病例暂无表单数据</MudPaper>
+        }
+        else
+        {
+            <div class="form-layout">
+                <nav class="form-nav">
+                    @for (var i = 0; i < _forms.Count; i++)
+                    {
+                        <a href="@($"#case-form-{i}")">@_forms[i].Name</a>
+                    }
+                </nav>
+                <div class="form-content">
+                    @for (var i = 0; i < _forms.Count; i++)
+                    {
+                        var form = _forms[i];
+                        <MudPaper Class="form-panel" Elevation="0" id="@($"case-form-{i}")">
+                            <div class="form-title">
+                                <div>
+                                    <h2>@form.Name</h2>
+                                    <div class="page-subtitle">创建时间 @FormatDateTime(form.CreatedAt)</div>
+                                </div>
+                                <span>@form.Fields.Count 个字段</span>
+                            </div>
+
+                            <div class="field-grid">
+                                @foreach (var field in form.Fields)
+                                {
+                                    if (field.IsSection)
+                                    {
+                                        <div class="section-title">@field.FieldName</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="field-card">
+                                            <div class="field-name">@field.FieldName</div>
+                                            @if (_isEditing && !field.IsFile)
+                                            {
+                                                <MudTextField T="string"
+                                                              @bind-Value="field.EditValue"
+                                                              Variant="Variant.Outlined"
+                                                              Margin="Margin.Dense"
+                                                              Lines="3" />
+                                            }
+                                            else
+                                            {
+                                                <div class="field-value">@GetDisplayValue(field)</div>
+                                            }
+                                            @if (field.Files.Count > 0)
+                                            {
+                                                <div class="file-list">
+                                                    @foreach (var file in field.Files)
+                                                    {
+                                                        <div class="file-item">
+                                                            <span title="@file.FilePath">@file.FileName</span>
+                                                            <span class="muted">@FormatSize(file.FileSize)</span>
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                                           Size="Size.Small"
+                                                                           Color="Color.Primary"
+                                                                           Href="@GetFileUrl(file, false)"
+                                                                           Target="_blank" />
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                                           Size="Size.Small"
+                                                                           Color="Color.Primary"
+                                                                           Href="@GetFileUrl(file, true)"
+                                                                           Target="_blank" />
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        </MudPaper>
+                    }
+                </div>
+            </div>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid CaseId { get; set; }
+
+    private RegistryCase? _case;
+    private readonly List<CaseAdvice> _advices = [];
+    private readonly List<FormBlock> _forms = [];
+    private bool _isLoading = true;
+    private bool _isEditing;
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        await LoadCaseAsync();
+    }
+
+    private async Task LoadCaseAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
+            _advices.Clear();
+            _forms.Clear();
+            if (_case == null)
+            {
+                return;
+            }
+
+            var advices = await _registryContext.CaseAdvices.AsNoTracking()
+                .Where(x => x.CaseId == CaseId)
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync();
+            _advices.AddRange(advices);
+
+            var instances = await _registryContext.FormInstances.AsNoTracking()
+                .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
+                .OrderBy(x => x.CreatedAt)
+                .ToListAsync();
+            var instanceIds = instances.Select(x => x.Id).ToList();
+            if (instanceIds.Count == 0)
+            {
+                return;
+            }
+
+            var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
+            var templates = await _registryContext.FormTemplates.AsNoTracking()
+                .Where(x => templateIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id);
+
+            var values = await _registryContext.FormFieldValues.AsNoTracking()
+                .Where(x => instanceIds.Contains(x.FormInstanceId))
+                .OrderBy(x => x.Sort)
+                .ThenBy(x => x.StorageKey)
+                .ToListAsync();
+
+            var definitionIds = values
+                .Where(x => x.FormFieldDefinitionId.HasValue)
+                .Select(x => x.FormFieldDefinitionId!.Value)
+                .Distinct()
+                .ToList();
+            var definitions = definitionIds.Count == 0
+                ? new Dictionary<Guid, RegistryFormFieldDefinition>()
+                : await _registryContext.FormFieldDefinitions.AsNoTracking()
+                    .Where(x => definitionIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id);
+
+            var valueIds = values.Select(x => x.Id).ToList();
+            var files = valueIds.Count == 0
+                ? []
+                : await _registryContext.Files.AsNoTracking()
+                    .Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId))
+                    .OrderBy(x => x.CreatedAt)
+                    .ThenBy(x => x.FileName)
+                    .ToListAsync();
+            var filesByValue = files
+                .GroupBy(x => x.OwnerId)
+                .ToDictionary(x => x.Key, x => x.ToList());
+
+            foreach (var instance in instances)
+            {
+                var formValues = values.Where(x => x.FormInstanceId == instance.Id).ToList();
+                var fields = formValues.Select(value =>
+                {
+                    RegistryFormFieldDefinition? definition = null;
+                    if (value.FormFieldDefinitionId.HasValue)
+                    {
+                        definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
+                    }
+
+                    filesByValue.TryGetValue(value.Id, out var fieldFiles);
+                    return new FieldItem(
+                        value.Id,
+                        value.FieldName,
+                        value.FieldValue,
+                        value.FieldText,
+                        definition?.ControlType,
+                        definition?.Level ?? 2,
+                        value.Sort,
+                        fieldFiles ?? []);
+                }).ToList();
+
+                var name = templates.TryGetValue(instance.FormTemplateId, out var template)
+                    ? template.FormName
+                    : "病例表单";
+                _forms.Add(new FormBlock(name, instance.CreatedAt, fields));
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void BackToList() => inj_navigationManager.NavigateTo(RouteConstants.CaseList);
+
+    private void ToggleEdit()
+    {
+        _isEditing = !_isEditing;
+        foreach (var field in _forms.SelectMany(x => x.Fields))
+        {
+            field.EditValue = string.IsNullOrWhiteSpace(field.FieldText) ? field.FieldValue : field.FieldText;
+        }
+    }
+
+    private async Task SaveFormsAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.CaseEdit) || !await ConfirmAsync("确认保存当前病例表单修改？"))
+        {
+            return;
+        }
+
+        var fields = _forms.SelectMany(x => x.Fields).Where(x => !x.IsFile).ToList();
+        var ids = fields.Select(x => x.Id).ToList();
+        var values = await _registryContext.FormFieldValues.Where(x => ids.Contains(x.Id)).ToListAsync();
+        foreach (var value in values)
+        {
+            var field = fields.First(x => x.Id == value.Id);
+            value.FieldValue = field.EditValue;
+            value.FieldText = field.EditValue;
+            value.UpdatedAt = DateTime.Now;
+            value.UpdatedBy = CurrentUserId;
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "保存表单", "case", CaseId));
+        await _registryContext.SaveChangesAsync();
+        _isEditing = false;
+        inj_snackbar.Add("病例表单已保存", Severity.Success);
+        await LoadCaseAsync();
+    }
+
+    private async Task SubmitCaseAsync()
+    {
+        if (_registryContext == null || _case == null || !await RequirePermissionAsync(PermissionConstants.CaseSubmit) || !await ConfirmAsync("确认提交该病例进入审核？"))
+        {
+            return;
+        }
+
+        if (_case.Status is not (3 or 4))
+        {
+            inj_snackbar.Add("当前状态不能提交审核", Severity.Warning);
+            return;
+        }
+
+        await _registryContext.Cases.Where(x => x.Id == CaseId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, 0)
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "提交审核", "case", CaseId));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("病例已提交审核", Severity.Success);
+        await LoadCaseAsync();
+    }
+
+    private async Task ApproveCaseAsync()
+    {
+        if (_registryContext == null || _case == null || !await RequirePermissionAsync(PermissionConstants.CaseApprove) || !await ConfirmAsync("确认审核通过该病例？"))
+        {
+            return;
+        }
+
+        if (_case.Status != 0)
+        {
+            inj_snackbar.Add("当前状态不能审核通过", Severity.Warning);
+            return;
+        }
+
+        await _registryContext.Cases.Where(x => x.Id == CaseId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, 2)
+                .SetProperty(x => x.SubStatus, 0)
+                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "审核通过", "case", CaseId));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("病例审核通过", Severity.Success);
+        await LoadCaseAsync();
+    }
+
+    private async Task RejectCaseAsync(int type)
+    {
+        if (_registryContext == null || _case == null)
+        {
+            return;
+        }
+
+        var permission = type == 0 ? PermissionConstants.CaseApprove : PermissionConstants.QualityManage;
+        if (!await RequirePermissionAsync(permission))
+        {
+            return;
+        }
+
+        var advice = await PromptAsync(type == 0 ? "请输入审核不通过意见" : "请输入质控退回意见");
+        if (string.IsNullOrWhiteSpace(advice) || !await ConfirmAsync("确认执行驳回/退回操作？"))
+        {
+            return;
+        }
+
+        if (type == 0 && _case.Status is 0 or 1)
+        {
+            await _registryContext.Cases.Where(x => x.Id == CaseId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Status, 4)
+                    .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                    .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        }
+        else if (type == 1 && _case.Status == 2)
+        {
+            await _registryContext.Cases.Where(x => x.Id == CaseId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Status, 1)
+                    .SetProperty(x => x.SubStatus, -1)
+                    .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                    .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        }
+        else
+        {
+            inj_snackbar.Add("当前状态不能执行该操作", Severity.Warning);
+            return;
+        }
+
+        _registryContext.CaseAdvices.Add(new CaseAdvice
+        {
+            CaseId = CaseId,
+            AdviceType = type,
+            Content = advice,
+            CreatedAt = DateTime.Now,
+            CreatedBy = CurrentUserId
+        });
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", type == 0 ? "审核不通过" : "质控退回", "case", CaseId, advice));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("操作已完成", Severity.Success);
+        await LoadCaseAsync();
+    }
+
+    private async Task DeleteCaseAsync()
+    {
+        if (_registryContext == null || _case == null || !await RequirePermissionAsync(PermissionConstants.CaseDelete))
+        {
+            return;
+        }
+
+        if (!await ConfirmAsync("确认删除该病例？病例表单、附件记录、意见、评审、汇总和投票都会删除。"))
+        {
+            return;
+        }
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var appraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.CaseId == CaseId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        var summaryIds = await _registryContext.CaseSummaries.AsNoTracking()
+            .Where(x => x.CaseId == CaseId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        var voteIds = await _registryContext.CaseVotes.AsNoTracking()
+            .Where(x => x.CaseId == CaseId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        var adviceIds = await _registryContext.CaseAdvices.AsNoTracking()
+            .Where(x => x.CaseId == CaseId)
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        await DeleteFormInstancesAsync("appraise", appraiseIds);
+        await DeleteFormInstancesAsync("case", new List<Guid> { CaseId });
+        await _registryContext.CaseVotes.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+        await _registryContext.CaseSummaries.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+        await _registryContext.CaseAppraises.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+        await _registryContext.CaseAdvices.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+        await _registryContext.CaseFormData.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+
+        var targetIds = new List<Guid> { CaseId };
+        targetIds.AddRange(appraiseIds);
+        targetIds.AddRange(summaryIds);
+        targetIds.AddRange(voteIds);
+        targetIds.AddRange(adviceIds);
+        await _registryContext.MigrationMaps.Where(x => targetIds.Contains(x.TargetId)).ExecuteDeleteAsync();
+        await _registryContext.Cases.Where(x => x.Id == CaseId).ExecuteDeleteAsync();
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "删除", "case", CaseId, _case.PatientName));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("病例已删除", Severity.Success);
+        inj_navigationManager.NavigateTo(RouteConstants.CaseList);
+    }
+
+    private async Task DeleteFormInstancesAsync(string ownerType, List<Guid> ownerIds)
+    {
+        if (_registryContext == null || ownerIds.Count == 0)
+        {
+            return;
+        }
+
+        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == ownerType && ownerIds.Contains(x.OwnerId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (instanceIds.Count == 0)
+        {
+            return;
+        }
+
+        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instanceIds.Contains(x.FormInstanceId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (valueIds.Count > 0)
+        {
+            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
+            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+
+        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
+    }
+
+    private IEnumerable<SummaryItem> BuildSummaryItems()
+    {
+        if (_case == null)
+        {
+            yield break;
+        }
+
+        yield return new("病案号", _case.PatientNumber);
+        yield return new("身份证号", _case.IdNumber);
+        yield return new("入院时间", FormatDate(_case.AdmissionTime));
+        yield return new("出院时间", FormatDate(_case.DischargeTime));
+        yield return new("手术时间", FormatDate(_case.OperationTime));
+        yield return new("创建时间", FormatDateTime(_case.CreatedAt));
+    }
+
+    private static string GetDisplayValue(FieldItem field)
+    {
+        if (field.ControlType == 7)
+        {
+            return field.Files.Count == 0 ? "-" : $"{field.Files.Count} 个附件";
+        }
+
+        var value = FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue);
+        return ShowValue(value);
+    }
+
+    private static string GetFileUrl(RegistryFile file, bool download)
+        => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+
+    private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string FormatSize(long? size)
+    {
+        if (!size.HasValue || size.Value <= 0)
+        {
+            return "-";
+        }
+
+        var value = size.Value;
+        if (value < 1024)
+        {
+            return $"{value} B";
+        }
+
+        if (value < 1024 * 1024)
+        {
+            return $"{value / 1024d:0.#} KB";
+        }
+
+        return $"{value / 1024d / 1024d:0.#} MB";
+    }
+
+    private static string GetStatusText(int status)
+        => status switch
+        {
+            0 => "待审核",
+            1 => "已回退",
+            2 => "已上报",
+            3 => "待填写",
+            4 => "审核失败",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetAdviceTypeText(int type)
+        => type switch
+        {
+            0 => "审核不通过",
+            1 => "质控退回",
+            _ => "其他意见"
+        };
+
+    private sealed record SummaryItem(string Label, string? Value);
+
+    private sealed record FormBlock(string Name, DateTime CreatedAt, List<FieldItem> Fields);
+
+    private sealed class FieldItem(
+        Guid id,
+        string fieldName,
+        string? fieldValue,
+        string? fieldText,
+        int? controlType,
+        int level,
+        int sort,
+        List<RegistryFile> files)
+    {
+        public Guid Id { get; } = id;
+        public string FieldName { get; } = fieldName;
+        public string? FieldValue { get; set; } = fieldValue;
+        public string? FieldText { get; set; } = fieldText;
+        public string? EditValue { get; set; } = string.IsNullOrWhiteSpace(fieldText) ? fieldValue : fieldText;
+        public int? ControlType { get; } = controlType;
+        public int Level { get; } = level;
+        public int Sort { get; } = sort;
+        public List<RegistryFile> Files { get; } = files;
+        public bool IsSection => Level <= 1;
+        public bool IsFile => ControlType == 7;
+    }
+}

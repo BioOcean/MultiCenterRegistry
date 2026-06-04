@@ -1,0 +1,314 @@
+﻿@page "/followups"
+@inherits BasePage
+
+<PageTitle>随访消息</PageTitle>
+
+<div class="followup-page followup-list-page">
+    <div class="page-header">
+        <div>
+            <h1>随访消息</h1>
+            <div class="page-subtitle">共 @_items.Count 条未填报提醒</div>
+        </div>
+        <div class="header-actions">
+            <MudButton Variant="@GetTypeVariant(0)" Color="Color.Primary" Size="Size.Small" OnClick="@(() => ChangeTypeAsync(0))">30 天结果</MudButton>
+            <MudButton Variant="@GetTypeVariant(1)" Color="Color.Primary" Size="Size.Small" OnClick="@(() => ChangeTypeAsync(1))">一年结果</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync">刷新</MudButton>
+        </div>
+    </div>
+
+    <MudPaper Class="summary-panel" Elevation="0">
+        <div class="summary-item">
+            <span>提醒类型</span>
+            <strong>@(_followupType == 0 ? "30 天结果" : "一年结果")</strong>
+        </div>
+        <div class="summary-item">
+            <span>未填报</span>
+            <strong>@_items.Count</strong>
+        </div>
+        <div class="summary-item">
+            <span>最大超期</span>
+            <strong>@MaxOverdueDays 天</strong>
+        </div>
+        <div class="summary-item">
+            <span>最早开始</span>
+            <strong>@EarliestStartText</strong>
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="list-panel followup-list-panel" Elevation="0">
+        @if (_isLoading)
+        {
+            <div class="loading-row">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                <span>正在加载随访消息</span>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_configMessage))
+        {
+            <div class="empty-row">@_configMessage</div>
+        }
+        else if (_items.Count == 0)
+        {
+            <div class="empty-row">未找到未填报随访病例</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="followup-table">
+                    <thead>
+                        <tr>
+                            <th>患者</th>
+                            <th>病案号</th>
+                            <th>医院/科室</th>
+                            <th>经办人</th>
+                            <th>开始时间</th>
+                            <th>随访结果</th>
+                            <th>当前值</th>
+                            <th>超期天数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in _items)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="patient-name">@item.PatientName</div>
+                                    <div class="muted">@ShowValue(item.PatientSex) / @ShowValue(item.PatientAge)</div>
+                                </td>
+                                <td>@ShowValue(item.PatientNumber)</td>
+                                <td>
+                                    <div>@ShowValue(item.HospitalName)</div>
+                                    <div class="muted">@ShowValue(item.DepartmentName)</div>
+                                </td>
+                                <td>@ShowValue(item.OperatorName)</td>
+                                <td>@item.StartTime.ToString("yyyy-MM-dd")</td>
+                                <td>@item.ResultFieldName</td>
+                                <td>@ShowValue(item.ResultValue)</td>
+                                <td>@item.OverdueDays</td>
+                                <td class="operation-cell">
+                                    <div class="followup-row-actions">
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Visibility"
+                                                   OnClick="@(() => OpenCase(item.CaseId))">查看</MudButton>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </MudPaper>
+</div>
+
+@code {
+    private static readonly string[] StartSubjectIds = ["BB3035F7-C1C8-4665-A4C3-FD5A2185D6B1"];
+    private static readonly string[] ThirtySubjectIds = ["61F2CE95-83BA-4A53-B363-904650DB3522"];
+    private static readonly string[] OneYearSubjectIds = ["A04B3C29-D29E-4949-81CB-59B3C408CA29"];
+    private static readonly string[] StartFieldNames = ["ECMO开始时间", "手术时间", "介入时间"];
+    private static readonly string[] ThirtyFieldNames = ["30天结果（自ECMO安装之日起）", "30天结果", "30天随访结果"];
+    private static readonly string[] OneYearFieldNames = ["一年结果（自ECMO安装之日起）", "一年结果", "1年结果", "一年随访结果"];
+
+    private readonly List<FollowupItem> _items = [];
+    private int _followupType;
+    private bool _isLoading = true;
+    private string? _configMessage;
+
+    private int MaxOverdueDays => _items.Count == 0 ? 0 : _items.Max(x => x.OverdueDays);
+
+    private string EarliestStartText => _items.Count == 0 ? "-" : _items.Min(x => x.StartTime).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    protected override Task OnPageInitializedAsync() => LoadAsync();
+
+    private async Task ChangeTypeAsync(int type)
+    {
+        _followupType = type;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!HasPermission(PermissionConstants.CaseSubmit))
+        {
+            inj_snackbar.Add("当前账号没有随访消息权限", Severity.Warning);
+            _isLoading = false;
+            return;
+        }
+
+        _isLoading = true;
+        _configMessage = null;
+        _items.Clear();
+        try
+        {
+            var resultSubjectIds = _followupType == 0 ? ThirtySubjectIds : OneYearSubjectIds;
+            var resultFieldNames = _followupType == 0 ? ThirtyFieldNames : OneYearFieldNames;
+            var hasResultConfig = await HasFieldConfigAsync(resultSubjectIds, resultFieldNames);
+            if (!hasResultConfig)
+            {
+                _configMessage = _followupType == 0 ? "未找到 30 天随访结果题目配置" : "未找到一年随访结果题目配置";
+                return;
+            }
+
+            var days = _followupType == 0 ? 30 : 365;
+            var deadline = DateTime.Now.Date.AddDays(-days);
+            var resultValues = await QueryFollowupValuesAsync(resultSubjectIds, resultFieldNames);
+            var startValues = await QueryFollowupValuesAsync(StartSubjectIds, StartFieldNames);
+            var resultByCase = resultValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
+            var startByCase = startValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
+            var cases = await _registryContext.Cases.AsNoTracking()
+                .OrderByDescending(x => x.OperationTime ?? x.AdmissionTime ?? x.CreatedAt)
+                .ToListAsync();
+            var hospitalIds = cases.Select(x => TryParseGuid(x.HospitalId)).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+            var departmentIds = cases.Select(x => TryParseGuid(x.DepartmentId)).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+            var operatorIds = cases.Select(x => TryParseGuid(x.OperatorId)).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+            var hospitals = hospitalIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemHospitals.AsNoTracking()
+                    .Where(x => hospitalIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+            var departments = departmentIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemDepartments.AsNoTracking()
+                    .Where(x => departmentIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Name : x.DisplayName!);
+            var operators = operatorIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemUsers.AsNoTracking()
+                    .Where(x => operatorIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+
+            foreach (var item in cases)
+            {
+                var startText = startByCase.TryGetValue(item.Id, out var startValue) ? startValue.Value : null;
+                var startTime = TryParseDate(startText) ?? item.OperationTime ?? item.AdmissionTime;
+                if (!startTime.HasValue || startTime.Value.Date > deadline)
+                {
+                    continue;
+                }
+
+                resultByCase.TryGetValue(item.Id, out var result);
+                if (!IsUnfilled(result?.Value, _followupType))
+                {
+                    continue;
+                }
+
+                _items.Add(new FollowupItem(
+                    item.Id,
+                    item.PatientName,
+                    item.PatientSex,
+                    item.PatientAge,
+                    item.PatientNumber,
+                    GetDisplayName(item.HospitalId, hospitals),
+                    GetDisplayName(item.DepartmentId, departments),
+                    GetDisplayName(item.OperatorId, operators),
+                    startTime.Value,
+                    result?.FieldName ?? resultFieldNames[0],
+                    result?.Value,
+                    Math.Max(0, (DateTime.Now.Date - startTime.Value.Date).Days - days)));
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task<bool> HasFieldConfigAsync(string[] sourceIds, string[] fieldNames)
+    {
+        if (_registryContext == null)
+        {
+            return false;
+        }
+
+        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
+        return await _registryContext.FormFieldDefinitions.AsNoTracking()
+            .AnyAsync(x =>
+                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
+                || fieldNames.Contains(x.FieldName));
+    }
+
+    private async Task<List<FollowupFieldValue>> QueryFollowupValuesAsync(string[] sourceIds, string[] fieldNames)
+    {
+        if (_registryContext == null)
+        {
+            return [];
+        }
+
+        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
+        var values = await _registryContext.FormInstances.AsNoTracking()
+            .Where(instance => instance.OwnerType == "case")
+            .Join(
+                _registryContext.FormFieldValues.AsNoTracking(),
+                instance => instance.Id,
+                value => value.FormInstanceId,
+                (instance, value) => new
+                {
+                    CaseId = instance.OwnerId,
+                    value.SourceSubjectId,
+                    value.FieldName,
+                    value.FieldValue,
+                    value.FieldText
+                })
+            .Where(x =>
+                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
+                || fieldNames.Contains(x.FieldName))
+            .Select(x => new { x.CaseId, x.FieldName, x.FieldText, x.FieldValue })
+            .ToListAsync();
+        return values
+            .Select(x => new FollowupFieldValue(x.CaseId, x.FieldName, FormValueDisplayMapper.GetDisplayText(x.FieldName, x.FieldText, x.FieldValue)))
+            .ToList();
+    }
+
+    private void OpenCase(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(id));
+
+    private Variant GetTypeVariant(int type) => _followupType == type ? Variant.Filled : Variant.Outlined;
+
+    private static DateTime? TryParseDate(string? value)
+        => DateTime.TryParse(value, out var result) ? result : null;
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private static string GetDisplayName(string? id, IReadOnlyDictionary<Guid, string> names)
+    {
+        var guid = TryParseGuid(id);
+        return guid.HasValue && names.TryGetValue(guid.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static bool IsUnfilled(string? value, int type)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        return type == 0
+            ? value.Contains("未满30天", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase)
+            : value.Contains("未满1年", StringComparison.OrdinalIgnoreCase) || value.Contains("未满一年", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private sealed record FollowupFieldValue(Guid CaseId, string FieldName, string? Value);
+
+    private sealed record FollowupItem(
+        Guid CaseId,
+        string PatientName,
+        string? PatientSex,
+        string? PatientAge,
+        string? PatientNumber,
+        string? HospitalName,
+        string? DepartmentName,
+        string? OperatorName,
+        DateTime StartTime,
+        string ResultFieldName,
+        string? ResultValue,
+        int OverdueDays);
+}

@@ -1,0 +1,41 @@
+﻿@page "/admin"
+@inherits BasePage
+
+<PageTitle>后台维护</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="admin-page">
+    <div class="loading-wrapper">
+        <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+        <MudText Typo="Typo.h6" Color="Color.Primary" Class="mt-3">正在进入后台维护...</MudText>
+    </div>
+</MudContainer>
+
+@code {
+    protected override Task OnPageInitializedAsync()
+    {
+        var targetPath = GetAdminDefaultPath();
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+            return Task.CompletedTask;
+        }
+
+        inj_navigationManager.NavigateTo(targetPath, true);
+        return Task.CompletedTask;
+    }
+
+    private string GetAdminDefaultPath()
+    {
+        if (HasPermission(PermissionConstants.MessageManager))
+        {
+            return RouteConstants.AdminArticles;
+        }
+
+        if (HasPermission(PermissionConstants.AccountManager))
+        {
+            return RouteConstants.AdminUsers;
+        }
+
+        return "";
+    }
+}

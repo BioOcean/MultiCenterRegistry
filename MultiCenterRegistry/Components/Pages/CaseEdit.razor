@@ -1,0 +1,306 @@
+﻿@page "/cases/new"
+@inherits BasePage
+
+<PageTitle>新建病例</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="@PageClass">
+    @if (IsModal)
+    {
+        <div class="panel-title">
+            <span id="case-create-modal-title">新建病例</span>
+            <button type="button" class="modal-close" title="关闭" @onclick="Back">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="detail-header">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="Back">返回</MudButton>
+            <div>
+                <h1>新建病例</h1>
+                <div class="page-subtitle">保存后会按疾病模板初始化病例表单</div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载基础数据</span>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="form-panel" Elevation="0">
+            <MudTextField T="string" @bind-Value="_patientName" Label="患者姓名" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_patientSex" Label="性别" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_patientAge" Label="年龄" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_patientNumber" Label="病案号" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_idNumber" Label="身份证号" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudSelect T="string" @bind-Value="_diseaseId" Label="疾病类型" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var disease in _diseases)
+                {
+                    <MudSelectItem T="string" Value="@disease.Id">@disease.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_hospitalId" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
+                @foreach (var hospital in _hospitals)
+                {
+                    <MudSelectItem T="string" Value="@hospital.Id.ToString()">@hospital.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_departmentId" Label="科室" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
+                @foreach (var department in _departments)
+                {
+                    <MudSelectItem T="string" Value="@department.Id.ToString()">@ShowDepartmentName(department)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField T="string" @bind-Value="_operatorId" Label="经办人用户 ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_admissionTime" Label="入院时间" Placeholder="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_dischargeTime" Label="出院时间" Placeholder="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField T="string" @bind-Value="_operationTime" Label="手术时间" Placeholder="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <div class="actions editor-actions">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">保存</MudButton>
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public bool IsModal { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> Saved { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+    private readonly List<DiseaseOption> _diseases = [];
+    private readonly List<SystemHospital> _hospitals = [];
+    private readonly List<SystemDepartment> _departments = [];
+    private string _patientName = "";
+    private string _patientSex = "";
+    private string _patientAge = "";
+    private string _patientNumber = "";
+    private string _idNumber = "";
+    private string _diseaseId = "";
+    private string _hospitalId = "";
+    private string _departmentId = "";
+    private string _operatorId = "";
+    private string _admissionTime = "";
+    private string _dischargeTime = "";
+    private string _operationTime = "";
+    private bool _isLoading = true;
+
+    private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
+
+    protected override async Task OnPageInitializedAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            var maps = await _registryContext.FormTemplateMaps.AsNoTracking()
+                .Where(x => x.BusinessType == "case" && x.TemplateName != "基本信息")
+                .OrderBy(x => x.TemplateName)
+                .ToListAsync();
+            _diseases.AddRange(maps.Select(x => new DiseaseOption(x.SourceFollowTemplateId, x.TemplateName)));
+            _diseaseId = _diseases.FirstOrDefault()?.Id ?? "";
+
+            _hospitals.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+                .OrderBy(x => x.Name)
+                .ToListAsync());
+            _departments.AddRange(await _registryContext.SystemDepartments.AsNoTracking()
+                .OrderBy(x => x.Name)
+                .ToListAsync());
+            _operatorId = CurrentUserId;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.CaseCreate))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_patientName) || string.IsNullOrWhiteSpace(_diseaseId))
+        {
+            inj_snackbar.Add("请填写患者姓名并选择疾病类型", Severity.Warning);
+            return;
+        }
+
+        if (!TryParseDate(_admissionTime, out var admissionTime)
+            || !TryParseDate(_dischargeTime, out var dischargeTime)
+            || !TryParseDate(_operationTime, out var operationTime))
+        {
+            inj_snackbar.Add("时间格式不正确", Severity.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_operatorId) && Guid.TryParse(_operatorId, out var operatorGuid))
+        {
+            var exists = await _registryContext.SystemUsers.AsNoTracking().AnyAsync(x => x.Id == operatorGuid);
+            if (!exists)
+            {
+                inj_snackbar.Add("经办人用户 ID 不存在", Severity.Warning);
+                return;
+            }
+        }
+
+        if (!await ConfirmAsync("确认新建病例？"))
+        {
+            return;
+        }
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var now = DateTime.Now;
+        var caseId = Guid.NewGuid();
+        var maxSort = await _registryContext.Cases.Select(x => (int?)x.Sort).MaxAsync() ?? 0;
+        var item = new RegistryCase
+        {
+            Id = caseId,
+            OldCaseId = caseId.ToString(),
+            PatientName = _patientName.Trim(),
+            PatientSex = EmptyToNull(_patientSex),
+            PatientAge = EmptyToNull(_patientAge),
+            PatientNumber = EmptyToNull(_patientNumber),
+            IdNumber = EmptyToNull(_idNumber),
+            DiseaseId = _diseaseId,
+            HospitalId = EmptyToNull(_hospitalId),
+            DepartmentId = EmptyToNull(_departmentId),
+            OperatorId = EmptyToNull(_operatorId),
+            AdmissionTime = admissionTime,
+            DischargeTime = dischargeTime,
+            OperationTime = operationTime,
+            Status = 3,
+            SubStatus = 0,
+            Sort = maxSort + 1,
+            CreatedAt = now,
+            CreatedBy = CurrentUserId
+        };
+        _registryContext.Cases.Add(item);
+
+        await AddCaseFormsAsync(caseId, _diseaseId, now);
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "新建", "case", caseId));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("病例已创建", Severity.Success);
+        if (IsModal)
+        {
+            await Saved.InvokeAsync(caseId);
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(caseId));
+    }
+
+    private async Task AddCaseFormsAsync(Guid caseId, string diseaseId, DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var maps = await _registryContext.FormTemplateMaps.AsNoTracking()
+            .Where(x => x.BusinessType == "case" && (x.SourceFollowTemplateId == diseaseId || x.TemplateName == "基本信息"))
+            .ToListAsync();
+        var templateIds = maps.Select(x => x.FormTemplateId).Distinct().ToList();
+        var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
+            .Where(x => templateIds.Contains(x.FormTemplateId))
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.StorageKey)
+            .ToListAsync();
+        var definitionsByTemplate = definitions
+            .GroupBy(x => x.FormTemplateId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        foreach (var map in maps)
+        {
+            var instance = new RegistryFormInstance
+            {
+                OwnerType = "case",
+                OwnerId = caseId,
+                FormTemplateId = map.FormTemplateId,
+                FormTemplateMapId = map.Id,
+                SourceCustomFormId = map.SourceCustomFormId,
+                SourceFollowTemplateId = map.SourceFollowTemplateId,
+                Status = 0,
+                CreatedAt = now,
+                CreatedBy = CurrentUserId
+            };
+            _registryContext.FormInstances.Add(instance);
+
+            if (!definitionsByTemplate.TryGetValue(map.FormTemplateId, out var fields))
+            {
+                continue;
+            }
+
+            foreach (var field in fields)
+            {
+                _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
+                {
+                    FormInstanceId = instance.Id,
+                    FormFieldDefinitionId = field.Id,
+                    StorageKey = field.StorageKey,
+                    SourceSubjectId = field.SourceSubjectId,
+                    FieldCode = field.FieldCode,
+                    FieldName = field.FieldName,
+                    Sort = field.Sort,
+                    CreatedAt = now,
+                    CreatedBy = CurrentUserId
+                });
+            }
+        }
+    }
+
+    private async Task Back()
+    {
+        if (IsModal)
+        {
+            await Cancelled.InvokeAsync();
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.CaseList);
+    }
+
+    private static bool TryParseDate(string value, out DateTime? result)
+    {
+        result = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (!DateTime.TryParse(value, out var parsed))
+        {
+            return false;
+        }
+
+        result = parsed;
+        return true;
+    }
+
+    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string ShowDepartmentName(SystemDepartment department)
+        => string.IsNullOrWhiteSpace(department.DisplayName) ? department.Name : department.DisplayName;
+
+    private sealed record DiseaseOption(string Id, string Name);
+}

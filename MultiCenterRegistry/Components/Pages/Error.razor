@@ -1,0 +1,34 @@
+﻿@page "/error"
+@using System.Diagnostics
+@attribute [AllowAnonymous]
+
+<PageTitle>系统错误</PageTitle>
+
+<div class="error-page">
+    <section class="empty-panel">
+        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="Color.Error" />
+        <h1>系统错误</h1>
+        <p>处理请求时发生错误。</p>
+
+        @if (ShowRequestId)
+        {
+            <div class="request-id">
+                <strong>请求编号：</strong>
+                <code>@RequestId</code>
+            </div>
+        }
+    </section>
+</div>
+
+@code{
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized()
+    {
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+    }
+}

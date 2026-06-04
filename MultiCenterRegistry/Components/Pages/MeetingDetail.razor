@@ -1,0 +1,738 @@
+﻿@page "/meetings/{MeetingId:guid}"
+@inherits BasePage
+
+<PageTitle>@(_meeting == null ? "会议详情" : $"{_meeting.Title} - 会议详情")</PageTitle>
+
+<div class="detail-page meeting-detail-page">
+    <div class="detail-header">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToList">返回</MudButton>
+        <div>
+            <h1>@(_meeting?.Title ?? "会议详情")</h1>
+            <div class="page-subtitle">@(_meeting == null ? "" : $"{FormatDateTime(_meeting.MeetingTime)} - {FormatDateTime(_meeting.EndTime)}")</div>
+        </div>
+        <MudSpacer />
+        @if (_meeting != null)
+        {
+            <span class="status-pill">@GetMeetingStatusText(_meeting.Status)</span>
+        }
+    </div>
+
+    @if (_showMeetingEditor)
+    {
+        <div class="meeting-dialog-mask" role="presentation">
+            <section class="meeting-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="meeting-edit-modal-title">
+                <MeetingEdit MeetingId="MeetingId" IsModal="true" Saved="OnMeetingSavedAsync" Cancelled="CloseMeetingEditor" />
+            </section>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            <span>正在加载会议详情</span>
+        </MudPaper>
+    }
+    else if (_meeting == null)
+    {
+        <MudPaper Class="loading-panel" Elevation="0">未找到会议</MudPaper>
+    }
+    else
+    {
+        <MudPaper Class="summary-panel" Elevation="0">
+            @foreach (var item in BuildSummaryItems())
+            {
+                <div class="summary-item">
+                    <div class="summary-label">@item.Label</div>
+                    <div class="summary-value">@ShowValue(item.Value)</div>
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="action-panel" Elevation="0">
+            @if (HasPermission(PermissionConstants.QualityManage))
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="EditMeeting">编辑会议</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddCaseToMeetingAsync">添加病例</MudButton>
+                @if (_meeting.Status == 0)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => ChangeMeetingStatusAsync(1, StartMeetingAction))">开始会议</MudButton>
+                }
+                @if (_meeting.Status == 1)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Publish" OnClick="@(() => ChangeMeetingStatusAsync(2, PublishMeetingAction))">发布会议</MudButton>
+                }
+                @if (_meeting.Status == 2)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Done" OnClick="@(() => ChangeMeetingStatusAsync(3, FinishMeetingAction))">结束会议</MudButton>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteMeetingAsync">删除会议</MudButton>
+            }
+        </MudPaper>
+
+        <MudPaper Class="expert-panel" Elevation="0">
+            <div class="panel-title">
+                <h2>评审专家</h2>
+                <span>@_experts.Count 人</span>
+            </div>
+            @if (_experts.Count == 0)
+            {
+                <div class="empty-line">暂无专家</div>
+            }
+            else
+            {
+                <div class="expert-list">
+                    @foreach (var expert in _experts)
+                    {
+                        <div class="expert-item">
+                            <span>@expert.Name</span>
+                            <em>@(expert.Level == 1 ? "组长" : "专家")</em>
+                        </div>
+                    }
+                </div>
+            }
+        </MudPaper>
+
+        <MudPaper Class="list-panel" Elevation="0">
+            <div class="panel-title table-title">
+                <h2>会议病例</h2>
+                <span>@_cases.Count 例</span>
+            </div>
+            @if (_cases.Count == 0)
+            {
+                <div class="empty-row">该会议暂无病例</div>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="case-table">
+                        <thead>
+                            <tr>
+                                <th>排序</th>
+                                <th>患者</th>
+                                <th>病案号</th>
+                                <th>医院/科室</th>
+                                <th>入院时间</th>
+                                <th>评审进度</th>
+                                <th>汇总</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _cases)
+                            {
+                                <tr>
+                                    <td>@item.Sort</td>
+                                    <td>
+                                        <div class="patient-name">@item.PatientName</div>
+                                        <div class="muted">@ShowSexAge(item.PatientSex, item.PatientAge)</div>
+                                    </td>
+                                    <td>@ShowValue(item.PatientNumber)</td>
+                                    <td>
+                                        <div>@ShowValue(item.HospitalName)</div>
+                                        <div class="muted">@ShowValue(item.DepartmentName)</div>
+                                    </td>
+                                    <td>@FormatDate(item.AdmissionTime)</td>
+                                    <td>@item.FinishedAppraiseCount / @item.AppraiseCount</td>
+                                    <td>@item.SummaryCount 条</td>
+                                    <td>
+                                        <span class="status-pill">@GetCaseStatusText(item.Status)</span>
+                                        <span class="muted">@GetSubStatusText(item.SubStatus)</span>
+                                    </td>
+                                    <td class="operation-cell">
+                                        <div class="meeting-case-actions">
+                                            <MudButton Variant="Variant.Text"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Description"
+                                                       OnClick="@(() => OpenCase(item.CaseId))">病例</MudButton>
+                                            <MudButton Variant="Variant.Text"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.RateReview"
+                                                       OnClick="@(() => OpenAppraise(item.CaseId))">评审</MudButton>
+                                            @if (HasPermission(PermissionConstants.QualityManage))
+                                            {
+                                                <MudButton Variant="Variant.Text"
+                                                           Color="Color.Primary"
+                                                           Size="Size.Small"
+                                                           Disabled="@IsFirstCase(item.CaseId)"
+                                                           StartIcon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                           OnClick="@(() => MoveCaseAsync(item.CaseId, -1))">上移</MudButton>
+                                                <MudButton Variant="Variant.Text"
+                                                           Color="Color.Primary"
+                                                           Size="Size.Small"
+                                                           Disabled="@IsLastCase(item.CaseId)"
+                                                           StartIcon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                           OnClick="@(() => MoveCaseAsync(item.CaseId, 1))">下移</MudButton>
+                                                <MudButton Variant="Variant.Text"
+                                                           Color="Color.Error"
+                                                           Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Delete"
+                                                           OnClick="@(() => RemoveCaseAsync(item.CaseId))">移除</MudButton>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </MudPaper>
+    }
+</div>
+
+@code {
+    private const string StartMeetingAction = "开始会议";
+    private const string PublishMeetingAction = "发布会议";
+    private const string FinishMeetingAction = "结束会议";
+
+    [Parameter]
+    public Guid MeetingId { get; set; }
+
+    private ReviewMeeting? _meeting;
+    private readonly List<ExpertItem> _experts = [];
+    private readonly List<MeetingCaseItem> _cases = [];
+    private bool _isLoading = true;
+    private bool _showMeetingEditor;
+
+    protected override Task OnPageInitializedAsync() => LoadMeetingAsync();
+
+    private async Task LoadMeetingAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!HasAnyPermission(PermissionConstants.QualityManage, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView))
+        {
+            inj_snackbar.Add("当前账号没有会议查看权限", Severity.Warning);
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _meeting = await _registryContext.ReviewMeetings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == MeetingId);
+            _experts.Clear();
+            _cases.Clear();
+            if (_meeting == null)
+            {
+                return;
+            }
+
+            var experts = await _registryContext.MeetingExperts.AsNoTracking()
+                .Where(x => x.MeetingId == MeetingId)
+                .OrderBy(x => x.Level)
+                .ThenBy(x => x.ExpertId)
+                .ToListAsync();
+
+            var appraises = await _registryContext.CaseAppraises.AsNoTracking()
+                .Where(x => x.MeetingId == MeetingId)
+                .ToListAsync();
+            var caseIds = appraises.Select(x => x.CaseId).Distinct().ToList();
+            var cases = caseIds.Count == 0
+                ? []
+                : await _registryContext.Cases.AsNoTracking()
+                    .Where(x => caseIds.Contains(x.Id))
+                    .ToListAsync();
+
+            var summaries = caseIds.Count == 0
+                ? []
+                : await _registryContext.CaseSummaries.AsNoTracking()
+                    .Where(x => x.MeetingId == MeetingId && caseIds.Contains(x.CaseId))
+                    .ToListAsync();
+
+            var userIds = experts
+                .Select(x => TryParseGuid(x.ExpertId))
+                .Concat(appraises.Select(x => TryParseGuid(x.ExpertId)))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Distinct()
+                .ToList();
+            var users = userIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemUsers.AsNoTracking()
+                    .Where(x => userIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+
+            foreach (var expert in experts)
+            {
+                _experts.Add(new ExpertItem(GetUserName(expert.ExpertId, users), expert.Level));
+            }
+
+            var hospitalIds = cases.Select(x => TryParseGuid(x.HospitalId)).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+            var departmentIds = cases.Select(x => TryParseGuid(x.DepartmentId)).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+            var hospitals = hospitalIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemHospitals.AsNoTracking()
+                    .Where(x => hospitalIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => x.Name);
+            var departments = departmentIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _registryContext.SystemDepartments.AsNoTracking()
+                    .Where(x => departmentIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id, x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Name : x.DisplayName!);
+
+            foreach (var item in cases.OrderBy(x => x.Sort).ThenBy(x => x.PatientName))
+            {
+                var caseAppraises = appraises.Where(x => x.CaseId == item.Id).ToList();
+                _cases.Add(new MeetingCaseItem(
+                    item.Id,
+                    item.PatientName,
+                    item.PatientSex,
+                    item.PatientAge,
+                    item.PatientNumber,
+                    GetName(item.HospitalId, hospitals),
+                    GetName(item.DepartmentId, departments),
+                    item.AdmissionTime,
+                    item.Sort,
+                    item.Status,
+                    item.SubStatus,
+                    caseAppraises.Count,
+                    caseAppraises.Count(x => x.Status == 1),
+                    summaries.Count(x => x.CaseId == item.Id)));
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void BackToList() => inj_navigationManager.NavigateTo(RouteConstants.MeetingList);
+
+    private void OpenCase(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(id));
+
+    private void OpenAppraise(Guid caseId) => inj_navigationManager.NavigateTo(RouteConstants.AppraiseDetail(MeetingId, caseId));
+
+    private void EditMeeting() => _showMeetingEditor = true;
+
+    private void CloseMeetingEditor() => _showMeetingEditor = false;
+
+    private async Task OnMeetingSavedAsync(Guid meetingId)
+    {
+        _showMeetingEditor = false;
+        await LoadMeetingAsync();
+    }
+
+    private async Task AddCaseToMeetingAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage))
+        {
+            return;
+        }
+
+        var keywordText = await PromptAsync("请输入病例 ID、病案号或患者姓名，多个用逗号分隔");
+        if (string.IsNullOrWhiteSpace(keywordText) || !await ConfirmAsync("确认将匹配到的病例加入会议？"))
+        {
+            return;
+        }
+
+        var tokens = keywordText.Split([',', '，', ';', '；', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var cases = new List<RegistryCase>();
+        foreach (var token in tokens)
+        {
+            RegistryCase? item = null;
+            if (Guid.TryParse(token, out var caseId))
+            {
+                item = await _registryContext.Cases.FirstOrDefaultAsync(x => x.Id == caseId);
+            }
+
+            item ??= await _registryContext.Cases.FirstOrDefaultAsync(x => x.PatientNumber == token || x.PatientName == token);
+            if (item != null && cases.All(x => x.Id != item.Id))
+            {
+                cases.Add(item);
+            }
+        }
+
+        if (cases.Count == 0)
+        {
+            inj_snackbar.Add("没有匹配到病例", Severity.Warning);
+            return;
+        }
+
+        var experts = await _registryContext.MeetingExperts.AsNoTracking().Where(x => x.MeetingId == MeetingId).ToListAsync();
+        if (experts.Count == 0)
+        {
+            inj_snackbar.Add("该会议还没有配置专家", Severity.Warning);
+            return;
+        }
+
+        var caseIds = cases.Select(x => x.Id).ToList();
+        var existingCaseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId && caseIds.Contains(x.CaseId))
+            .Select(x => x.CaseId)
+            .Distinct()
+            .ToListAsync();
+        var targetCases = cases.Where(x => !existingCaseIds.Contains(x.Id)).ToList();
+        if (targetCases.Count == 0)
+        {
+            inj_snackbar.Add("匹配到的病例已在会议中", Severity.Warning);
+            return;
+        }
+
+        var appraiseTemplateMaps = await _registryContext.FormTemplateMaps.AsNoTracking()
+            .Where(x => x.BusinessType == "appraise")
+            .ToListAsync();
+        var templateMapByDisease = appraiseTemplateMaps
+            .Where(x => !string.IsNullOrWhiteSpace(x.SourceFollowTemplateId))
+            .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+        var targetCasesWithTemplate = targetCases
+            .Where(x => !string.IsNullOrWhiteSpace(x.DiseaseId) && templateMapByDisease.ContainsKey(x.DiseaseId))
+            .ToList();
+        if (targetCasesWithTemplate.Count == 0)
+        {
+            inj_snackbar.Add("匹配到的病例没有可用评审模板", Severity.Warning);
+            return;
+        }
+
+        var templateIds = targetCasesWithTemplate
+            .Select(x => templateMapByDisease[x.DiseaseId!].FormTemplateId)
+            .Distinct()
+            .ToList();
+        var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
+            .Where(x => templateIds.Contains(x.FormTemplateId))
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.StorageKey)
+            .ToListAsync();
+        var definitionsByTemplate = definitions
+            .GroupBy(x => x.FormTemplateId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var now = DateTime.Now;
+        foreach (var item in targetCasesWithTemplate)
+        {
+            var templateMap = templateMapByDisease[item.DiseaseId!];
+            foreach (var expert in experts)
+            {
+                var appraise = new CaseAppraise
+                {
+                    MeetingId = MeetingId,
+                    CaseId = item.Id,
+                    ExpertId = expert.ExpertId,
+                    Status = 0,
+                    CreatedAt = now
+                };
+                _registryContext.CaseAppraises.Add(appraise);
+                AddAppraiseForm(appraise.Id, templateMap, definitionsByTemplate, now);
+            }
+
+            _registryContext.CaseSummaries.Add(new CaseSummary
+            {
+                MeetingId = MeetingId,
+                CaseId = item.Id,
+                Content = "",
+                Status = 0,
+                CreatedAt = now,
+                CreatedBy = experts.FirstOrDefault(x => x.Level == 1)?.ExpertId
+            });
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "添加病例", "meeting", MeetingId, string.Join(",", targetCasesWithTemplate.Select(x => x.Id))));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        var skippedCount = targetCases.Count - targetCasesWithTemplate.Count;
+        inj_snackbar.Add(skippedCount == 0 ? $"已添加 {targetCasesWithTemplate.Count} 个病例" : $"已添加 {targetCasesWithTemplate.Count} 个病例，{skippedCount} 个病例缺少评审模板未添加", Severity.Success);
+        await LoadMeetingAsync();
+    }
+
+    private async Task ChangeMeetingStatusAsync(int nextStatus, string action)
+    {
+        if (_registryContext == null || _meeting == null || !await RequirePermissionAsync(PermissionConstants.QualityManage))
+        {
+            return;
+        }
+
+        if (!await ConfirmAsync($"确认{action}？"))
+        {
+            return;
+        }
+
+        var currentStatus = _meeting.Status;
+        var now = DateTime.Now;
+        var updated = await _registryContext.ReviewMeetings
+            .Where(x => x.Id == MeetingId && x.Status == currentStatus)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, nextStatus)
+                .SetProperty(x => x.UpdatedAt, now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        if (updated == 0)
+        {
+            inj_snackbar.Add("会议状态已变化，请刷新后重试", Severity.Warning);
+            await LoadMeetingAsync();
+            return;
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", action, "meeting", MeetingId, $"{currentStatus}->{nextStatus}"));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add($"{action}成功", Severity.Success);
+        await LoadMeetingAsync();
+    }
+
+    private async Task MoveCaseAsync(Guid caseId, int offset)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage))
+        {
+            return;
+        }
+
+        var ordered = _cases.OrderBy(x => x.Sort).ThenBy(x => x.PatientName).ThenBy(x => x.CaseId).ToList();
+        var index = ordered.FindIndex(x => x.CaseId == caseId);
+        var targetIndex = index + offset;
+        if (index < 0 || targetIndex < 0 || targetIndex >= ordered.Count)
+        {
+            return;
+        }
+
+        var caseIds = ordered.Select(x => x.CaseId).ToList();
+        var caseRows = await _registryContext.Cases.Where(x => caseIds.Contains(x.Id)).ToListAsync();
+        var rowById = caseRows.ToDictionary(x => x.Id);
+        var now = DateTime.Now;
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (rowById.TryGetValue(ordered[i].CaseId, out var row))
+            {
+                row.Sort = (i + 1) * 10;
+                row.UpdatedAt = now;
+                row.UpdatedBy = CurrentUserId;
+            }
+        }
+
+        if (!rowById.TryGetValue(ordered[index].CaseId, out var current) || !rowById.TryGetValue(ordered[targetIndex].CaseId, out var target))
+        {
+            return;
+        }
+
+        (current.Sort, target.Sort) = (target.Sort, current.Sort);
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "调整病例排序", "meeting", MeetingId, caseId.ToString()));
+        await _registryContext.SaveChangesAsync();
+        await LoadMeetingAsync();
+    }
+
+    private async Task RemoveCaseAsync(Guid caseId)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("确认从该会议移除病例？相关评审和汇总也会删除。"))
+        {
+            return;
+        }
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var appraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId && x.CaseId == caseId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        await DeleteAppraiseFormsAsync(appraiseIds);
+        await _registryContext.CaseVotes.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
+        await _registryContext.CaseSummaries.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
+        await _registryContext.CaseAppraises.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "移除病例", "meeting", MeetingId, caseId.ToString()));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("病例已移除", Severity.Success);
+        await LoadMeetingAsync();
+    }
+
+    private async Task DeleteMeetingAsync()
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("确认删除该会议？会议专家、评审、汇总和投票都会删除。"))
+        {
+            return;
+        }
+
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var appraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        await DeleteAppraiseFormsAsync(appraiseIds);
+        await _registryContext.CaseVotes.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
+        await _registryContext.CaseSummaries.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
+        await _registryContext.CaseAppraises.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
+        await _registryContext.MeetingExperts.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
+        await _registryContext.ReviewMeetings.Where(x => x.Id == MeetingId).ExecuteDeleteAsync();
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "删除", "meeting", MeetingId));
+        await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        inj_snackbar.Add("会议已删除", Severity.Success);
+        inj_navigationManager.NavigateTo(RouteConstants.MeetingList);
+    }
+
+    private async Task DeleteAppraiseFormsAsync(List<Guid> appraiseIds)
+    {
+        if (_registryContext == null || appraiseIds.Count == 0)
+        {
+            return;
+        }
+
+        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
+            .Where(x => x.OwnerType == "appraise" && appraiseIds.Contains(x.OwnerId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (instanceIds.Count == 0)
+        {
+            return;
+        }
+
+        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
+            .Where(x => instanceIds.Contains(x.FormInstanceId))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (valueIds.Count > 0)
+        {
+            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
+            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
+        }
+
+        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
+    }
+
+    private void AddAppraiseForm(
+        Guid appraiseId,
+        RegistryFormTemplateMap templateMap,
+        IReadOnlyDictionary<Guid, List<RegistryFormFieldDefinition>> definitionsByTemplate,
+        DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var instance = new RegistryFormInstance
+        {
+            OwnerType = "appraise",
+            OwnerId = appraiseId,
+            FormTemplateId = templateMap.FormTemplateId,
+            FormTemplateMapId = templateMap.Id,
+            SourceCustomFormId = templateMap.SourceCustomFormId,
+            SourceFollowTemplateId = templateMap.SourceFollowTemplateId,
+            Status = 0,
+            CreatedAt = now,
+            CreatedBy = CurrentUserId
+        };
+        _registryContext.FormInstances.Add(instance);
+
+        if (!definitionsByTemplate.TryGetValue(templateMap.FormTemplateId, out var definitions))
+        {
+            return;
+        }
+
+        foreach (var definition in definitions)
+        {
+            _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
+            {
+                FormInstanceId = instance.Id,
+                FormFieldDefinitionId = definition.Id,
+                StorageKey = definition.StorageKey,
+                SourceSubjectId = definition.SourceSubjectId,
+                FieldCode = definition.FieldCode,
+                FieldName = definition.FieldName,
+                Sort = definition.Sort,
+                CreatedAt = now,
+                CreatedBy = CurrentUserId
+            });
+        }
+    }
+
+    private IEnumerable<SummaryItem> BuildSummaryItems()
+    {
+        if (_meeting == null)
+        {
+            yield break;
+        }
+
+        var leader = _experts.FirstOrDefault(x => x.Level == 1)?.Name;
+        yield return new("会议时间", $"{FormatDateTime(_meeting.MeetingTime)} - {FormatDateTime(_meeting.EndTime)}");
+        yield return new("地点", _meeting.Place);
+        yield return new("分组", _meeting.GroupInfo);
+        yield return new("组长", leader);
+        yield return new("专家数", _experts.Count.ToString(CultureInfo.InvariantCulture));
+        yield return new("病例数", _cases.Count.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private bool IsFirstCase(Guid caseId)
+        => _cases.OrderBy(x => x.Sort).ThenBy(x => x.PatientName).ThenBy(x => x.CaseId).FirstOrDefault()?.CaseId == caseId;
+
+    private bool IsLastCase(Guid caseId)
+        => _cases.OrderByDescending(x => x.Sort).ThenByDescending(x => x.PatientName).ThenByDescending(x => x.CaseId).FirstOrDefault()?.CaseId == caseId;
+
+    private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
+
+    private static string GetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
+    {
+        var userId = TryParseGuid(id);
+        return userId.HasValue && users.TryGetValue(userId.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static string GetName(string? id, IReadOnlyDictionary<Guid, string> names)
+    {
+        var guid = TryParseGuid(id);
+        return guid.HasValue && names.TryGetValue(guid.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static string ShowSexAge(string? sex, string? age) => $"{ShowValue(sex)} / {ShowValue(age)}";
+
+    private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+
+    private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string GetMeetingStatusText(int status)
+        => status switch
+        {
+            0 => "未开始",
+            1 => "已开始",
+            2 => "已发布",
+            3 => "已结束",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetCaseStatusText(int status)
+        => status switch
+        {
+            0 => "待审核",
+            1 => "已回退",
+            2 => "已上报",
+            3 => "待填写",
+            4 => "审核失败",
+            _ => $"状态 {status}"
+        };
+
+    private static string GetSubStatusText(int status)
+        => status switch
+        {
+            0 => "待分配",
+            1 => "待评审",
+            2 => "已评审",
+            _ => $"子状态 {status}"
+        };
+
+    private sealed record SummaryItem(string Label, string? Value);
+
+    private sealed record ExpertItem(string Name, int Level);
+
+    private sealed record MeetingCaseItem(
+        Guid CaseId,
+        string PatientName,
+        string? PatientSex,
+        string? PatientAge,
+        string? PatientNumber,
+        string? HospitalName,
+        string? DepartmentName,
+        DateTime? AdmissionTime,
+        int Sort,
+        int Status,
+        int SubStatus,
+        int AppraiseCount,
+        int FinishedAppraiseCount,
+        int SummaryCount);
+}

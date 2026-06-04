@@ -1,0 +1,270 @@
+﻿.meeting-list-page {
+    width: 100%;
+}
+
+.meeting-filter-panel {
+    grid-template-columns: 240px 180px 180px 220px max-content;
+}
+
+.meeting-filter-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    height: 40px;
+}
+
+.meeting-filter-actions ::deep .mud-button-root {
+    min-width: 72px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 7px;
+}
+
+.meeting-filter-panel ::deep .mud-input-control {
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+}
+
+.meeting-filter-panel ::deep .mud-input-control-input-container,
+.meeting-filter-panel ::deep .mud-input {
+    height: 40px;
+    min-height: 40px;
+}
+
+.meeting-filter-panel ::deep .mud-input {
+    align-items: center;
+}
+
+.meeting-filter-panel ::deep .mud-input-root,
+.meeting-filter-panel ::deep .mud-select-input {
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 38px;
+}
+
+.meeting-filter-panel ::deep .mud-input-adornment {
+    height: 38px;
+    margin-top: 0;
+}
+
+.meeting-filter-panel ::deep .mud-input-outlined-border {
+    top: 0;
+}
+
+.meeting-filter-panel ::deep .mud-input-label-outlined {
+    transform: translate(14px, 11px) scale(1);
+}
+
+.meeting-filter-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start {
+    transform: translate(40px, 11px) scale(1);
+}
+
+.meeting-filter-panel ::deep .mud-input-label-outlined.mud-shrink {
+    transform: translate(14px, -6px) scale(.75);
+}
+
+.meeting-filter-panel ::deep .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink {
+    transform: translate(40px, -6px) scale(.75);
+}
+
+.meeting-filter-panel ::deep .mud-input-root-outlined {
+    min-height: 40px;
+}
+
+.review-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--mcr-border);
+    border-radius: var(--mcr-radius);
+    background: var(--mcr-surface);
+    box-shadow: var(--mcr-shadow-soft);
+}
+
+.review-tab {
+    min-width: 92px;
+    height: 36px;
+    padding: 0 14px;
+    color: var(--mcr-text-soft);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--mcr-border);
+    border-radius: 7px;
+    background: var(--mcr-surface);
+}
+
+.review-tab:hover,
+.review-tab.active {
+    color: var(--mcr-primary);
+    border-color: var(--mcr-border-strong);
+    background: var(--mcr-primary-soft);
+}
+
+.review-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 14px;
+    padding: 16px;
+}
+
+.review-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+    overflow: hidden;
+    border: 1px solid var(--mcr-border);
+    border-radius: var(--mcr-radius);
+    background: var(--mcr-surface);
+    box-shadow: var(--mcr-shadow-soft);
+}
+
+.review-card:hover {
+    background: var(--mcr-surface-soft);
+}
+
+.review-card-running {
+    border-color: #fed7aa;
+}
+
+.review-card-finished {
+    border-color: var(--mcr-border-strong);
+}
+
+.review-status {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    color: #ffffff;
+    font-weight: 800;
+}
+
+.review-status-running {
+    background: var(--mcr-warning);
+}
+
+.review-status-finished {
+    background: var(--mcr-primary);
+}
+
+.review-status-idle {
+    background: #64748b;
+}
+
+.review-card-body {
+    display: grid;
+    gap: 9px;
+    padding: 14px;
+}
+
+.review-line {
+    display: grid;
+    grid-template-columns: 118px minmax(0, 1fr);
+    gap: 8px;
+    color: var(--mcr-text-soft);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.review-line span {
+    color: var(--mcr-muted);
+    font-weight: 700;
+}
+
+.review-line em,
+.review-line strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--mcr-text);
+    font-style: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.review-title strong {
+    font-size: 16px;
+    font-weight: 800;
+}
+
+.review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px solid var(--mcr-border-light);
+}
+
+.review-actions ::deep .mud-button-root {
+    min-height: 30px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.meeting-pager {
+    min-height: 64px;
+}
+
+.meeting-dialog-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(17, 32, 51, .34);
+    backdrop-filter: blur(8px);
+}
+
+.meeting-edit-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(1080px, 100%);
+    max-height: min(88vh, 920px);
+    overflow: hidden;
+    border: 1px solid var(--mcr-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(244, 251, 255, .90)),
+        linear-gradient(135deg, rgba(37, 99, 235, .06), rgba(20, 184, 166, .05));
+    box-shadow: var(--mcr-shadow);
+}
+
+.meeting-edit-dialog ::deep .modal-edit-content {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+    background-image: none;
+}
+
+@media (max-width: 900px) {
+    .meeting-filter-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .meeting-dialog-mask {
+        align-items: flex-start;
+        padding: 14px;
+    }
+}
+
+@media (max-width: 760px) {
+    .review-card-grid {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+
+    .review-line {
+        grid-template-columns: 96px minmax(0, 1fr);
+    }
+}

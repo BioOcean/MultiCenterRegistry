@@ -1,0 +1,198 @@
+﻿@namespace MultiCenterRegistry.Components
+@attribute [AllowAnonymous]
+@implements IAsyncDisposable
+
+@code {
+    protected CubeDbContext? _context { get; private set; }
+    protected RegistryDbContext? _registryContext { get; private set; }
+    private readonly HashSet<string> _permissionCodes = new(StringComparer.OrdinalIgnoreCase);
+    private ClaimsPrincipal? _currentUser;
+
+    protected IReadOnlyCollection<string> CurrentPermissionCodes => _permissionCodes;
+
+    protected Guid CurrentRoleId { get; private set; }
+
+    protected string CurrentUserId
+        => GetCurrentClaimValue(ClaimTypes.NameIdentifier)
+           ?? GetCurrentClaimValue("userId")
+           ?? GetCurrentClaimValue("id")
+           ?? _currentUser?.Identity?.Name
+           ?? inj_httpContextAccessor.HttpContext?.User.Identity?.Name
+           ?? "";
+
+    protected string CurrentUserName
+        => GetCurrentClaimValue("displayName")
+           ?? GetCurrentClaimValue(ClaimTypes.Name)
+           ?? _currentUser?.Identity?.Name
+           ?? inj_httpContextAccessor.HttpContext?.User.Identity?.Name
+           ?? "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        ArgumentNullException.ThrowIfNull(inj_dbContextFactory, nameof(inj_dbContextFactory));
+        ArgumentNullException.ThrowIfNull(inj_registryDbContextFactory, nameof(inj_registryDbContextFactory));
+
+        _context = await inj_dbContextFactory.CreateDbContextAsync();
+        _registryContext = await inj_registryDbContextFactory.CreateDbContextAsync();
+
+        var authenticationState = await inj_authenticationStateProvider.GetAuthenticationStateAsync();
+        _currentUser = authenticationState.User;
+        var isAuthenticated = _currentUser.Identity?.IsAuthenticated == true;
+        var currentPath = new Uri(inj_navigationManager.Uri).AbsolutePath;
+        var isLoginPage = currentPath.Equals(RouteConstants.Login, StringComparison.OrdinalIgnoreCase);
+
+        if (!isAuthenticated && currentPath.Equals(RouteConstants.Home, StringComparison.OrdinalIgnoreCase))
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Portal, true);
+            return;
+        }
+
+        if (!isAuthenticated && !isLoginPage)
+        {
+            inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+            return;
+        }
+
+        if (isAuthenticated)
+        {
+            if (!TryGetSelectedRoleId(out var selectedRoleId))
+            {
+                inj_navigationManager.NavigateTo(RouteConstants.Login, true);
+                return;
+            }
+
+            CurrentRoleId = selectedRoleId;
+            await LoadPermissionCodesAsync(selectedRoleId);
+            if (!isLoginPage && !FeatureCatalog.CanAccessPath(currentPath, _permissionCodes))
+            {
+                var defaultPath = FeatureCatalog.GetDefaultPath(_permissionCodes);
+                inj_navigationManager.NavigateTo(string.IsNullOrWhiteSpace(defaultPath) ? RouteConstants.Login : defaultPath, true);
+                return;
+            }
+        }
+
+        await OnPageInitializedAsync();
+        await base.OnInitializedAsync();
+    }
+
+    protected virtual Task OnPageInitializedAsync() => Task.CompletedTask;
+
+    protected virtual Task OnPageFirstRenderAsync() => Task.CompletedTask;
+
+    protected virtual Task OnPageDisposedAsync() => Task.CompletedTask;
+
+    protected Task<bool> ConfirmAsync(string message)
+        => inj_jsRuntime.InvokeAsync<bool>("confirm", message).AsTask();
+
+    protected async Task<string?> PromptAsync(string message)
+    {
+        var result = await inj_jsRuntime.InvokeAsync<string?>("prompt", message);
+        return string.IsNullOrWhiteSpace(result) ? null : result.Trim();
+    }
+
+    protected OperationLog CreateOperationLog(string module, string action, string ownerType, Guid ownerId, string? content = null)
+        => new()
+        {
+            Module = module,
+            Action = action,
+            OwnerType = ownerType,
+            OwnerId = ownerId,
+            Content = content,
+            CreatedAt = DateTime.Now,
+            CreatedBy = CurrentUserId
+        };
+
+    protected bool HasPermission(string code) => _permissionCodes.Contains(code);
+
+    protected bool HasAnyPermission(params string[] codes) => codes.Any(HasPermission);
+
+    protected async Task<bool> RequirePermissionAsync(string code)
+    {
+        if (HasPermission(code))
+        {
+            return true;
+        }
+
+        inj_snackbar.Add("当前账号没有该操作权限", Severity.Warning);
+        await Task.CompletedTask;
+        return false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await OnPageFirstRenderAsync();
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeAsyncCore().ConfigureAwait(false);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (_registryContext != null)
+        {
+            await _registryContext.DisposeAsync().ConfigureAwait(false);
+            _registryContext = null;
+        }
+
+        if (_context != null)
+        {
+            await _context.DisposeAsync().ConfigureAwait(false);
+            _context = null;
+        }
+
+        await OnPageDisposedAsync().ConfigureAwait(false);
+    }
+
+    private string? GetCurrentClaimValue(string type)
+        => _currentUser?.FindFirst(type)?.Value
+           ?? inj_httpContextAccessor.HttpContext?.User.FindFirst(type)?.Value;
+
+    private bool TryGetSelectedRoleId(out Guid roleId)
+    {
+        roleId = Guid.Empty;
+        return Guid.TryParse(inj_httpContextAccessor.HttpContext?.Request.Cookies["mcr_selected_role_id"], out roleId);
+    }
+
+    private async Task LoadPermissionCodesAsync(Guid selectedRoleId)
+    {
+        _permissionCodes.Clear();
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId))
+        {
+            return;
+        }
+
+        var codes = await _registryContext.SystemMapUserRoles.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == selectedRoleId)
+            .Join(
+                _registryContext.SystemRoles.AsNoTracking().Where(x => x.IsValid),
+                userRole => userRole.RoleId,
+                role => role.Id,
+                (userRole, role) => role.Id)
+            .Join(
+                _registryContext.SystemMapRolePermissions.AsNoTracking(),
+                roleId => roleId,
+                rolePermission => rolePermission.RoleId,
+                (roleId, rolePermission) => rolePermission.PermissionId)
+            .Join(
+                _registryContext.SystemPermissions.AsNoTracking(),
+                permissionId => permissionId,
+                permission => permission.Id,
+                (permissionId, permission) => permission.Code)
+            .Where(x => !string.IsNullOrWhiteSpace(x) && x.StartsWith("Power-MCR-"))
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var code in codes)
+        {
+            _permissionCodes.Add(code!);
+        }
+    }
+}
