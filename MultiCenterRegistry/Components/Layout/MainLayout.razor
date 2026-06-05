@@ -59,7 +59,7 @@
         </MudDrawer>
     }
 
-    <MudMainContent Class="main-content">
+    <MudMainContent Class="@MainContentClass">
         <div class="@ContentShellClass">
             @Body
         </div>
@@ -102,11 +102,20 @@
             ? _systemName
             : inj_configuration["AppSettings:loginHospitalTitle"] ?? inj_configuration["AppSettings:SystemName"] ?? "介入数据填报与管理平台";
 
+    private string CurrentPath
+        => "/" + inj_navigationManager.ToBaseRelativePath(inj_navigationManager.Uri).Trim('/').Split('?', '#')[0].Trim('/');
+
     private bool ShowSidebar
-        => !string.IsNullOrWhiteSpace(inj_navigationManager.ToBaseRelativePath(inj_navigationManager.Uri).Trim('/'));
+        => ShouldShowSidebar(CurrentPath);
+
+    private bool IsFixedContentPath
+        => IsAppraiseEditPath(CurrentPath);
+
+    private string MainContentClass
+        => IsFixedContentPath ? "main-content fixed-content" : "main-content";
 
     private string ContentShellClass
-        => ShowSidebar ? "content-shell with-sidebar" : "content-shell";
+        => $"{(ShowSidebar ? "content-shell with-sidebar" : "content-shell full-width")}{(IsFixedContentPath ? " fixed-content-shell" : "")}";
 
     private string UserName
         => _currentUser?.FindFirst("displayName")?.Value
@@ -211,6 +220,35 @@
     {
         var targetPath = FeatureCatalog.GetDefaultPath(_permissionCodes);
         inj_navigationManager.NavigateTo(string.IsNullOrWhiteSpace(targetPath) ? RouteConstants.Login : targetPath, true);
+    }
+
+    private static bool ShouldShowSidebar(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path == "/")
+        {
+            return false;
+        }
+
+        return !IsCaseEditPath(path) && !IsAppraiseEditPath(path);
+    }
+
+    private static bool IsCaseEditPath(string path)
+    {
+        var parts = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 2
+               && parts[0].Equals(RouteConstants.CaseList.Trim('/'), StringComparison.OrdinalIgnoreCase)
+               && Guid.TryParse(parts[1], out _);
+    }
+
+    private static bool IsAppraiseEditPath(string path)
+    {
+        var parts = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 5
+               && parts[0].Equals(RouteConstants.MeetingList.Trim('/'), StringComparison.OrdinalIgnoreCase)
+               && Guid.TryParse(parts[1], out _)
+               && parts[2].Equals("cases", StringComparison.OrdinalIgnoreCase)
+               && Guid.TryParse(parts[3], out _)
+               && parts[4].Equals("appraise", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<int> CountFollowupRemindersAsync(RegistryDbContext dbContext)

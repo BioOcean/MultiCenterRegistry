@@ -97,10 +97,15 @@
                     <div class="form-nav-title">表单目录</div>
                     @foreach (var formSection in _sections)
                     {
+                        var navFieldCount = GetVisibleFields(formSection).Count;
                         <button type="button"
                                 class="form-nav-link"
                                 title="@formSection.Title"
-                                @onclick="@(() => ScrollToSectionAsync(formSection.AnchorId))">@formSection.Title</button>
+                                @onclick="@(() => ScrollToSectionAsync(formSection.AnchorId))">
+                            <span class="form-nav-dot"></span>
+                            <span class="form-nav-text">@formSection.Title</span>
+                            <span class="form-nav-count">@navFieldCount</span>
+                        </button>
                     }
                 </nav>
                 <div class="form-content">
@@ -109,7 +114,10 @@
                         var visibleFields = GetVisibleFields(formSection);
                         <MudPaper Class="form-section" Elevation="0">
                             <button type="button" id="@formSection.AnchorId" class="section-header" @onclick="@(() => ToggleSection(formSection))">
-                                <span>@formSection.Title</span>
+                                <span class="section-title">
+                                    <span class="section-marker"></span>
+                                    <span>@formSection.Title</span>
+                                </span>
                                 <span class="section-count">@visibleFields.Count 项</span>
                                 <MudIcon Icon="@(formSection.IsExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
                             </button>
@@ -117,10 +125,20 @@
                             @if (formSection.IsExpanded)
                             {
                                 <div class="@GetSectionFieldsClass(formSection)">
-                                    @foreach (var field in visibleFields)
+                                    @for (var fieldIndex = 0; fieldIndex < visibleFields.Count; fieldIndex++)
                                     {
+                                        var field = visibleFields[fieldIndex];
                                         <div class="@GetQuestionClass(formSection, field)">
-                                            <label class="question-label">@field.FieldName</label>
+                                            <div class="question-title">
+                                                @if (HasFieldValue(field))
+                                                {
+                                                    <MudIcon Class="question-state"
+                                                             Icon="@Icons.Material.Filled.CheckCircle"
+                                                             Color="Color.Primary"
+                                                             Size="Size.Small" />
+                                                }
+                                                <label class="question-label">@field.FieldName</label>
+                                            </div>
                                             <div class="question-control">
                                                 @if (field.IsFile)
                                                 {
@@ -212,7 +230,7 @@
                                                 }
                                                 else
                                                 {
-                                                    <input class="form-input"
+                                                    <input class="@GetInputClass(field)"
                                                            type="@GetInputType(field)"
                                                            value="@GetInputValue(field)"
                                                            disabled="@IsFieldDisabled(field)"
@@ -738,6 +756,11 @@
     private bool IsFieldDisabled(FieldItem field)
         => !_isEditing || !HasPermission(PermissionConstants.CaseEdit);
 
+    private static bool HasFieldValue(FieldItem field)
+        => field.IsFile
+            ? field.Files.Count > 0
+            : !string.IsNullOrWhiteSpace(GetRawEditValue(field));
+
     private static bool IsChoiceField(FieldItem field)
         => field.ControlType is 2 or 3;
 
@@ -768,6 +791,21 @@
 
     private static string GetInputType(FieldItem field)
         => IsDateField(field) ? "date" : "text";
+
+    private string GetInputClass(FieldItem field)
+    {
+        var classes = new List<string> { "form-input" };
+        if (IsDateField(field))
+        {
+            classes.Add("date-input");
+            if (string.IsNullOrWhiteSpace(GetInputValue(field)))
+            {
+                classes.Add("date-empty");
+            }
+        }
+
+        return string.Join(" ", classes);
+    }
 
     private int GetTextareaRows(FieldItem field)
     {

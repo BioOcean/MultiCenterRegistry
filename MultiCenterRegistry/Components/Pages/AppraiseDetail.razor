@@ -3,28 +3,31 @@
 
 <PageTitle>@(_case == null ? "病例评审" : $"{_case.PatientName} - 病例评审")</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="appraise-page">
-    <div class="detail-header">
-        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToMeeting">返回</MudButton>
-        <div>
+<div class="appraise-page">
+    <div class="detail-header appraise-detail-header">
+        <MudIconButton Class="appraise-back-button"
+                       Icon="@Icons.Material.Filled.ArrowBack"
+                       Color="Color.Primary"
+                       Size="Size.Medium"
+                       title="返回会议"
+                       OnClick="BackToMeeting" />
+        <div class="appraise-title-block">
             <h1>@(_case?.PatientName ?? "病例评审")</h1>
-            <div class="page-subtitle">@(_meeting?.Title ?? "")</div>
+            @if (_case != null)
+            {
+                <div class="appraise-top-info">
+                    @foreach (var item in BuildHeaderItems())
+                    {
+                        <span><strong>@item.Label：</strong>@ShowValue(item.Value)</span>
+                    }
+                </div>
+            }
         </div>
-        <MudSpacer />
         @if (_case != null)
         {
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       Size="Size.Small"
-                       StartIcon="@Icons.Material.Filled.Download"
-                       Href="@($"/exports/appraise/{MeetingId}/{CaseId}.pdf")"
-                       Target="_blank">下载PDF</MudButton>
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       Size="Size.Small"
-                       StartIcon="@Icons.Material.Filled.Description"
-                       OnClick="OpenCase">查看病例</MudButton>
-            <span class="status-pill">@GetSubStatusText(_case.SubStatus)</span>
+            <div class="appraise-header-actions">
+                <span class="status-pill @GetSubStatusClass(_case.SubStatus)">@GetSubStatusText(_case.SubStatus)</span>
+            </div>
         }
     </div>
 
@@ -41,28 +44,9 @@
     }
     else
     {
-        <MudPaper Class="summary-panel" Elevation="0">
-            @foreach (var item in BuildSummaryItems())
-            {
-                <div class="summary-item">
-                    <div class="summary-label">@item.Label</div>
-                    <div class="summary-value">@ShowValue(item.Value)</div>
-                </div>
-            }
-        </MudPaper>
-
-        <MudPaper Class="case-preview-panel" Elevation="0">
-            <div class="panel-title">
-                <div>
-                    <h2>病例对照</h2>
-                    <div class="page-subtitle">评审时可对照查看病例表单原始内容</div>
-                </div>
-                <MudButton Variant="Variant.Outlined"
-                           Color="Color.Primary"
-                           Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.OpenInNew"
-                           OnClick="OpenCase">完整病例</MudButton>
-            </div>
+        <div class="appraise-workspace">
+            <section class="appraise-case-column">
+        <div class="case-preview-panel">
             @if (_caseForms.Count == 0)
             {
                 <div class="empty-line">该病例暂无表单数据</div>
@@ -71,271 +55,254 @@
             {
                 <div class="case-form-layout">
                     <nav class="case-form-nav">
-                        @for (var i = 0; i < _caseForms.Count; i++)
+                        <button type="button"
+                                class="@GetCasePreviewNavClass(CasePreviewAllKey)"
+                                @onclick="@(() => SelectCasePreviewSection(CasePreviewAllKey))">
+                            <span class="form-nav-dot"></span>
+                            <span class="form-nav-text">全部</span>
+                            <span class="form-nav-count">@GetCasePreviewFieldCount(CasePreviewAllKey)</span>
+                        </button>
+                        @foreach (var previewSection in GetCasePreviewSections())
                         {
-                            <a href="@($"#case-preview-{i}")">@_caseForms[i].Name</a>
+                            <button type="button"
+                                    class="@GetCasePreviewNavClass(previewSection.Key)"
+                                    title="@previewSection.Title"
+                                    @onclick="@(() => SelectCasePreviewSection(previewSection.Key))">
+                                <span class="form-nav-dot"></span>
+                                <span class="form-nav-text">@previewSection.Title</span>
+                                <span class="form-nav-count">@previewSection.Fields.Count</span>
+                            </button>
                         }
                     </nav>
-                    <div class="case-preview-list">
-                        @for (var i = 0; i < _caseForms.Count; i++)
+                    <div class="case-pdf-view">
+                        <div class="case-pdf-page">
+                        @foreach (var previewSection in GetSelectedCasePreviewSections())
                         {
-                            var form = _caseForms[i];
-                            <div class="case-preview-form" id="@($"case-preview-{i}")">
-                                <div class="form-title">
-                                    <div>
-                                        <h3>@form.Name</h3>
-                                        <div class="page-subtitle">创建时间 @FormatDateTime(form.CreatedAt)</div>
-                                    </div>
-                                    <span>@form.Fields.Count 个字段</span>
-                                </div>
-                                <div class="field-grid">
-                                    @foreach (var field in form.Fields)
-                                    {
-                                        if (field.IsSection)
-                                        {
-                                            <div class="section-title">@field.FieldName</div>
-                                        }
-                                        else
-                                        {
-                                            <div class="field-card">
-                                                <div class="field-name">@field.FieldName</div>
-                                                <div class="field-value">@GetDisplayValue(field)</div>
-                                                @if (field.Files.Count > 0)
-                                                {
-                                                    <div class="file-list">
-                                                        @foreach (var file in field.Files)
-                                                        {
-                                                            <div class="file-item">
-                                                                <span title="@file.FilePath">@file.FileName</span>
-                                                                <span class="muted">@FormatSize(file.FileSize)</span>
-                                                                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
-                                                                               Size="Size.Small"
-                                                                               Color="Color.Primary"
-                                                                               Href="@GetFileUrl(file, false)"
-                                                                               Target="_blank" />
-                                                                <MudIconButton Icon="@Icons.Material.Filled.Download"
-                                                                               Size="Size.Small"
-                                                                               Color="Color.Primary"
-                                                                               Href="@GetFileUrl(file, true)"
-                                                                               Target="_blank" />
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-        </MudPaper>
-
-        <MudPaper Class="section-panel" Elevation="0">
-            <div class="panel-title">
-                <h2>评审汇总</h2>
-                <span>@_summaries.Count 条</span>
-            </div>
-            @if (_summaries.Count == 0)
-            {
-                <div class="empty-line">暂无汇总</div>
-            }
-            else
-            {
-                <div class="summary-list">
-                    @foreach (var summary in _summaries)
-                    {
-                        <div class="summary-note">
-                            <div class="note-head">
-                                <strong>@ShowValue(summary.ExpertName)</strong>
-                                <span>@GetSummaryStatusText(summary.Status)</span>
-                            </div>
-                            @if (CanEditSummary(summary))
-                            {
-                                <MudTextField T="string"
-                                              @bind-Value="summary.Content"
-                                              Variant="Variant.Outlined"
-                                              Margin="Margin.Dense"
-                                              Lines="4" />
-                                <div class="inline-actions">
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="@(() => SaveSummaryAsync(summary))">保存汇总</MudButton>
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" OnClick="@(() => SubmitSummaryAsync(summary))">提交汇总</MudButton>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="note-content">@ShowValue(summary.Content)</div>
-                            }
-                            <div class="muted">@FormatDateTime(summary.CreatedAt)</div>
-                        </div>
-                    }
-                </div>
-            }
-        </MudPaper>
-
-        <MudPaper Class="section-panel" Elevation="0">
-            <div class="panel-title">
-                <h2>答案统计</h2>
-                <span>@_statistics.Count 个字段</span>
-            </div>
-            @if (_statistics.Count == 0)
-            {
-                <div class="empty-line">暂无可统计答案</div>
-            }
-            else
-            {
-                <div class="stat-grid">
-                    @foreach (var item in _statistics)
-                    {
-                        <div class="stat-card">
-                            <div class="field-name">@item.FieldName</div>
-                            @foreach (var option in item.Options)
-                            {
-                                <div class="stat-row">
-                                    <span>@option.Text</span>
-                                    <em>@option.Count 人</em>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-        </MudPaper>
-
-        <MudPaper Class="section-panel" Elevation="0">
-            <div class="panel-title">
-                <h2>专家评审</h2>
-                <span>@_appraises.Count 条</span>
-            </div>
-            <div class="inline-actions">
-                @if (CanEditCurrentAppraise)
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
-                        @(_isEditing ? "取消编辑" : "编辑评审表单")
-                    </MudButton>
-                }
-                @if (_isEditing && CanEditCurrentAppraise)
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAppraiseFormsAsync">保存评审表单</MudButton>
-                }
-            </div>
-            @if (_appraises.Count == 0)
-            {
-                <div class="empty-line">暂无评审</div>
-            }
-            else
-            {
-                <div class="appraise-list">
-                    @foreach (var appraise in _appraises)
-                    {
-                        <details class="appraise-item" open="@appraise.IsFirst">
-                            <summary>
-                                <span>@ShowValue(appraise.ExpertName)</span>
-                                <em>@GetAppraiseStatusText(appraise.Status)</em>
-                                <small>@FormatDateTime(appraise.UpdatedAt ?? appraise.CreatedAt)</small>
-                            </summary>
-                            @if (appraise.CanEdit)
-                            {
-                                <div class="inline-actions appraise-actions">
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" OnClick="@(() => SubmitAppraiseAsync(appraise.Id))">提交评审</MudButton>
-                                </div>
-                            }
-                            @if (appraise.Forms.Count == 0)
-                            {
-                                <div class="empty-line">该专家暂无评审表单数据</div>
-                            }
-                            else
-                            {
-                                @foreach (var form in appraise.Forms)
+                            <section class="case-pdf-section">
+                                <h3>@previewSection.Title</h3>
+                                @foreach (var field in previewSection.Fields)
                                 {
-                                    <div class="form-block">
-                                        <div class="form-title">
-                                            <h3>@form.Name</h3>
-                                            <span>@form.Fields.Count 个字段</span>
-                                        </div>
-                                        <div class="field-grid">
-                                            @foreach (var field in form.Fields)
+                                    <div class="@GetPdfQuestionClass(field)">
+                                        <div class="pdf-question-name">@field.FieldName</div>
+                                        <div class="pdf-question-value">
+                                            @if (field.IsFile)
                                             {
-                                                if (field.IsSection)
-                                                {
-                                                    <div class="section-title">@field.FieldName</div>
-                                                }
-                                                else
-                                                {
-                                                    <div class="field-card">
-                                                        <div class="field-name">@field.FieldName</div>
-                                                        @if (_isEditing && appraise.CanEdit && !field.IsFile)
-                                                        {
-                                                            <MudTextField T="string"
-                                                                          @bind-Value="field.EditValue"
-                                                                          Variant="Variant.Outlined"
-                                                                          Margin="Margin.Dense"
-                                                                          Lines="3" />
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="field-value">@GetDisplayValue(field)</div>
-                                                        }
-                                                        @if (field.Files.Count > 0)
-                                                        {
-                                                            <div class="file-list">
-                                                                @foreach (var file in field.Files)
-                                                                {
-                                                                    <div class="file-item">
-                                                                        <span title="@file.FilePath">@file.FileName</span>
-                                                                        <span class="muted">@FormatSize(file.FileSize)</span>
-                                                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
-                                                                                       Size="Size.Small"
-                                                                                       Color="Color.Primary"
-                                                                                       Href="@GetFileUrl(file, false)"
-                                                                                       Target="_blank" />
-                                                                        <MudIconButton Icon="@Icons.Material.Filled.Download"
-                                                                                       Size="Size.Small"
-                                                                                       Color="Color.Primary"
-                                                                                       Href="@GetFileUrl(file, true)"
-                                                                                       Target="_blank" />
-                                                                    </div>
-                                                                }
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                }
+                                                @RenderPreviewFiles(field)
+                                            }
+                                            else
+                                            {
+                                                @ShowValue(GetDisplayValue(field))
                                             }
                                         </div>
                                     </div>
                                 }
-                            }
-                        </details>
-                    }
+                            </section>
+                        }
+                        </div>
+                    </div>
                 </div>
             }
-        </MudPaper>
+        </div>
+            </section>
 
-        @if (_votes.Count > 0)
-        {
-            <MudPaper Class="section-panel" Elevation="0">
-                <div class="panel-title">
-                    <h2>投票记录</h2>
-                    <span>@_votes.Count 条</span>
+            <section class="appraise-review-column">
+                <div class="review-shell">
+                    <nav class="review-mode-tabs">
+                        <button type="button" class="@GetReviewTabClass(ReviewTabAppraise)" @onclick="@(() => SelectReviewTab(ReviewTabAppraise))">评审</button>
+                        <button type="button" class="@GetReviewTabClass(ReviewTabSummary)" @onclick="@(() => SelectReviewTab(ReviewTabSummary))">汇总</button>
+                    </nav>
+                    <div class="review-content-panel">
+                        @if (_activeReviewTab == ReviewTabAppraise)
+                        {
+                            @if (_appraises.Count == 0)
+                            {
+                                <div class="empty-line">暂无评审</div>
+                            }
+                            else
+                            {
+                                <div class="expert-tabs">
+                                    @foreach (var appraise in _appraises)
+                                    {
+                                        <button type="button"
+                                                class="@GetExpertTabClass(appraise)"
+                                                @onclick="@(() => SelectAppraise(appraise.Id))">
+                                            @ShowValue(appraise.ExpertName)
+                                        </button>
+                                    }
+                                </div>
+
+                                @if (SelectedAppraise is { } selectedAppraise)
+                                {
+                                    <div class="selected-appraise-head">
+                                        <strong>@ShowValue(selectedAppraise.ExpertName)</strong>
+                                        <span>@GetAppraiseStatusText(selectedAppraise.Status)</span>
+                                        <em>@FormatDateTime(selectedAppraise.UpdatedAt ?? selectedAppraise.CreatedAt)</em>
+                                    </div>
+
+                                    @if (selectedAppraise.Forms.Count == 0)
+                                    {
+                                        <div class="empty-line">该专家暂无评审表单数据</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="review-form-list">
+                                            @foreach (var form in selectedAppraise.Forms)
+                                            {
+                                                @foreach (var reviewSection in GetReviewFormSections(form))
+                                                {
+                                                    var sectionKey = GetReviewSectionKey(selectedAppraise, form, reviewSection);
+                                                    <section class="review-form-section">
+                                                        <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(sectionKey))">
+                                                            <span>@reviewSection.Title</span>
+                                                            <em>@(IsReviewSectionCollapsed(sectionKey) ? "展开" : "收起")</em>
+                                                        </button>
+                                                        @if (!IsReviewSectionCollapsed(sectionKey))
+                                                        {
+                                                            <div class="review-question-grid">
+                                                                @foreach (var field in reviewSection.Fields)
+                                                                {
+                                                                    <div class="@GetReviewQuestionClass(field)">
+                                                                        <div class="review-question-title">@field.FieldName</div>
+                                                                        <div class="review-question-control">
+                                                                            @RenderReviewField(selectedAppraise, field)
+                                                                        </div>
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </section>
+                                                }
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (selectedAppraise.CanEdit)
+                                    {
+                                        <div class="review-bottom-actions">
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="SaveAppraiseFormsAsync">保存</MudButton>
+                                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="@(() => SubmitAppraiseAsync(selectedAppraise.Id))">提交</MudButton>
+                                        </div>
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <MudPaper Class="section-panel appraise-section-panel appraise-summary-section" Elevation="0">
+                                <div class="panel-title">
+                                    <h2>评审汇总</h2>
+                                    <span>@_summaries.Count 条</span>
+                                </div>
+                                @if (_summaries.Count == 0)
+                                {
+                                    <div class="empty-line">暂无汇总</div>
+                                }
+                                else
+                                {
+                                    <div class="summary-list">
+                                        @foreach (var summary in _summaries)
+                                        {
+                                            <div class="summary-note">
+                                                <div class="note-head">
+                                                    <strong>@ShowValue(summary.ExpertName)</strong>
+                                                    <span>@GetSummaryStatusText(summary.Status)</span>
+                                                </div>
+                                                @if (CanEditSummary(summary))
+                                                {
+                                                    <MudTextField T="string"
+                                                                  @bind-Value="summary.Content"
+                                                                  Variant="Variant.Outlined"
+                                                                  Margin="Margin.Dense"
+                                                                  Lines="4" />
+                                                    <div class="inline-actions">
+                                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Save" OnClick="@(() => SaveSummaryAsync(summary))">保存汇总</MudButton>
+                                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" OnClick="@(() => SubmitSummaryAsync(summary))">提交汇总</MudButton>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="note-content">@ShowValue(summary.Content)</div>
+                                                }
+                                                <div class="muted">@FormatDateTime(summary.CreatedAt)</div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </MudPaper>
+
+                            <MudPaper Class="section-panel appraise-section-panel appraise-stat-section" Elevation="0">
+                                <div class="panel-title">
+                                    <h2>答案统计</h2>
+                                    <span>@_statistics.Count 个字段</span>
+                                </div>
+                                @if (_statistics.Count == 0)
+                                {
+                                    <div class="empty-line">暂无可统计答案</div>
+                                }
+                                else
+                                {
+                                    <div class="stat-grid">
+                                        @foreach (var item in _statistics)
+                                        {
+                                            <div class="stat-card">
+                                                <div class="field-name">@item.FieldName</div>
+                                                @foreach (var option in item.Options)
+                                                {
+                                                    <div class="stat-row">
+                                                        <span>@option.Text</span>
+                                                        <em>@option.Count 人</em>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </MudPaper>
+
+                            @if (_votes.Count > 0)
+                            {
+                                <MudPaper Class="section-panel appraise-section-panel appraise-vote-section" Elevation="0">
+                                    <div class="panel-title">
+                                        <h2>投票记录</h2>
+                                        <span>@_votes.Count 条</span>
+                                    </div>
+                                    <div class="vote-list">
+                                        @foreach (var vote in _votes)
+                                        {
+                                            <div class="vote-item">
+                                                <strong>@ShowValue(vote.ExpertName)</strong>
+                                                <span>@(vote.Agreed ? "同意" : "不同意")</span>
+                                                <em>@ShowValue(vote.Content)</em>
+                                            </div>
+                                        }
+                                    </div>
+                                </MudPaper>
+                            }
+                        }
+                    </div>
                 </div>
-                <div class="vote-list">
-                    @foreach (var vote in _votes)
-                    {
-                        <div class="vote-item">
-                            <strong>@ShowValue(vote.ExpertName)</strong>
-                            <span>@(vote.Agreed ? "同意" : "不同意")</span>
-                            <em>@ShowValue(vote.Content)</em>
-                        </div>
-                    }
-                </div>
-            </MudPaper>
-        }
+            </section>
+        </div>
     }
-</MudContainer>
+
+    @if (!string.IsNullOrWhiteSpace(_previewImageUrl))
+    {
+        <div class="image-preview-mask" role="presentation" @onclick="CloseImagePreview">
+            <div class="image-preview-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+                <button type="button" class="image-preview-close" title="关闭" @onclick="CloseImagePreview">
+                    <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                </button>
+                <img src="@_previewImageUrl" alt="@_previewImageTitle" />
+            </div>
+        </div>
+    }
+</div>
 
 @code {
+    private const string CasePreviewAllKey = "all";
+    private const string ReviewTabAppraise = "appraise";
+    private const string ReviewTabSummary = "summary";
+
     [Parameter]
     public Guid MeetingId { get; set; }
 
@@ -351,9 +318,14 @@
     private readonly List<FieldStatistic> _statistics = [];
     private string? _hospitalName;
     private string? _departmentName;
+    private string _selectedCasePreviewSectionKey = CasePreviewAllKey;
+    private string _activeReviewTab = ReviewTabAppraise;
+    private Guid? _selectedAppraiseId;
+    private string? _previewImageUrl;
+    private string? _previewImageTitle;
     private bool _isLoading = true;
-    private bool _isEditing;
     private bool _isMeetingLeader;
+    private readonly HashSet<string> _collapsedReviewSections = [];
 
     protected override Task OnPageInitializedAsync() => LoadAppraiseAsync();
 
@@ -463,6 +435,8 @@
 
             BuildAppraiseBlocks(appraises, users, instances, templates, values, definitions, filesByValue);
             BuildStatistics(values, definitions);
+            EnsureCasePreviewSelection();
+            EnsureAppraiseSelection();
         }
         finally
         {
@@ -655,6 +629,7 @@
             definition?.ControlType,
             definition?.Level ?? 2,
             value.Sort,
+            definition?.DefaultOptions,
             fieldFiles ?? []);
     }
 
@@ -706,32 +681,443 @@
         _statistics.AddRange(statistics);
     }
 
+    private void EnsureCasePreviewSelection()
+    {
+        if (_selectedCasePreviewSectionKey == CasePreviewAllKey)
+        {
+            return;
+        }
+
+        if (GetCasePreviewSections().All(x => x.Key != _selectedCasePreviewSectionKey))
+        {
+            _selectedCasePreviewSectionKey = CasePreviewAllKey;
+        }
+    }
+
+    private void EnsureAppraiseSelection()
+    {
+        if (_selectedAppraiseId.HasValue && _appraises.Any(x => x.Id == _selectedAppraiseId.Value))
+        {
+            return;
+        }
+
+        _selectedAppraiseId = CurrentAppraise?.Id ?? _appraises.FirstOrDefault()?.Id;
+    }
+
+    private AppraiseBlock? SelectedAppraise
+        => _selectedAppraiseId.HasValue
+            ? _appraises.FirstOrDefault(x => x.Id == _selectedAppraiseId.Value) ?? _appraises.FirstOrDefault()
+            : _appraises.FirstOrDefault();
+
+    private void SelectCasePreviewSection(string key) => _selectedCasePreviewSectionKey = key;
+
+    private void SelectReviewTab(string tab) => _activeReviewTab = tab;
+
+    private void SelectAppraise(Guid id) => _selectedAppraiseId = id;
+
+    private string GetCasePreviewNavClass(string key)
+        => _selectedCasePreviewSectionKey == key ? "form-nav-link active" : "form-nav-link";
+
+    private string GetReviewTabClass(string tab)
+        => _activeReviewTab == tab ? "review-mode-tab active" : "review-mode-tab";
+
+    private string GetExpertTabClass(AppraiseBlock appraise)
+        => SelectedAppraise?.Id == appraise.Id ? "expert-tab active" : "expert-tab";
+
+    private List<CasePreviewSection> GetCasePreviewSections()
+    {
+        var sections = new List<CasePreviewSection>();
+        var index = 0;
+        foreach (var form in _caseForms)
+        {
+            CasePreviewSection? current = null;
+            foreach (var field in form.Fields)
+            {
+                if (field.IsSection)
+                {
+                    current = new CasePreviewSection($"case-section-{index++}", field.FieldName);
+                    sections.Add(current);
+                    continue;
+                }
+
+                current ??= new CasePreviewSection($"case-section-{index++}", form.Name);
+                if (!sections.Contains(current))
+                {
+                    sections.Add(current);
+                }
+
+                current.Fields.Add(field);
+            }
+        }
+
+        return sections
+            .Select(section =>
+            {
+                var visibleSection = new CasePreviewSection(section.Key, section.Title);
+                visibleSection.Fields.AddRange(section.Fields.Where(field => IsVisibleCasePreviewField(section, field)));
+                return visibleSection;
+            })
+            .Where(x => x.Fields.Count > 0)
+            .ToList();
+    }
+
+    private List<CasePreviewSection> GetSelectedCasePreviewSections()
+    {
+        var sections = GetCasePreviewSections();
+        if (_selectedCasePreviewSectionKey == CasePreviewAllKey)
+        {
+            return sections;
+        }
+
+        var selected = sections.FirstOrDefault(x => x.Key == _selectedCasePreviewSectionKey);
+        return selected == null ? sections : [selected];
+    }
+
+    private int GetCasePreviewFieldCount(string key)
+    {
+        var sections = GetCasePreviewSections();
+        return key == CasePreviewAllKey
+            ? sections.Sum(x => x.Fields.Count)
+            : sections.FirstOrDefault(x => x.Key == key)?.Fields.Count ?? 0;
+    }
+
+    private static string GetPdfQuestionClass(FieldItem field)
+        => field.IsFile || IsLongTextField(field) ? "pdf-question full-row" : "pdf-question";
+
+    private bool IsVisibleCasePreviewField(CasePreviewSection section, FieldItem field)
+    {
+        if (IsCaseComplicationFollowupField(section, field))
+        {
+            return IsCaseFieldSelected("是否组织医院或科室并发症讨论", "1", "是");
+        }
+
+        if (field.FieldName.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsCaseFieldSelected("手术类型", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入")
+                   || IsCaseFieldSelected("手术类别", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入");
+        }
+
+        if (field.FieldName.Equals("死亡时间", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsCaseFieldSelected("离院方式", "死亡", "死亡");
+        }
+
+        if (field.FieldName.Equals("补充说明", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsCaseFieldSelected("情况说明/原因说明", "4", "其他")
+                   || IsCaseFieldSelected("情况/原因说明", "4", "其他");
+        }
+
+        return true;
+    }
+
+    private static bool IsCaseComplicationFollowupField(CasePreviewSection section, FieldItem field)
+    {
+        if (!section.Title.Contains("并发症讨论", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var controller = section.Fields.FirstOrDefault(x => x.FieldName.Equals("是否组织医院或科室并发症讨论", StringComparison.OrdinalIgnoreCase));
+        return controller != null && field.Sort > controller.Sort;
+    }
+
+    private bool IsCaseFieldSelected(string fieldName, string rawValue, string displayValue)
+    {
+        var field = _caseForms.SelectMany(x => x.Fields)
+            .LastOrDefault(x => x.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
+        if (field == null)
+        {
+            return false;
+        }
+
+        return SplitChoiceValues(GetRawEditValue(field)).Any(x =>
+            IsSameOptionValue(x, rawValue)
+            || IsSameOptionValue(x, displayValue)
+            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), displayValue));
+    }
+
+    private RenderFragment RenderPreviewFiles(FieldItem field) => @<div class="pdf-file-list">
+        @if (field.Files.Count == 0)
+        {
+            <span class="muted">暂无附件</span>
+        }
+        else
+        {
+            @foreach (var file in field.Files)
+            {
+                if (IsImageFile(file))
+                {
+                    <button type="button" class="pdf-image-thumb" title="@file.FileName" @onclick="@(() => OpenImagePreview(file))">
+                        <img src="@GetFileUrl(file, false)" alt="@file.FileName" />
+                    </button>
+                }
+                else
+                {
+                    <a class="pdf-file-link" href="@GetFileUrl(file, false)" target="_blank" title="@file.FileName">
+                        <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" />
+                        <span>@file.FileName</span>
+                    </a>
+                }
+            }
+        }
+    </div>;
+
+    private List<ReviewFormSection> GetReviewFormSections(FormBlock form)
+    {
+        var sections = new List<ReviewFormSection>();
+        var index = 0;
+        ReviewFormSection? current = null;
+        foreach (var field in form.Fields)
+        {
+            if (field.IsSection)
+            {
+                current = new ReviewFormSection($"review-section-{index++}", field.FieldName);
+                sections.Add(current);
+                continue;
+            }
+
+            current ??= new ReviewFormSection($"review-section-{index++}", form.Name);
+            if (!sections.Contains(current))
+            {
+                sections.Add(current);
+            }
+
+            current.Fields.Add(field);
+        }
+
+        return sections.Where(x => x.Fields.Count > 0).ToList();
+    }
+
+    private static string GetReviewSectionKey(AppraiseBlock appraise, FormBlock form, ReviewFormSection section)
+        => $"{appraise.Id:N}:{form.Name}:{section.Key}";
+
+    private bool IsReviewSectionCollapsed(string key) => _collapsedReviewSections.Contains(key);
+
+    private void ToggleReviewSection(string key)
+    {
+        if (!_collapsedReviewSections.Add(key))
+        {
+            _collapsedReviewSections.Remove(key);
+        }
+    }
+
+    private RenderFragment RenderReviewField(AppraiseBlock appraise, FieldItem field) => @<div>
+        @if (field.IsFile)
+        {
+            @RenderPreviewFiles(field)
+        }
+        else if (IsChoiceField(field))
+        {
+            <div class="review-choice-tags">
+                @foreach (var option in GetFieldOptions(field))
+                {
+                    <button type="button"
+                            class="@GetReviewChoiceClass(field, option)"
+                            disabled="@IsReviewFieldDisabled(appraise)"
+                            @onclick="@(() => SetChoiceValue(appraise, field, option))">@option.Text</button>
+                }
+                @if (GetFieldOptions(field).Count == 0)
+                {
+                    <span class="review-choice-tag disabled">@GetDisplayValue(field)</span>
+                }
+            </div>
+        }
+        else if (IsLongTextField(field))
+        {
+            <textarea class="review-textarea"
+                      value="@GetReviewInputValue(field)"
+                      disabled="@IsReviewFieldDisabled(appraise)"
+                      rows="@GetTextareaRows(field)"
+                      @oninput="@((ChangeEventArgs args) => field.EditValue = args.Value?.ToString())"></textarea>
+        }
+        else
+        {
+            <input class="@GetReviewInputClass(field)"
+                   type="@GetInputType(field)"
+                   value="@GetReviewInputValue(field)"
+                   disabled="@IsReviewFieldDisabled(appraise)"
+                   @onchange="@((ChangeEventArgs args) => field.EditValue = args.Value?.ToString())" />
+        }
+    </div>;
+
+    private static bool IsReviewFieldDisabled(AppraiseBlock appraise) => !appraise.CanEdit;
+
+    private static bool IsChoiceField(FieldItem field) => field.ControlType is 2 or 3 || GetFieldOptions(field).Count > 0;
+
+    private static bool IsLongTextField(FieldItem field) => field.ControlType == 10;
+
+    private static bool IsDateField(FieldItem field)
+        => field.ControlType == 4
+           || field.FieldName.Contains("时间", StringComparison.OrdinalIgnoreCase)
+           || field.FieldName.Contains("日期", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetInputType(FieldItem field) => IsDateField(field) ? "date" : "text";
+
+    private static string GetReviewInputValue(FieldItem field)
+        => IsDateField(field) ? NormalizeDateValue(GetRawEditValue(field)) : GetRawEditValue(field);
+
+    private static string GetReviewInputClass(FieldItem field)
+    {
+        var classes = new List<string> { "review-input" };
+        if (IsDateField(field))
+        {
+            classes.Add("date-input");
+            if (string.IsNullOrWhiteSpace(GetReviewInputValue(field)))
+            {
+                classes.Add("date-empty");
+            }
+        }
+
+        return string.Join(" ", classes);
+    }
+
+    private static string GetReviewQuestionClass(FieldItem field)
+        => field.IsFile || IsLongTextField(field) ? "review-question full-row" : "review-question";
+
+    private static string GetReviewChoiceClass(FieldItem field, FieldOption option)
+    {
+        var classes = new List<string> { "review-choice-tag" };
+        classes.Add(IsOptionSelected(field, option) ? "selected" : "unselected");
+        return string.Join(" ", classes);
+    }
+
+    private static IReadOnlyList<FieldOption> GetFieldOptions(FieldItem field)
+    {
+        var name = field.FieldName.Trim();
+        if (name.Contains("适应症", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "合理"), new("2", "欠合理"), new("3", "不合理")];
+        }
+
+        if (name.Contains("介入操作", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "规范"), new("2", "欠规范"), new("3", "不规范"), new("4", "极不规范")];
+        }
+
+        if (name.Contains("齐全", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "齐全"), new("2", "不齐全")];
+        }
+
+        if (name.Equals("死亡原因", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "疾病相关"), new("2", "药物相关"), new("3", "操作相关"), new("4", "器械相关"), new("5", "其他")];
+        }
+
+        if (name.Contains("是否", StringComparison.OrdinalIgnoreCase) || field.DefaultOptions == "11")
+        {
+            return [new("1", "是"), new("2", "否")];
+        }
+
+        return [];
+    }
+
+    private static bool IsOptionSelected(FieldItem field, FieldOption option)
+    {
+        var values = SplitChoiceValues(GetRawEditValue(field)).ToList();
+        return values.Any(x =>
+            IsSameOptionValue(x, option.Value)
+            || IsSameOptionValue(x, option.Text)
+            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), option.Text));
+    }
+
+    private static void SetChoiceValue(AppraiseBlock appraise, FieldItem field, FieldOption option)
+    {
+        if (IsReviewFieldDisabled(appraise))
+        {
+            return;
+        }
+
+        if (field.ControlType != 3)
+        {
+            field.EditValue = option.Text;
+            return;
+        }
+
+        var values = SplitChoiceValues(field.EditValue).ToList();
+        var existed = values.Any(x => IsSameOptionValue(x, option.Value) || IsSameOptionValue(x, option.Text));
+        values = existed
+            ? values.Where(x => !IsSameOptionValue(x, option.Value) && !IsSameOptionValue(x, option.Text)).ToList()
+            : [.. values, option.Text];
+        field.EditValue = values.Count == 0 ? null : string.Join(",", values);
+    }
+
+    private static int GetTextareaRows(FieldItem field)
+    {
+        var value = GetReviewInputValue(field);
+        return Math.Clamp((value.Length / 90) + 3, 3, 10);
+    }
+
+    private static string GetRawEditValue(FieldItem field)
+        => field.EditValue?.Trim()
+           ?? field.FieldText?.Trim()
+           ?? field.FieldValue?.Trim()
+           ?? "";
+
+    private static IEnumerable<string> SplitChoiceValues(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(['、', ',', '，', ';', '；', '|', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool IsSameOptionValue(string? left, string? right)
+        => NormalizeOptionValue(left).Equals(NormalizeOptionValue(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeOptionValue(string? value)
+        => value?.Trim().Trim('{', '}').ToUpperInvariant() ?? "";
+
+    private static string NormalizeDateValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var text = value.Trim();
+        if (DateTime.TryParse(text, out var date))
+        {
+            return date.ToString("yyyy-MM-dd");
+        }
+
+        return text.Length >= 10 ? text[..10] : text;
+    }
+
+    private static bool IsImageFile(RegistryFile file)
+    {
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var extension = System.IO.Path.GetExtension(file.FileName);
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OpenImagePreview(RegistryFile file)
+    {
+        _previewImageUrl = GetFileUrl(file, false);
+        _previewImageTitle = file.FileName;
+    }
+
+    private void CloseImagePreview()
+    {
+        _previewImageUrl = null;
+        _previewImageTitle = null;
+    }
+
     private void BackToMeeting() => inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(MeetingId));
 
-    private void OpenCase() => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(CaseId));
-
     private AppraiseBlock? CurrentAppraise => _appraises.FirstOrDefault(x => x.IsCurrentUser);
-
-    private bool CanEditCurrentAppraise => CurrentAppraise?.CanEdit == true;
 
     private bool CanEditSummary(CaseSummary summary)
         => summary.Status == 0
            && HasPermission(PermissionConstants.AppraiseEdit)
            && (_isMeetingLeader || IsCurrentUser(summary.CreatedBy));
-
-    private void ToggleEdit()
-    {
-        if (!CanEditCurrentAppraise)
-        {
-            return;
-        }
-
-        _isEditing = !_isEditing;
-        foreach (var field in CurrentAppraise!.Forms.SelectMany(x => x.Fields))
-        {
-            field.EditValue = string.IsNullOrWhiteSpace(field.FieldText) ? field.FieldValue : field.FieldText;
-        }
-    }
 
     private async Task SaveAppraiseFormsAsync()
     {
@@ -740,7 +1126,7 @@
             return;
         }
 
-        var appraise = CurrentAppraise;
+        var appraise = SelectedAppraise;
         if (appraise?.CanEdit != true)
         {
             inj_snackbar.Add("只能保存本人未提交的评审表单", Severity.Warning);
@@ -775,7 +1161,6 @@
 
         _registryContext.OperationLogs.Add(CreateOperationLog("评审", "保存表单", "case", CaseId));
         await _registryContext.SaveChangesAsync();
-        _isEditing = false;
         inj_snackbar.Add("评审表单已保存", Severity.Success);
         await LoadAppraiseAsync();
     }
@@ -954,19 +1339,20 @@
         return false;
     }
 
-    private IEnumerable<SummaryItem> BuildSummaryItems()
+    private IEnumerable<SummaryItem> BuildHeaderItems()
     {
         if (_case == null)
         {
             yield break;
         }
 
-        yield return new("性别/年龄", $"{ShowValue(_case.PatientSex)} / {ShowValue(_case.PatientAge)}");
+        yield return new("所属医院", _hospitalName ?? _case.HospitalName ?? _case.HospitalId);
         yield return new("病案号", _case.PatientNumber);
-        yield return new("所属医院", _hospitalName ?? _case.HospitalId);
-        yield return new("所属科室", _departmentName ?? _case.DepartmentId);
-        yield return new("入院时间", FormatDate(_case.AdmissionTime));
-        yield return new("手术时间", FormatDate(_case.OperationTime));
+        yield return new("患者姓名", _case.PatientName);
+        yield return new("性别", ShowSex(_case.PatientSexText ?? _case.PatientSex));
+        yield return new("出院时间", FormatDate(_case.DischargeTime));
+        yield return new("术者", _case.OperatorName ?? _case.OperatorId);
+        yield return new("手术类别", ShowValue(_case.SurgeryTypeText ?? FormValueDisplayMapper.Normalize("手术类别", _case.SurgeryTypeValue)));
     }
 
     private static string GetDisplayValue(FieldItem field)
@@ -982,6 +1368,16 @@
     private static string GetFileUrl(RegistryFile file, bool download)
         => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
 
+    private string GetCaseSubtitle()
+    {
+        if (_case == null)
+        {
+            return "";
+        }
+
+        return $"{ShowSex(_case.PatientSexText ?? _case.PatientSex)} / {ShowValue(_case.PatientAge)}";
+    }
+
     private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
 
     private bool IsCurrentUser(string? id) => string.Equals(id, CurrentUserId, StringComparison.OrdinalIgnoreCase);
@@ -994,30 +1390,12 @@
 
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
+    private static string ShowSex(string? value)
+        => ShowValue(FormValueDisplayMapper.Normalize("性别", value));
+
     private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
-
-    private static string FormatSize(long? size)
-    {
-        if (!size.HasValue || size.Value <= 0)
-        {
-            return "-";
-        }
-
-        var value = size.Value;
-        if (value < 1024)
-        {
-            return $"{value} B";
-        }
-
-        if (value < 1024 * 1024)
-        {
-            return $"{value / 1024d:0.#} KB";
-        }
-
-        return $"{value / 1024d / 1024d:0.#} MB";
-    }
 
     private static string GetSubStatusText(int status)
         => status switch
@@ -1026,6 +1404,15 @@
             1 => "待评审",
             2 => "已评审",
             _ => $"子状态 {status}"
+        };
+
+    private static string GetSubStatusClass(int status)
+        => status switch
+        {
+            0 => "status-draft",
+            1 => "status-running",
+            2 => "status-published",
+            _ => "status-unknown"
         };
 
     private static string GetAppraiseStatusText(int status)
@@ -1060,6 +1447,20 @@
 
     private sealed record FormBlock(string Name, List<FieldItem> Fields, DateTime? CreatedAt = null);
 
+    private sealed class CasePreviewSection(string key, string title)
+    {
+        public string Key { get; } = key;
+        public string Title { get; } = title;
+        public List<FieldItem> Fields { get; } = [];
+    }
+
+    private sealed class ReviewFormSection(string key, string title)
+    {
+        public string Key { get; } = key;
+        public string Title { get; } = title;
+        public List<FieldItem> Fields { get; } = [];
+    }
+
     private sealed class FieldItem(
         Guid id,
         string fieldName,
@@ -1068,6 +1469,7 @@
         int? controlType,
         int level,
         int sort,
+        string? defaultOptions,
         List<RegistryFile> files)
     {
         public Guid Id { get; } = id;
@@ -1078,6 +1480,7 @@
         public int? ControlType { get; } = controlType;
         public int Level { get; } = level;
         public int Sort { get; } = sort;
+        public string? DefaultOptions { get; } = defaultOptions;
         public List<RegistryFile> Files { get; } = files;
         public bool IsSection => Level <= 1;
         public bool IsFile => ControlType == 7;
@@ -1086,4 +1489,6 @@
     private sealed record FieldStatistic(string FieldName, List<FieldStatisticOption> Options);
 
     private sealed record FieldStatisticOption(string Text, int Count);
+
+    private sealed record FieldOption(string Value, string Text);
 }

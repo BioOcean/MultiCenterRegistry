@@ -14,6 +14,7 @@
 - `07_migrate_quality.ps1`：迁移质控主表、驳回记录和质控表单答案；默认需要 `-Export` 才生成导入文件，`-Execute` 才写入 PostgreSQL。
 - `08_migrate_meetings.ps1`：迁移会议、专家、评价、总结、投票和专家评审答案；默认需要 `-Export` 才生成导入文件，`-Execute` 才写入 PostgreSQL。
 - `09_migrate_identity.ps1`：迁移医院、科室、用户、MCR 角色权限，并把已迁移业务数据中的旧医院/用户 ID 映射为现系统 ID；默认需要 `-Export` 才生成导入文件，`-Execute` 才写入 PostgreSQL。
+- `12_cleanup_create_case_form.sql`：清理旧库已生成的“创建病例信息”冗余模板、实例、字段值和附件，执行前必须单独确认。
 - `13_extend_admin_content.sql`：新增文献、系统消息和门户配置运行期表，执行前必须单独确认。
 - `14_migrate_articles.ps1`：迁移旧系统 `MCRArticle` 文献和系统消息；默认需要 `-Export` 才生成导入文件，`-Execute` 才写入 PostgreSQL。
 - `15_extend_system_user_email.sql`：给 `system.sys_user` 增加邮箱字段，执行前必须单独确认；需要在重新执行 `09_migrate_identity.ps1 -Execute` 前先执行。

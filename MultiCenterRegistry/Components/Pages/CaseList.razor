@@ -30,7 +30,7 @@
     {
         <div class="case-dialog-mask" role="presentation">
             <section class="case-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="case-create-modal-title">
-                <CaseEdit IsModal="true" Saved="OnCaseCreated" Cancelled="CloseCreateCaseModal" />
+                <CaseEdit Saved="OnCaseCreated" Cancelled="CloseCreateCaseModal" />
             </section>
         </div>
     }
@@ -314,10 +314,13 @@
                                                    Color="Color.Primary"
                                                    Size="Size.Small"
                                                    OnClick="@(() => OpenCase(item.Id))">查看病例</MudButton>
-                                        <MudButton Variant="Variant.Text"
-                                                   Color="Color.Primary"
-                                                   Size="Size.Small"
-                                                   OnClick="@(() => OpenCaseAppraiseAsync(item.Id))">查看评价</MudButton>
+                                        @if (CanViewCaseAppraise(item))
+                                        {
+                                            <MudButton Variant="Variant.Text"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       OnClick="@(() => OpenCaseAppraiseAsync(item.Id))">查看评价</MudButton>
+                                        }
                                         @if (CanDeleteCase(item))
                                         {
                                             <MudButton Variant="Variant.Text"
@@ -699,6 +702,7 @@
                     x.OperatorName ?? x.OperatorId,
                     x.SurgeryTypeText,
                     x.Status,
+                    x.SubStatus,
                     x.Sort,
                     x.CreatedAt)));
         }
@@ -1122,6 +1126,9 @@
 
     private bool CanDeleteCase(CaseListItem item)
         => HasPermission(PermissionConstants.CaseDelete) && item.Status != 2;
+
+    private bool CanViewCaseAppraise(CaseListItem item)
+        => HasPermission(PermissionConstants.AppraiseView) && item.SubStatus == 2;
 
     private void ToggleExportPanel()
     {
@@ -1640,6 +1647,7 @@
         string? OperatorName,
         string? SurgeryTypeText,
         int Status,
+        int SubStatus,
         int Sort,
         DateTime CreatedAt);
 

@@ -1,30 +1,17 @@
-﻿@page "/cases/new"
-@inherits BasePage
+﻿@inherits BasePage
 
 <PageTitle>新建病例</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="@PageClass">
-    @if (IsModal)
-    {
-        <div class="case-dialog-head">
-            <div class="case-dialog-title">
-                <span class="case-dialog-icon">
-                    <MudIcon Icon="@Icons.Material.Filled.NoteAdd" />
-                </span>
-                <span id="case-create-modal-title">新建病例</span>
-            </div>
-            <MudIconButton Class="case-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Default" title="关闭" OnClick="Back" />
+    <div class="case-dialog-head">
+        <div class="case-dialog-title">
+            <span class="case-dialog-icon">
+                <MudIcon Icon="@Icons.Material.Filled.NoteAdd" />
+            </span>
+            <span id="case-create-modal-title">新建病例</span>
         </div>
-    }
-    else
-    {
-        <div class="detail-header">
-            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="Back">返回</MudButton>
-            <div>
-                <h1>新建病例</h1>
-            </div>
-        </div>
-    }
+        <MudIconButton Class="case-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Default" title="关闭" OnClick="Back" />
+    </div>
 
     @if (_isLoading)
     {
@@ -149,9 +136,6 @@
 
 @code {
     [Parameter]
-    public bool IsModal { get; set; }
-
-    [Parameter]
     public EventCallback<Guid> Saved { get; set; }
 
     [Parameter]
@@ -187,9 +171,9 @@
     private DateTime? _dischargeTime;
     private bool _isLoading = true;
 
-    private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
-    private string BodyClass => IsModal ? "case-dialog-body" : "case-create-page-body";
-    private string ActionsClass => IsModal ? "case-dialog-actions" : "case-create-page-actions";
+    private const string PageClass = "edit-page modal-edit-content";
+    private const string BodyClass = "case-dialog-body";
+    private const string ActionsClass = "case-dialog-actions";
     private bool HasSelectedHospital => !string.IsNullOrWhiteSpace(_hospitalId);
     private bool CanCreate => HasSelectedHospital
                               && !string.IsNullOrWhiteSpace(_patientNumber)
@@ -297,13 +281,7 @@
         }
 
         inj_snackbar.Add("病例已创建", Severity.Success);
-        if (IsModal)
-        {
-            await Saved.InvokeAsync(caseId);
-            return;
-        }
-
-        inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(caseId));
+        await Saved.InvokeAsync(caseId);
     }
 
     private async Task AddCaseFormsAsync(Guid caseId, string diseaseId, DateTime now)
@@ -368,13 +346,7 @@
 
     private async Task Back()
     {
-        if (IsModal)
-        {
-            await Cancelled.InvokeAsync();
-            return;
-        }
-
-        inj_navigationManager.NavigateTo(RouteConstants.CaseList);
+        await Cancelled.InvokeAsync();
     }
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

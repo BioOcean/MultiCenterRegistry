@@ -305,6 +305,33 @@ textarea {
     margin-left: 16px;
 }
 
+.content-shell.full-width {
+    margin-left: 0;
+}
+
+.main-content.fixed-content {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    padding-top: var(--mcr-header-height) !important;
+    overflow: hidden;
+}
+
+.content-shell.fixed-content-shell {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    height: calc(100dvh - var(--mcr-header-height));
+    max-height: calc(100dvh - var(--mcr-header-height));
+    min-height: 0;
+    overflow: hidden;
+}
+
+.content-shell.fixed-content-shell > .appraise-page {
+    min-height: 0;
+}
+
 /* 功能页基础层：只处理业务页面内部，不影响系统 Header 和左侧菜单。 */
 :where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) {
     display: flex;

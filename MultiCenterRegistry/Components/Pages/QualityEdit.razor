@@ -1,28 +1,14 @@
-﻿@page "/quality/new"
-@inherits BasePage
+﻿@inherits BasePage
 
 <PageTitle>新建质控</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.False" Class="@PageClass">
-    @if (IsModal)
-    {
-        <div class="panel-title">
-            <span id="quality-create-modal-title">新建质控</span>
-            <button type="button" class="modal-close" title="关闭" @onclick="Back">
-                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
-            </button>
-        </div>
-    }
-    else
-    {
-        <div class="detail-header">
-            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="Back">返回</MudButton>
-            <div>
-                <h1>新建质控</h1>
-                <div class="page-subtitle">保存后会按质控模板初始化表单</div>
-            </div>
-        </div>
-    }
+    <div class="panel-title">
+        <span id="quality-create-modal-title">新建质控</span>
+        <button type="button" class="modal-close" title="关闭" @onclick="Back">
+            <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+        </button>
+    </div>
 
     @if (_isLoading)
     {
@@ -60,9 +46,6 @@
 
 @code {
     [Parameter]
-    public bool IsModal { get; set; }
-
-    [Parameter]
     public EventCallback<Guid> Saved { get; set; }
 
     [Parameter]
@@ -78,7 +61,7 @@
     private string _qualityUserId = "";
     private bool _isLoading = true;
 
-    private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
+    private const string PageClass = "edit-page modal-edit-content";
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -180,13 +163,7 @@
         await transaction.CommitAsync();
 
         inj_snackbar.Add("质控报表已创建", Severity.Success);
-        if (IsModal)
-        {
-            await Saved.InvokeAsync(qualityId);
-            return;
-        }
-
-        inj_navigationManager.NavigateTo(RouteConstants.QualityDetail(qualityId));
+        await Saved.InvokeAsync(qualityId);
     }
 
     private async Task AddQualityFormAsync(Guid qualityId, RegistryFormTemplateMap templateMap, DateTime now)
@@ -234,13 +211,7 @@
 
     private async Task Back()
     {
-        if (IsModal)
-        {
-            await Cancelled.InvokeAsync();
-            return;
-        }
-
-        inj_navigationManager.NavigateTo(RouteConstants.QualityList);
+        await Cancelled.InvokeAsync();
     }
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

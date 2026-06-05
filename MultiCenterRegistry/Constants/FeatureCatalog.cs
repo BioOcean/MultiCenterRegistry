@@ -8,8 +8,7 @@ public sealed record FeatureItem(
     string Href,
     string Icon,
     string[] PermissionCodes,
-    string Group,
-    bool IsMenu = true);
+    string Group);
 
 public static class FeatureCatalog
 {
@@ -62,14 +61,6 @@ public static class FeatureCatalog
             Icons.Material.Filled.RateReview,
             [PermissionConstants.QualityManage, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView],
             ReviewGroup),
-        new(
-            "admin",
-            "后台维护",
-            RouteConstants.Admin,
-            Icons.Material.Filled.AdminPanelSettings,
-            [PermissionConstants.AccountManager, PermissionConstants.MessageManager],
-            AdminGroup,
-            IsMenu: false),
         new(
             "admin-users",
             "账号管理",
@@ -169,7 +160,7 @@ public static class FeatureCatalog
 
         var group = GetMenuGroup(path, permissionCodes);
         return Items
-            .Where(item => item.IsMenu && item.Group == group)
+            .Where(item => item.Group == group)
             .Where(item => item.PermissionCodes.Any(code => permissionCodes.Contains(code, StringComparer.OrdinalIgnoreCase)))
             .ToList();
     }
@@ -217,11 +208,6 @@ public static class FeatureCatalog
             return HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.QualityManage, PermissionConstants.CaseCreate, PermissionConstants.CaseEdit, PermissionConstants.CaseDelete, PermissionConstants.ImportCase);
         }
 
-        if (path.Equals(RouteConstants.CaseNew(), StringComparison.OrdinalIgnoreCase))
-        {
-            return HasAny(permissionCodes, PermissionConstants.CaseCreate);
-        }
-
         if (path.StartsWith($"{RouteConstants.CaseList}/", StringComparison.OrdinalIgnoreCase))
         {
             return HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.QualityManage, PermissionConstants.CaseEdit, PermissionConstants.CaseDelete, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView);
@@ -232,11 +218,6 @@ public static class FeatureCatalog
             return HasAny(permissionCodes, PermissionConstants.QualityCreate, PermissionConstants.QualityView, PermissionConstants.QualityManage);
         }
 
-        if (path.Equals(RouteConstants.QualityNew(), StringComparison.OrdinalIgnoreCase))
-        {
-            return HasAny(permissionCodes, PermissionConstants.QualityCreate);
-        }
-
         if (path.StartsWith($"{RouteConstants.QualityList}/", StringComparison.OrdinalIgnoreCase))
         {
             return HasAny(permissionCodes, PermissionConstants.QualityCreate, PermissionConstants.QualityView, PermissionConstants.QualityManage);
@@ -245,12 +226,6 @@ public static class FeatureCatalog
         if (path.Equals(RouteConstants.MeetingList, StringComparison.OrdinalIgnoreCase))
         {
             return HasAny(permissionCodes, PermissionConstants.QualityManage, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView);
-        }
-
-        if (path.Equals(RouteConstants.MeetingNew(), StringComparison.OrdinalIgnoreCase)
-            || IsMeetingEditPath(path))
-        {
-            return HasAny(permissionCodes, PermissionConstants.QualityManage);
         }
 
         if (path.StartsWith($"{RouteConstants.MeetingList}/", StringComparison.OrdinalIgnoreCase))
@@ -283,10 +258,6 @@ public static class FeatureCatalog
         => path.StartsWith($"{RouteConstants.CaseList}/", StringComparison.OrdinalIgnoreCase)
            && !HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.QualityManage, PermissionConstants.CaseEdit)
            && HasAny(permissionCodes, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView);
-
-    private static bool IsMeetingEditPath(string path)
-        => path.StartsWith($"{RouteConstants.MeetingList}/", StringComparison.OrdinalIgnoreCase)
-           && path.EndsWith("/edit", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasAny(IReadOnlyCollection<string> permissionCodes, params string[] codes)
         => codes.Any(code => permissionCodes.Contains(code, StringComparer.OrdinalIgnoreCase));
