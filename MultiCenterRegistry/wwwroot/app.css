@@ -892,7 +892,8 @@ textarea {
 }
 
 .status-pending,
-.status-running {
+.status-running,
+.status-review {
     color: var(--mcr-warning);
     background: #fff7ed;
 }
@@ -906,6 +907,8 @@ textarea {
 }
 
 .status-rejected,
+.status-returned,
+.status-failed,
 .status-invalid {
     color: var(--mcr-danger);
     background: #fef2f2;

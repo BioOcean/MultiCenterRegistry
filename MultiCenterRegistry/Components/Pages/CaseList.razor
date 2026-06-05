@@ -192,15 +192,29 @@
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense" />
         </div>
-        <MudSelect T="string" @bind-Value="_surgeryTypeValue" Label="手术类别" Variant="Variant.Outlined" Margin="Margin.Dense">
-            <MudSelectItem T="string" Value="@("")">全部</MudSelectItem>
+        <MudSelect T="string"
+                   MultiSelection="true"
+                   SelectedValues="_surgeryTypeValues"
+                   SelectedValuesChanged="OnSurgeryTypeValuesChanged"
+                   ToStringFunc="GetSurgeryTypeText"
+                   Label="手术类别"
+                   Placeholder="全部"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense">
             @foreach (var item in _surgeryTypeOptions)
             {
                 <MudSelectItem T="string" Value="@item.Value">@item.Text</MudSelectItem>
             }
         </MudSelect>
-        <MudSelect T="string" @bind-Value="_surgeonValue" Label="术者" Variant="Variant.Outlined" Margin="Margin.Dense">
-            <MudSelectItem T="string" Value="@("")">全部</MudSelectItem>
+        <MudSelect T="string"
+                   MultiSelection="true"
+                   SelectedValues="_surgeonValues"
+                   SelectedValuesChanged="OnSurgeonValuesChanged"
+                   ToStringFunc="GetSurgeonText"
+                   Label="术者"
+                   Placeholder="全部"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense">
             @foreach (var item in _surgeonOptions)
             {
                 <MudSelectItem T="string" Value="@item.Value">@item.Text</MudSelectItem>
@@ -383,8 +397,8 @@
     private string _patientNameValue = "";
     private DateTime? _dischargeStartDate;
     private DateTime? _dischargeEndDate;
-    private string _surgeryTypeValue = "";
-    private string _surgeonValue = "";
+    private IEnumerable<string> _surgeryTypeValues = [];
+    private IEnumerable<string> _surgeonValues = [];
     private string _tabValue = "";
     private string _sortColumn = "";
     private bool _sortAscending = true;
@@ -460,8 +474,8 @@
         _patientNameValue = "";
         _dischargeStartDate = null;
         _dischargeEndDate = null;
-        _surgeryTypeValue = "";
-        _surgeonValue = "";
+        _surgeryTypeValues = [];
+        _surgeonValues = [];
         _tabValue = "";
         ClearSort();
         _pageIndex = 0;
@@ -1213,18 +1227,43 @@
             query = query.Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value < endExclusive);
         }
 
-        if (!string.IsNullOrWhiteSpace(_surgeryTypeValue))
+        var surgeryTypeValues = GetSelectedFilterValues(_surgeryTypeValues);
+        if (surgeryTypeValues.Count > 0)
         {
-            query = query.Where(x => x.SurgeryTypeValue == _surgeryTypeValue || x.SurgeryTypeText == _surgeryTypeValue);
+            query = query.Where(x => (x.SurgeryTypeValue != null && surgeryTypeValues.Contains(x.SurgeryTypeValue))
+                                     || (x.SurgeryTypeText != null && surgeryTypeValues.Contains(x.SurgeryTypeText)));
         }
 
-        if (!string.IsNullOrWhiteSpace(_surgeonValue))
+        var surgeonValues = GetSelectedFilterValues(_surgeonValues);
+        if (surgeonValues.Count > 0)
         {
-            query = query.Where(x => x.OperatorId == _surgeonValue);
+            query = query.Where(x => x.OperatorId != null && surgeonValues.Contains(x.OperatorId));
         }
 
         return query;
     }
+
+    private void OnSurgeryTypeValuesChanged(IEnumerable<string> values)
+        => _surgeryTypeValues = GetSelectedFilterValues(values);
+
+    private void OnSurgeonValuesChanged(IEnumerable<string> values)
+        => _surgeonValues = GetSelectedFilterValues(values);
+
+    private string GetSurgeryTypeText(string value)
+        => _surgeryTypeOptions.FirstOrDefault(x => IsSameFilterValue(x.Value, value))?.Text ?? value;
+
+    private string GetSurgeonText(string value)
+        => _surgeonOptions.FirstOrDefault(x => IsSameFilterValue(x.Value, value))?.Text ?? value;
+
+    private static List<string> GetSelectedFilterValues(IEnumerable<string>? values)
+        => values?
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+    private static bool IsSameFilterValue(string left, string right)
+        => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
     private bool TryReadDischargeRange(out DateTime? start, out DateTime? end)
     {
@@ -1377,10 +1416,8 @@
                 .Where(x => x.BusinessType == "case")
                 .ToListAsync();
             var templateMapByDisease = caseTemplateMaps
-                .Where(x => x.TemplateName != "基本信息")
                 .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-            var baseMaps = caseTemplateMaps.Where(x => x.TemplateName == "基本信息").ToList();
             var templateIds = caseTemplateMaps.Select(x => x.FormTemplateId).Distinct().ToList();
             var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
                 .Where(x => templateIds.Contains(x.FormTemplateId))
@@ -1458,7 +1495,7 @@
                     CreatedBy = CurrentUserId
                 });
 
-                AddCaseForms(caseId, baseMaps.Append(templateMap), definitionsByTemplate, now);
+                AddCaseForms(caseId, [templateMap], definitionsByTemplate, now);
                 _registryContext.OperationLogs.Add(CreateOperationLog("病例", "导入", "case", caseId, file.Name));
                 imported++;
             }

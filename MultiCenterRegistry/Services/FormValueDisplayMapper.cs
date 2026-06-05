@@ -13,6 +13,13 @@ public static class FormValueDisplayMapper
         ["AA4D47B6-7852-4A5F-AB95-50D7568DB9C4"] = "单纯CAG"
     };
 
+    private static readonly Dictionary<string, string> CoronaryInterventionOptionNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["1"] = "急诊PCI",
+        ["2"] = "择期PCI",
+        ["3"] = "单纯CAG"
+    };
+
     private static readonly Dictionary<string, string> DischargeOptionNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["1"] = "非心内科患者",
@@ -58,6 +65,11 @@ public static class FormValueDisplayMapper
             };
         }
 
+        if (name.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase) && text.All(char.IsDigit))
+        {
+            return CoronaryInterventionOptionNames.TryGetValue(text, out var coronaryName) ? coronaryName : $"选项 {text}";
+        }
+
         if (name.StartsWith("是否", StringComparison.OrdinalIgnoreCase))
         {
             return text switch
@@ -68,7 +80,10 @@ public static class FormValueDisplayMapper
             };
         }
 
-        if (name.Equals("离院方式", StringComparison.OrdinalIgnoreCase) && text.All(char.IsDigit))
+        if ((name.Equals("离院方式", StringComparison.OrdinalIgnoreCase)
+             || name.Equals("情况说明/原因说明", StringComparison.OrdinalIgnoreCase)
+             || name.Equals("情况/原因说明", StringComparison.OrdinalIgnoreCase))
+            && text.All(char.IsDigit))
         {
             return DischargeOptionNames.TryGetValue(text, out var dischargeName) ? dischargeName : $"选项 {text}";
         }

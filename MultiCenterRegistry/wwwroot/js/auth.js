@@ -92,3 +92,15 @@ window.mcrClearSelectedRole = async function (basePath) {
 
     return true;
 }
+
+window.mcrScrollToElement = function (elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        return;
+    }
+
+    element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+    });
+}

@@ -76,7 +76,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
         var hospitalName = await LoadHospitalNameAsync(dbContext, registryCase.HospitalId);
         var departmentName = await LoadDepartmentNameAsync(dbContext, registryCase.DepartmentId);
         var diseaseName = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case" && x.SourceFollowTemplateId == registryCase.DiseaseId && x.TemplateName != "基本信息")
+            .Where(x => x.BusinessType == "case" && x.SourceFollowTemplateId == registryCase.DiseaseId)
             .OrderBy(x => x.TemplateName)
             .Select(x => x.TemplateName)
             .FirstOrDefaultAsync();

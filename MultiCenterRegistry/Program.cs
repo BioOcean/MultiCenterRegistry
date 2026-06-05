@@ -212,7 +212,7 @@ try
         var departmentNames = await LoadDepartmentNamesAsync(dbContext, data.Select(x => x.DepartmentId));
         var userNames = await LoadUserNamesAsync(dbContext, data.Select(x => x.OperatorId));
         var diseaseNames = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case" && x.TemplateName != "基本信息")
+            .Where(x => x.BusinessType == "case")
             .GroupBy(x => x.SourceFollowTemplateId)
             .Select(x => new { DiseaseId = x.Key, Name = x.Min(item => item.TemplateName) })
             .ToDictionaryAsync(x => x.DiseaseId, x => x.Name);
@@ -580,7 +580,7 @@ try
         }
 
         var diseases = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case" && x.TemplateName != "基本信息")
+            .Where(x => x.BusinessType == "case")
             .OrderBy(x => x.TemplateName)
             .Select(x => new { x.SourceFollowTemplateId, x.TemplateName })
             .ToListAsync();

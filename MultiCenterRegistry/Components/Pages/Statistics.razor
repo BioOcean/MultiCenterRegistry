@@ -409,7 +409,7 @@
         }
 
         var diseaseNameRows = await _registryContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case" && x.TemplateName != "基本信息")
+            .Where(x => x.BusinessType == "case")
             .GroupBy(x => x.SourceFollowTemplateId)
             .Select(x => new { DiseaseId = x.Key, Name = x.Min(item => item.TemplateName) ?? "" })
             .ToListAsync();

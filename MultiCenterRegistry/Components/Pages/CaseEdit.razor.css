@@ -1,26 +1,195 @@
-﻿.form-panel {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(240px, 1fr));
-    gap: 14px;
-    padding: 18px;
+﻿.case-create-page-body {
+    padding: 18px 0 0;
 }
 
-.form-panel ::deep .mud-input-control {
+.case-create-page-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 0 0;
+}
+
+.case-create-form {
+    display: grid;
+    gap: 16px;
+}
+
+.case-create-section {
+    display: grid;
+    gap: 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.case-create-section-title {
+    color: var(--mcr-text);
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 22px;
+}
+
+.case-create-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 28px;
+}
+
+.case-create-span-2 {
+    grid-column: 1 / -1;
+}
+
+.case-create-field {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-content: start;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.case-create-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    min-height: 40px;
+    color: var(--mcr-primary);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.case-required {
+    color: var(--mcr-danger);
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.case-choice-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+}
+
+.case-choice-tag {
+    min-height: 32px;
+    padding: 0 13px;
+    border: 1px solid var(--mcr-border);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--mcr-text);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 30px;
+    cursor: pointer;
+    transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.case-choice-tag:hover {
+    border-color: var(--mcr-primary);
+    background: rgba(37, 99, 235, .06);
+}
+
+.case-choice-tag.selected {
+    border-color: var(--mcr-primary);
+    background: var(--mcr-primary);
+    color: #fff;
+    box-shadow: 0 6px 14px rgba(37, 99, 235, .18);
+}
+
+.case-choice-tag:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, .24);
+    outline-offset: 2px;
+}
+
+.case-create-form ::deep .mud-input-control {
     margin: 0;
 }
 
-.actions {
-    grid-column: 1 / -1;
-    min-height: 44px;
+.case-create-form ::deep .mud-input-control-input-container,
+.case-create-form ::deep .mud-input {
+    min-height: 40px;
 }
 
-.actions ::deep .mud-button-root {
-    min-width: 96px;
+.case-create-form ::deep .mud-input {
     height: 40px;
+    border-radius: 7px;
+}
+
+.case-create-form ::deep .mud-input-root,
+.case-create-form ::deep .mud-select-input,
+.case-create-form ::deep .mud-input-slot {
+    display: flex;
+    align-items: center;
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 38px;
+}
+
+.case-create-form ::deep .mud-input-adornment {
+    height: 40px;
+    margin-top: 0;
+}
+
+.case-create-form ::deep .mud-input-outlined-border {
+    border-color: var(--mcr-border);
+    border-radius: 7px;
+}
+
+.case-create-textarea-field {
+    align-items: start;
+}
+
+.case-create-textarea-field .case-create-label {
+    align-items: flex-start;
+    padding-top: 9px;
+}
+
+.case-create-textarea-field ::deep .mud-input-control-input-container,
+.case-create-textarea-field ::deep .mud-input {
+    height: auto;
+    min-height: 108px;
+}
+
+.case-create-textarea-field ::deep .mud-input-root,
+.case-create-textarea-field ::deep .mud-input-slot {
+    align-items: flex-start;
+    height: auto;
+    min-height: 106px;
+    padding-top: 9px !important;
+    padding-bottom: 9px !important;
+    line-height: 1.5;
+}
+
+.case-create-textarea-field ::deep textarea {
+    min-height: 86px;
+    max-height: 220px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.case-create-page-actions ::deep .mud-button-root {
+    min-width: 86px;
+    min-height: 40px;
+    border-radius: 7px;
 }
 
 @media (max-width: 900px) {
-    .form-panel {
+    .case-create-grid {
         grid-template-columns: 1fr;
+    }
+
+    .case-create-span-2 {
+        grid-column: auto;
     }
 }

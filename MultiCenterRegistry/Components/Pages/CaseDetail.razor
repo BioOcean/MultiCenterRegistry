@@ -3,17 +3,54 @@
 
 <PageTitle>@(_case == null ? "病例详情" : $"{_case.PatientName} - 病例详情")</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.False" Class="detail-page">
-    <div class="detail-header">
-        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToList">返回</MudButton>
-        <div>
-            <h1>@(_case?.PatientName ?? "病例详情")</h1>
-            <div class="page-subtitle">@(_case == null ? "" : $"{ShowValue(_case.PatientSex)} / {ShowValue(_case.PatientAge)}")</div>
+<div class="detail-page case-detail-page">
+    <div class="detail-header case-detail-header">
+        <div class="case-header-main">
+            <MudIconButton Class="case-back-button"
+                           Icon="@Icons.Material.Filled.ArrowBack"
+                           Color="Color.Primary"
+                           OnClick="BackToList"
+                           title="返回" />
+            <div class="case-patient-line">
+                <h1>@(_case?.PatientName ?? "病例详情")</h1>
+                @if (_case != null)
+                {
+                    <span class="case-patient-meta">@GetCaseSubtitle()</span>
+                    <span class="status-pill @GetStatusClass(_case.Status)">@GetStatusText(_case.Status)</span>
+                }
+            </div>
         </div>
-        <MudSpacer />
-        @if (_case != null)
+        @if (_case != null && CanShowCaseActions())
         {
-            <span class="status-pill">@GetStatusText(_case.Status)</span>
+            <div class="header-actions case-header-actions">
+                @if (HasPermission(PermissionConstants.CaseEdit))
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
+                        @(_isEditing ? "取消编辑" : "编辑表单")
+                    </MudButton>
+                }
+                @if (_isEditing && HasPermission(PermissionConstants.CaseEdit))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveFormsAsync">保存表单</MudButton>
+                }
+                @if ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" OnClick="SubmitCaseAsync">提交审核</MudButton>
+                }
+                @if (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="ApproveCaseAsync">审核通过</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => RejectCaseAsync(0))">审核不通过</MudButton>
+                }
+                @if (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Reply" OnClick="@(() => RejectCaseAsync(1))">质控退回</MudButton>
+                }
+                @if (HasPermission(PermissionConstants.CaseDelete))
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCaseAsync">删除病例</MudButton>
+                }
+            </div>
         }
     </div>
 
@@ -30,46 +67,6 @@
     }
     else
     {
-        <MudPaper Class="summary-panel" Elevation="0">
-            @foreach (var item in BuildSummaryItems())
-            {
-                <div class="summary-item">
-                    <div class="summary-label">@item.Label</div>
-                    <div class="summary-value">@ShowValue(item.Value)</div>
-                </div>
-            }
-        </MudPaper>
-
-        <MudPaper Class="action-panel" Elevation="0">
-            @if (HasPermission(PermissionConstants.CaseEdit))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
-                    @(_isEditing ? "取消编辑" : "编辑表单")
-                </MudButton>
-            }
-            @if (_isEditing && HasPermission(PermissionConstants.CaseEdit))
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveFormsAsync">保存表单</MudButton>
-            }
-            @if ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" OnClick="SubmitCaseAsync">提交审核</MudButton>
-            }
-            @if (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="ApproveCaseAsync">审核通过</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="@(() => RejectCaseAsync(0))">审核不通过</MudButton>
-            }
-            @if (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Reply" OnClick="@(() => RejectCaseAsync(1))">质控退回</MudButton>
-            }
-            @if (HasPermission(PermissionConstants.CaseDelete))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCaseAsync">删除病例</MudButton>
-            }
-        </MudPaper>
-
         @if (_advices.Count > 0)
         {
             <MudPaper Class="advice-panel" Elevation="0">
@@ -89,7 +86,7 @@
             </MudPaper>
         }
 
-        @if (_forms.Count == 0)
+        @if (_sections.Count == 0)
         {
             <MudPaper Class="loading-panel" Elevation="0">该病例暂无表单数据</MudPaper>
         }
@@ -97,80 +94,142 @@
         {
             <div class="form-layout">
                 <nav class="form-nav">
-                    @for (var i = 0; i < _forms.Count; i++)
+                    <div class="form-nav-title">表单目录</div>
+                    @foreach (var formSection in _sections)
                     {
-                        <a href="@($"#case-form-{i}")">@_forms[i].Name</a>
+                        <button type="button"
+                                class="form-nav-link"
+                                title="@formSection.Title"
+                                @onclick="@(() => ScrollToSectionAsync(formSection.AnchorId))">@formSection.Title</button>
                     }
                 </nav>
                 <div class="form-content">
-                    @for (var i = 0; i < _forms.Count; i++)
+                    @foreach (var formSection in _sections)
                     {
-                        var form = _forms[i];
-                        <MudPaper Class="form-panel" Elevation="0" id="@($"case-form-{i}")">
-                            <div class="form-title">
-                                <div>
-                                    <h2>@form.Name</h2>
-                                    <div class="page-subtitle">创建时间 @FormatDateTime(form.CreatedAt)</div>
-                                </div>
-                                <span>@form.Fields.Count 个字段</span>
-                            </div>
+                        var visibleFields = GetVisibleFields(formSection);
+                        <MudPaper Class="form-section" Elevation="0">
+                            <button type="button" id="@formSection.AnchorId" class="section-header" @onclick="@(() => ToggleSection(formSection))">
+                                <span>@formSection.Title</span>
+                                <span class="section-count">@visibleFields.Count 项</span>
+                                <MudIcon Icon="@(formSection.IsExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                            </button>
 
-                            <div class="field-grid">
-                                @foreach (var field in form.Fields)
-                                {
-                                    if (field.IsSection)
+                            @if (formSection.IsExpanded)
+                            {
+                                <div class="@GetSectionFieldsClass(formSection)">
+                                    @foreach (var field in visibleFields)
                                     {
-                                        <div class="section-title">@field.FieldName</div>
-                                    }
-                                    else
-                                    {
-                                        <div class="field-card">
-                                            <div class="field-name">@field.FieldName</div>
-                                            @if (_isEditing && !field.IsFile)
-                                            {
-                                                <MudTextField T="string"
-                                                              @bind-Value="field.EditValue"
-                                                              Variant="Variant.Outlined"
-                                                              Margin="Margin.Dense"
-                                                              Lines="3" />
-                                            }
-                                            else
-                                            {
-                                                <div class="field-value">@GetDisplayValue(field)</div>
-                                            }
-                                            @if (field.Files.Count > 0)
-                                            {
-                                                <div class="file-list">
-                                                    @foreach (var file in field.Files)
-                                                    {
-                                                        <div class="file-item">
-                                                            <span title="@file.FilePath">@file.FileName</span>
-                                                            <span class="muted">@FormatSize(file.FileSize)</span>
-                                                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
-                                                                           Size="Size.Small"
-                                                                           Color="Color.Primary"
-                                                                           Href="@GetFileUrl(file, false)"
-                                                                           Target="_blank" />
-                                                            <MudIconButton Icon="@Icons.Material.Filled.Download"
-                                                                           Size="Size.Small"
-                                                                           Color="Color.Primary"
-                                                                           Href="@GetFileUrl(file, true)"
-                                                                           Target="_blank" />
-                                                        </div>
-                                                    }
+                                        <div class="@GetQuestionClass(formSection, field)">
+                                            <label class="question-label">@field.FieldName</label>
+                                            <div class="question-control">
+                                                @if (field.IsFile)
+                                                {
+                                                    <div class="@GetFileFieldClass(field)">
+                                                        @if (field.Files.Count == 0)
+                                                        {
+                                                            <label class="@GetUploadButtonClass(field)">
+                                                                <MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />
+                                                                <span>上传图片</span>
+                                                                <InputFile class="file-input"
+                                                                           OnChange="@((InputFileChangeEventArgs args) => UploadFieldFileAsync(field, args))"
+                                                                           disabled="@IsFieldDisabled(field)" />
+                                                            </label>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="file-preview">
+                                                                @if (GetFirstPreviewImage(field) is { } image)
+                                                                {
+                                                                    <a href="@GetFileUrl(image, false)" target="_blank" title="@image.FileName">
+                                                                        <img src="@GetFileUrl(image, false)" alt="@image.FileName" />
+                                                                    </a>
+                                                                }
+                                                                else if (field.Files.FirstOrDefault() is { } file)
+                                                                {
+                                                                    <a class="file-preview-file" href="@GetFileUrl(file, false)" target="_blank" title="@file.FileName">
+                                                                        <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" />
+                                                                        <span>@file.FileName</span>
+                                                                    </a>
+                                                                }
+                                                            </div>
+
+                                                            <div class="file-meta">
+                                                                <textarea class="form-textarea file-remark"
+                                                                          @bind="field.EditValue"
+                                                                          disabled="@IsFieldDisabled(field)"
+                                                                          rows="3"
+                                                                          placeholder="备注"></textarea>
+                                                                <div class="file-toolbar">
+                                                                    <label class="@GetUploadButtonClass(field)">
+                                                                        <MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />
+                                                                        <span>重新上传</span>
+                                                                        <InputFile class="file-input"
+                                                                                   OnChange="@((InputFileChangeEventArgs args) => UploadFieldFileAsync(field, args))"
+                                                                                   disabled="@IsFieldDisabled(field)" />
+                                                                    </label>
+                                                                    <span class="muted">@GetFileSummary(field)</span>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                else if (IsSelectField(field))
+                                                {
+                                                    <select class="form-select"
+                                                            value="@GetSelectValue(field)"
+                                                            disabled="@IsFieldDisabled(field)"
+                                                            @onchange="@((ChangeEventArgs args) => SetFieldValue(field, args.Value?.ToString()))">
+                                                        <option value="">请选择</option>
+                                                        @foreach (var option in GetFieldOptions(field))
+                                                        {
+                                                            <option value="@option.Value">@option.Text</option>
+                                                        }
+                                                    </select>
+                                                }
+                                                else if (IsChoiceField(field))
+                                                {
+                                                    <div class="@GetChoiceTagsClass(field)">
+                                                        @foreach (var option in GetFieldOptions(field))
+                                                        {
+                                                            <button type="button"
+                                                                    class="@GetChoiceTagClass(field, option)"
+                                                                    disabled="@IsFieldDisabled(field)"
+                                                                    @onclick="@(() => SetChoiceValue(field, option.Value))">@option.Text</button>
+                                                        }
+                                                        @if (GetFieldOptions(field).Count == 0)
+                                                        {
+                                                            <span class="choice-tag disabled">未配置选项</span>
+                                                        }
+                                                    </div>
+                                                }
+                                                else if (IsLongTextField(field))
+                                                {
+                                                    <textarea class="form-textarea"
+                                                              @bind="field.EditValue"
+                                                              @bind:event="oninput"
+                                                              disabled="@IsFieldDisabled(field)"
+                                                              rows="@GetTextareaRows(field)"></textarea>
+                                                }
+                                                else
+                                                {
+                                                    <input class="form-input"
+                                                           type="@GetInputType(field)"
+                                                           value="@GetInputValue(field)"
+                                                           disabled="@IsFieldDisabled(field)"
+                                                           @onchange="@((ChangeEventArgs args) => field.EditValue = args.Value?.ToString())" />
+                                                }
                                                 </div>
-                                            }
-                                        </div>
+                                            </div>
                                     }
-                                }
-                            </div>
+                                </div>
+                            }
                         </MudPaper>
                     }
                 </div>
             </div>
         }
     }
-</MudContainer>
+</div>
 
 @code {
     [Parameter]
@@ -178,7 +237,8 @@
 
     private RegistryCase? _case;
     private readonly List<CaseAdvice> _advices = [];
-    private readonly List<FormBlock> _forms = [];
+    private readonly List<SectionBlock> _sections = [];
+    private readonly List<FieldOption> _operatorOptions = [];
     private bool _isLoading = true;
     private bool _isEditing;
 
@@ -199,7 +259,7 @@
         {
             _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
             _advices.Clear();
-            _forms.Clear();
+            _sections.Clear();
             if (_case == null)
             {
                 return;
@@ -255,6 +315,8 @@
                 .GroupBy(x => x.OwnerId)
                 .ToDictionary(x => x.Key, x => x.ToList());
 
+            await LoadOperatorOptionsAsync();
+
             foreach (var instance in instances)
             {
                 var formValues = values.Where(x => x.FormInstanceId == instance.Id).ToList();
@@ -275,13 +337,14 @@
                         definition?.ControlType,
                         definition?.Level ?? 2,
                         value.Sort,
+                        definition?.DefaultOptions,
                         fieldFiles ?? []);
                 }).ToList();
 
                 var name = templates.TryGetValue(instance.FormTemplateId, out var template)
                     ? template.FormName
                     : "病例表单";
-                _forms.Add(new FormBlock(name, instance.CreatedAt, fields));
+                AddSections(name, fields);
             }
         }
         finally
@@ -295,9 +358,11 @@
     private void ToggleEdit()
     {
         _isEditing = !_isEditing;
-        foreach (var field in _forms.SelectMany(x => x.Fields))
+        foreach (var field in _sections.SelectMany(x => x.Fields))
         {
-            field.EditValue = string.IsNullOrWhiteSpace(field.FieldText) ? field.FieldValue : field.FieldText;
+            field.EditValue = field.IsFile
+                ? GetFileRemark(field.FieldText, field.FieldValue)
+                : GetRawEditValue(field);
         }
     }
 
@@ -308,13 +373,17 @@
             return;
         }
 
-        var fields = _forms.SelectMany(x => x.Fields).Where(x => !x.IsFile).ToList();
+        var fields = _sections.SelectMany(x => x.Fields).ToList();
         var ids = fields.Select(x => x.Id).ToList();
         var values = await _registryContext.FormFieldValues.Where(x => ids.Contains(x.Id)).ToListAsync();
         foreach (var value in values)
         {
             var field = fields.First(x => x.Id == value.Id);
-            value.FieldValue = field.EditValue;
+            if (!field.IsFile)
+            {
+                value.FieldValue = field.EditValue;
+            }
+
             value.FieldText = field.EditValue;
             value.UpdatedAt = DateTime.Now;
             value.UpdatedBy = CurrentUserId;
@@ -568,30 +637,480 @@
         await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
     }
 
-    private IEnumerable<SummaryItem> BuildSummaryItems()
+    private void AddSections(string fallbackName, List<FieldItem> fields)
     {
-        if (_case == null)
+        SectionBlock? current = null;
+        foreach (var field in fields.OrderBy(x => x.Sort))
         {
-            yield break;
-        }
+            if (field.IsSection)
+            {
+                current = new SectionBlock(field.FieldName, $"case-section-{_sections.Count}");
+                _sections.Add(current);
+                continue;
+            }
 
-        yield return new("病案号", _case.PatientNumber);
-        yield return new("身份证号", _case.IdNumber);
-        yield return new("入院时间", FormatDate(_case.AdmissionTime));
-        yield return new("出院时间", FormatDate(_case.DischargeTime));
-        yield return new("手术时间", FormatDate(_case.OperationTime));
-        yield return new("创建时间", FormatDateTime(_case.CreatedAt));
+            if (current == null)
+            {
+                current = new SectionBlock(fallbackName, $"case-section-{_sections.Count}");
+                _sections.Add(current);
+            }
+
+            current.Fields.Add(field);
+        }
     }
 
-    private static string GetDisplayValue(FieldItem field)
+    private static void ToggleSection(SectionBlock section) => section.IsExpanded = !section.IsExpanded;
+
+    private async Task ScrollToSectionAsync(string anchorId)
+        => await inj_jsRuntime.InvokeVoidAsync("mcrScrollToElement", anchorId);
+
+    private async Task LoadOperatorOptionsAsync()
     {
-        if (field.ControlType == 7)
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _operatorOptions.Clear();
+        var users = await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => x.IsValid)
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.Account)
+            .Select(x => new { x.Id, x.DisplayName, x.Account })
+            .ToListAsync();
+
+        _operatorOptions.AddRange(users.Select(x =>
+            new FieldOption(x.Id.ToString().ToUpperInvariant(), string.IsNullOrWhiteSpace(x.DisplayName) ? x.Account : x.DisplayName)));
+    }
+
+    private string GetDisplayValue(FieldItem field)
+    {
+        if (field.IsFile)
         {
             return field.Files.Count == 0 ? "-" : $"{field.Files.Count} 个附件";
         }
 
+        if (field.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase))
+        {
+            var rawValue = GetRawEditValue(field);
+            var option = _operatorOptions.FirstOrDefault(x => IsSameOptionValue(rawValue, x.Value));
+            if (option != null)
+            {
+                return option.Text;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_case?.OperatorName))
+            {
+                return _case.OperatorName;
+            }
+        }
+
         var value = FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue);
         return ShowValue(value);
+    }
+
+    private List<FieldItem> GetVisibleFields(SectionBlock section)
+        => section.Fields.Where(field => IsVisibleField(section, field)).ToList();
+
+    private string GetSectionFieldsClass(SectionBlock section)
+        => IsBasicSection(section) ? "section-fields basic-info-fields" : "section-fields";
+
+    private string GetQuestionClass(SectionBlock section, FieldItem field)
+        => IsFullRowQuestion(section, field) ? "question-row full-row" : "question-row";
+
+    private static bool IsBasicSection(SectionBlock section)
+        => section.Title.Contains("患者基本信息", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFullRowQuestion(SectionBlock section, FieldItem field)
+    {
+        if (!IsBasicSection(section))
+        {
+            return true;
+        }
+
+        return field.IsFile
+               || IsLongTextField(field)
+               || field.FieldName.Contains("住院天数", StringComparison.OrdinalIgnoreCase)
+               || field.FieldName.Contains("手术类型", StringComparison.OrdinalIgnoreCase)
+               || field.FieldName.Contains("手术类别", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsFieldDisabled(FieldItem field)
+        => !_isEditing || !HasPermission(PermissionConstants.CaseEdit);
+
+    private static bool IsChoiceField(FieldItem field)
+        => field.ControlType is 2 or 3;
+
+    private static bool IsSelectField(FieldItem field)
+        => IsChoiceField(field)
+           && (field.FieldName.Equals("性别", StringComparison.OrdinalIgnoreCase)
+               || field.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase)
+               || field.FieldName.Equals("情况说明/原因说明", StringComparison.OrdinalIgnoreCase)
+               || field.FieldName.Equals("情况/原因说明", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsLongTextField(FieldItem field)
+        => field.ControlType == 10;
+
+    private static bool IsDateField(FieldItem field)
+        => field.ControlType == 4
+           || field.FieldName.Contains("时间", StringComparison.OrdinalIgnoreCase)
+           || field.FieldName.Contains("日期", StringComparison.OrdinalIgnoreCase);
+
+    private string GetInputValue(FieldItem field)
+    {
+        if (IsDateField(field))
+        {
+            return NormalizeDateValue(_isEditing ? field.EditValue : GetRawEditValue(field));
+        }
+
+        return _isEditing ? field.EditValue ?? "" : GetDisplayValue(field);
+    }
+
+    private static string GetInputType(FieldItem field)
+        => IsDateField(field) ? "date" : "text";
+
+    private int GetTextareaRows(FieldItem field)
+    {
+        var value = GetInputValue(field);
+        return Math.Clamp((value.Length / 90) + 3, 3, 10);
+    }
+
+    private string GetChoiceTagsClass(FieldItem field)
+        => IsFieldDisabled(field) ? "choice-tags disabled" : "choice-tags";
+
+    private string GetChoiceTagClass(FieldItem field, FieldOption option)
+    {
+        var classes = new List<string> { "choice-tag" };
+        classes.Add(IsOptionSelected(field, option) ? "selected" : "unselected");
+        if (IsFieldDisabled(field))
+        {
+            classes.Add("disabled");
+        }
+
+        return string.Join(" ", classes);
+    }
+
+    private IReadOnlyList<FieldOption> GetFieldOptions(FieldItem field)
+    {
+        var name = field.FieldName.Trim();
+        if (name.Equals("术者", StringComparison.OrdinalIgnoreCase))
+        {
+            var options = _operatorOptions.ToList();
+            var rawValue = GetRawEditValue(field);
+            if (!string.IsNullOrWhiteSpace(rawValue) && options.All(x => !IsSameOptionValue(x.Value, rawValue)))
+            {
+                options.Add(new FieldOption(rawValue, string.IsNullOrWhiteSpace(_case?.OperatorName) ? rawValue : _case.OperatorName));
+            }
+
+            return options;
+        }
+
+        if (name.Equals("性别", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "男"), new("2", "女")];
+        }
+
+        if (name.Equals("手术类型", StringComparison.OrdinalIgnoreCase) || name.Equals("手术类别", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+            [
+                new("6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入"),
+                new("C1174C60-2EF2-45F6-85DD-5269B567F996", "结构性心脏病介入"),
+                new("F827AE4A-F24F-4DF9-B92F-7601025A1864", "起搏器及CIED植入/置换"),
+                new("AE92E4FA-5E02-4D4C-A773-3DC79C4935BC", "导管消融")
+            ];
+        }
+
+        if (name.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "急诊PCI"), new("2", "择期PCI"), new("3", "单纯CAG")];
+        }
+
+        if (name.Equals("情况说明/原因说明", StringComparison.OrdinalIgnoreCase) || name.Equals("情况/原因说明", StringComparison.OrdinalIgnoreCase))
+        {
+            return [new("1", "非心内科患者"), new("2", "患者自行离院"), new("3", "首页填写错误"), new("4", "其他")];
+        }
+
+        if (name.StartsWith("是否", StringComparison.OrdinalIgnoreCase) || field.DefaultOptions == "11")
+        {
+            return [new("1", "是"), new("2", "否")];
+        }
+
+        var optionCount = field.DefaultOptions?.Count(x => x == '1') ?? 0;
+        return optionCount == 0
+            ? []
+            : Enumerable.Range(1, optionCount).Select(x => new FieldOption(x.ToString(), $"选项 {x}")).ToList();
+    }
+
+    private string GetSelectValue(FieldItem field)
+        => NormalizeOptionValue(GetRawEditValue(field));
+
+    private void SetFieldValue(FieldItem field, string? value)
+        => field.EditValue = value;
+
+    private void SetChoiceValue(FieldItem field, string value)
+    {
+        if (IsFieldDisabled(field))
+        {
+            return;
+        }
+
+        if (field.ControlType != 3)
+        {
+            field.EditValue = value;
+            return;
+        }
+
+        var values = SplitChoiceValues(field.EditValue).ToList();
+        var existed = values.Any(x => IsSameOptionValue(x, value));
+        values = existed
+            ? values.Where(x => !IsSameOptionValue(x, value)).ToList()
+            : [.. values, value];
+        field.EditValue = values.Count == 0 ? null : string.Join(",", values);
+    }
+
+    private bool IsOptionSelected(FieldItem field, FieldOption option)
+    {
+        var values = SplitChoiceValues(GetRawEditValue(field)).ToList();
+        if (values.Count == 0)
+        {
+            return false;
+        }
+
+        return values.Any(x =>
+            IsSameOptionValue(x, option.Value)
+            || IsSameOptionValue(x, option.Text)
+            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), option.Text));
+    }
+
+    private bool IsVisibleField(SectionBlock section, FieldItem field)
+    {
+        if (IsComplicationFollowupField(section, field))
+        {
+            return IsFieldSelected("是否组织医院或科室并发症讨论", "1", "是");
+        }
+
+        if (field.FieldName.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsFieldSelected("手术类型", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入")
+                   || IsFieldSelected("手术类别", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入");
+        }
+
+        if (field.FieldName.Equals("死亡时间", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsFieldSelected("离院方式", "死亡", "死亡");
+        }
+
+        if (field.FieldName.Equals("补充说明", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsFieldSelected("情况说明/原因说明", "4", "其他") || IsFieldSelected("情况/原因说明", "4", "其他");
+        }
+
+        return true;
+    }
+
+    private static bool IsComplicationFollowupField(SectionBlock section, FieldItem field)
+    {
+        if (!section.Title.Contains("并发症讨论", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var controller = section.Fields.FirstOrDefault(x => x.FieldName.Equals("是否组织医院或科室并发症讨论", StringComparison.OrdinalIgnoreCase));
+        return controller != null && field.Sort > controller.Sort;
+    }
+
+    private bool IsFieldSelected(string fieldName, string rawValue, string displayValue)
+    {
+        var field = _sections.SelectMany(x => x.Fields)
+            .LastOrDefault(x => x.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
+        if (field == null)
+        {
+            return false;
+        }
+
+        return SplitChoiceValues(GetRawEditValue(field)).Any(x =>
+            IsSameOptionValue(x, rawValue)
+            || IsSameOptionValue(x, displayValue)
+            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), displayValue));
+    }
+
+    private static string GetRawEditValue(FieldItem field)
+        => field.EditValue?.Trim()
+           ?? field.FieldValue?.Trim()
+           ?? field.FieldText?.Trim()
+           ?? "";
+
+    private static IEnumerable<string> SplitChoiceValues(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(['、', ',', '，', ';', '；', '|', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool IsSameOptionValue(string? left, string? right)
+        => NormalizeOptionValue(left).Equals(NormalizeOptionValue(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeOptionValue(string? value)
+        => value?.Trim().Trim('{', '}').ToUpperInvariant() ?? "";
+
+    private static string NormalizeDateValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var text = value.Trim();
+        if (DateTime.TryParse(text, out var date))
+        {
+            return date.ToString("yyyy-MM-dd");
+        }
+
+        return text.Length >= 10 ? text[..10] : text;
+    }
+
+    private static RegistryFile? GetFirstPreviewImage(FieldItem field)
+        => field.Files.FirstOrDefault(IsImageFile);
+
+    private static bool IsImageFile(RegistryFile file)
+    {
+        if (!string.IsNullOrWhiteSpace(file.ContentType) && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var extension = System.IO.Path.GetExtension(file.FileName);
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetFileSummary(FieldItem field)
+        => field.Files.Count == 0 ? "暂无附件" : $"{field.Files.Count} 个附件";
+
+    private static string GetFileFieldClass(FieldItem field)
+        => field.Files.Count == 0 ? "file-field empty" : "file-field has-file";
+
+    private string GetUploadButtonClass(FieldItem field)
+        => IsFieldDisabled(field) ? "file-upload-button disabled" : "file-upload-button";
+
+    private async Task UploadFieldFileAsync(FieldItem field, InputFileChangeEventArgs args)
+    {
+        if (_registryContext == null || IsFieldDisabled(field) || !await RequirePermissionAsync(PermissionConstants.CaseEdit))
+        {
+            return;
+        }
+
+        var uploadRoot = inj_configuration["FileStorage:UploadRoot"];
+        if (string.IsNullOrWhiteSpace(uploadRoot))
+        {
+            inj_snackbar.Add("未配置文件存储目录", Severity.Error);
+            return;
+        }
+
+        const long maxFileSize = 50 * 1024 * 1024;
+        var dateFolder = DateTime.Now.ToString("yyyyMMdd");
+        var rootPath = ResolveStorageRoot(uploadRoot);
+        var targetFolder = System.IO.Path.Combine(rootPath, dateFolder);
+        System.IO.Directory.CreateDirectory(targetFolder);
+
+        var uploaded = 0;
+        foreach (var browserFile in args.GetMultipleFiles(10))
+        {
+            var extension = System.IO.Path.GetExtension(browserFile.Name);
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                extension = ".bin";
+            }
+
+            var storedName = $"{Guid.NewGuid():N}{extension}";
+            var fullPath = System.IO.Path.Combine(targetFolder, storedName);
+            await using (var readStream = browserFile.OpenReadStream(maxFileSize))
+            await using (var writeStream = System.IO.File.Create(fullPath))
+            {
+                await readStream.CopyToAsync(writeStream);
+            }
+
+            var entity = new RegistryFile
+            {
+                OwnerType = "form_field_value",
+                OwnerId = field.Id,
+                FileName = SanitizeFileName(browserFile.Name),
+                FilePath = $"upload/{dateFolder}/{storedName}",
+                ContentType = browserFile.ContentType,
+                FileSize = browserFile.Size,
+                CreatedAt = DateTime.Now,
+                CreatedBy = CurrentUserId
+            };
+            _registryContext.Files.Add(entity);
+            field.Files.Add(entity);
+            uploaded++;
+        }
+
+        if (uploaded == 0)
+        {
+            return;
+        }
+
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "上传附件", "case", CaseId, field.FieldName));
+        await _registryContext.SaveChangesAsync();
+        inj_snackbar.Add("附件已上传", Severity.Success);
+    }
+
+    private static string ResolveStorageRoot(string root)
+        => System.IO.Path.GetFullPath(System.IO.Path.IsPathRooted(root)
+            ? root
+            : System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), root));
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+        var chars = fileName.Select(x => invalidChars.Contains(x) ? '_' : x).ToArray();
+        return new string(chars);
+    }
+
+    private static string GetFileRemark(string? fieldText, string? fieldValue)
+    {
+        if (!string.IsNullOrWhiteSpace(fieldText))
+        {
+            return fieldText.Trim();
+        }
+
+        var descriptions = ExtractUploadDescriptions(fieldValue).ToList();
+        return descriptions.Count == 0 ? "" : string.Join("；", descriptions);
+    }
+
+    private static IEnumerable<string> ExtractUploadDescriptions(string? fieldValue)
+    {
+        if (string.IsNullOrWhiteSpace(fieldValue))
+        {
+            yield break;
+        }
+
+        var items = fieldValue.Split("&!&", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var item in items)
+        {
+            string? description = null;
+            try
+            {
+                using var document = JsonDocument.Parse(item);
+                if (document.RootElement.TryGetProperty("describe", out var describeElement))
+                {
+                    description = describeElement.GetString();
+                }
+            }
+            catch (JsonException)
+            {
+                description = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                yield return description.Trim();
+            }
+        }
     }
 
     private static string NormalizeFieldValue(string fieldName, string? fieldText, string? fieldValue)
@@ -600,35 +1119,33 @@
     private static string GetRawFieldValue(string? fieldText, string? fieldValue)
         => string.IsNullOrWhiteSpace(fieldText) ? fieldValue?.Trim() ?? "" : fieldText.Trim();
 
+    private bool CanShowCaseActions()
+        => _case != null
+            && (HasPermission(PermissionConstants.CaseEdit)
+                || ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
+                || (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
+                || (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
+                || HasPermission(PermissionConstants.CaseDelete));
+
+    private string GetCaseSubtitle()
+    {
+        if (_case == null)
+        {
+            return "";
+        }
+
+        return $"{ShowSex(_case.PatientSexText ?? _case.PatientSex)} / {ShowValue(_case.PatientAge)}";
+    }
+
     private static string GetFileUrl(RegistryFile file, bool download)
         => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
 
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
-    private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+    private static string ShowSex(string? value)
+        => ShowValue(FormValueDisplayMapper.Normalize("性别", value));
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
-
-    private static string FormatSize(long? size)
-    {
-        if (!size.HasValue || size.Value <= 0)
-        {
-            return "-";
-        }
-
-        var value = size.Value;
-        if (value < 1024)
-        {
-            return $"{value} B";
-        }
-
-        if (value < 1024 * 1024)
-        {
-            return $"{value / 1024d:0.#} KB";
-        }
-
-        return $"{value / 1024d / 1024d:0.#} MB";
-    }
 
     private static string GetStatusText(int status)
         => status switch
@@ -641,6 +1158,17 @@
             _ => $"状态 {status}"
         };
 
+    private static string GetStatusClass(int status)
+        => status switch
+        {
+            0 => "status-review",
+            1 => "status-returned",
+            2 => "status-submitted",
+            3 => "status-draft",
+            4 => "status-failed",
+            _ => "status-unknown"
+        };
+
     private static string GetAdviceTypeText(int type)
         => type switch
         {
@@ -649,9 +1177,13 @@
             _ => "其他意见"
         };
 
-    private sealed record SummaryItem(string Label, string? Value);
-
-    private sealed record FormBlock(string Name, DateTime CreatedAt, List<FieldItem> Fields);
+    private sealed class SectionBlock(string title, string anchorId)
+    {
+        public string Title { get; } = title;
+        public string AnchorId { get; } = anchorId;
+        public List<FieldItem> Fields { get; } = [];
+        public bool IsExpanded { get; set; } = true;
+    }
 
     private sealed class FieldItem(
         Guid id,
@@ -661,18 +1193,24 @@
         int? controlType,
         int level,
         int sort,
+        string? defaultOptions,
         List<RegistryFile> files)
     {
         public Guid Id { get; } = id;
         public string FieldName { get; } = fieldName;
         public string? FieldValue { get; set; } = fieldValue;
         public string? FieldText { get; set; } = fieldText;
-        public string? EditValue { get; set; } = string.IsNullOrWhiteSpace(fieldText) ? fieldValue : fieldText;
+        public string? EditValue { get; set; } = controlType == 7
+            ? GetFileRemark(fieldText, fieldValue)
+            : string.IsNullOrWhiteSpace(fieldValue) ? fieldText : fieldValue;
         public int? ControlType { get; } = controlType;
         public int Level { get; } = level;
         public int Sort { get; } = sort;
+        public string? DefaultOptions { get; } = defaultOptions;
         public List<RegistryFile> Files { get; } = files;
         public bool IsSection => Level <= 1;
         public bool IsFile => ControlType == 7;
     }
+
+    private sealed record FieldOption(string Value, string Text);
 }

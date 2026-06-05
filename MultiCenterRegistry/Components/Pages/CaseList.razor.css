@@ -312,8 +312,7 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgba(17, 32, 51, .34);
-    backdrop-filter: blur(8px);
+    background: rgba(15, 23, 42, .36);
 }
 
 .case-edit-dialog,
@@ -326,9 +325,7 @@
     overflow: hidden;
     border: 1px solid var(--mcr-border);
     border-radius: 8px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(244, 251, 255, .90)),
-        linear-gradient(135deg, rgba(37, 99, 235, .06), rgba(20, 184, 166, .05));
+    background: var(--mcr-surface);
     box-shadow: var(--mcr-shadow);
 }
 
@@ -351,7 +348,8 @@
     background-image: none;
 }
 
-.case-dialog-head {
+.case-dialog-head,
+.case-edit-dialog ::deep .case-dialog-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -361,14 +359,22 @@
     border-bottom: 1px solid rgba(76, 135, 170, .16);
 }
 
-.case-dialog-title {
+.case-dialog-title,
+.case-edit-dialog ::deep .case-dialog-title {
     display: flex;
     align-items: center;
     gap: 12px;
     min-width: 0;
+    color: var(--mcr-text);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.2;
 }
 
-.case-dialog-title h2 {
+.case-dialog-title h2,
+.case-dialog-title > span:not(.case-dialog-icon),
+.case-edit-dialog ::deep .case-dialog-title h2,
+.case-edit-dialog ::deep .case-dialog-title > span:not(.case-dialog-icon) {
     margin: 0;
     color: var(--mcr-text);
     font-size: 18px;
@@ -376,18 +382,12 @@
     line-height: 1.2;
 }
 
-.case-dialog-title p {
-    margin: 5px 0 0;
-    color: var(--mcr-muted);
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 1.45;
-}
-
-.case-dialog-icon {
+.case-dialog-icon,
+.case-edit-dialog ::deep .case-dialog-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex: 0 0 auto;
     width: 36px;
     height: 36px;
     color: #ffffff;
@@ -396,33 +396,39 @@
     box-shadow: 0 10px 20px rgba(37, 99, 235, .18);
 }
 
-.case-dialog-icon ::deep svg {
+.case-dialog-icon ::deep svg,
+.case-edit-dialog ::deep .case-dialog-icon svg {
     width: 20px;
     height: 20px;
     color: #ffffff !important;
 }
 
-.case-dialog-close {
+.case-dialog-close,
+.case-edit-dialog ::deep .case-dialog-close {
+    flex: 0 0 auto;
     border: 1px solid rgba(76, 135, 170, .16);
     background: rgba(255, 255, 255, .62);
 }
 
-.case-dialog-body {
+.case-dialog-body,
+.case-edit-dialog ::deep .case-dialog-body {
     overflow: auto;
-    padding: 18px 20px 16px;
+    padding: 20px;
 }
 
-.case-dialog-actions {
+.case-dialog-actions,
+.case-edit-dialog ::deep .case-dialog-actions {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
     padding: 14px 20px 18px;
     border-top: 1px solid rgba(76, 135, 170, .14);
-    background: rgba(255, 255, 255, .50);
+    background: var(--mcr-surface);
 }
 
-.case-dialog-actions ::deep .mud-button-root {
+.case-dialog-actions ::deep .mud-button-root,
+.case-edit-dialog ::deep .case-dialog-actions .mud-button-root {
     min-width: 86px;
     min-height: 40px;
     border-radius: 7px;
@@ -547,7 +553,10 @@
 
     .case-dialog-head,
     .case-dialog-body,
-    .case-dialog-actions {
+    .case-dialog-actions,
+    .case-edit-dialog ::deep .case-dialog-head,
+    .case-edit-dialog ::deep .case-dialog-body,
+    .case-edit-dialog ::deep .case-dialog-actions {
         padding-inline: 16px;
     }
 

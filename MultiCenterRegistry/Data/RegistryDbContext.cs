@@ -89,6 +89,10 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
         modelBuilder.Entity<RegistryFormInstance>().HasIndex(x => x.SourceCardId);
         modelBuilder.Entity<RegistryFormFieldValue>().HasIndex(x => new { x.FormInstanceId, x.StorageKey });
         modelBuilder.Entity<RegistryFormFieldValue>().HasIndex(x => x.SourceAnswerId).IsUnique().HasFilter("source_answer_id is not null");
+        modelBuilder.Entity<RegistryFormFieldValue>()
+            .HasOne<RegistryFormInstance>()
+            .WithMany()
+            .HasForeignKey(x => x.FormInstanceId);
         modelBuilder.Entity<RegistryArticle>().HasIndex(x => x.OldArticleId).IsUnique().HasFilter("old_article_id is not null");
         modelBuilder.Entity<RegistryArticle>().HasIndex(x => new { x.Type, x.Status, x.CreatedAt });
 
