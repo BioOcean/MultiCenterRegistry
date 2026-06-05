@@ -48,8 +48,21 @@
                       AdornmentIcon="@Icons.Material.Filled.Search"
                       Immediate="true"
                       OnKeyDown="OnSearchKeyDown" />
-        <MudTextField T="string" @bind-Value="_meetingStart" Label="讨论开始时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
-        <MudTextField T="string" @bind-Value="_meetingEnd" Label="讨论结束时间" Placeholder="yyyy-MM-dd HH:mm" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
+        <div class="meeting-date-range">
+            <MudDatePicker @bind-Date="_meetingStartDate"
+                           Label="讨论开始时间"
+                           Placeholder="开始日期"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+            <span class="meeting-date-separator">-</span>
+            <MudDatePicker @bind-Date="_meetingEndDate"
+                           Label="讨论结束时间"
+                           Placeholder="结束日期"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </div>
         <MudTextField T="string" @bind-Value="_place" Label="讨论地点" Placeholder="请输入" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyDown="OnSearchKeyDown" />
         <div class="meeting-filter-actions">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
@@ -151,8 +164,8 @@
     private readonly List<MeetingListItem> _meetings = [];
     private string _title = "";
     private string _place = "";
-    private string _meetingStart = "";
-    private string _meetingEnd = "";
+    private DateTime? _meetingStartDate;
+    private DateTime? _meetingEndDate;
     private string _meetingTab = PendingMeetingTab;
     private int _pageIndex;
     private int _totalCount;
@@ -175,8 +188,8 @@
     {
         _title = "";
         _place = "";
-        _meetingStart = "";
-        _meetingEnd = "";
+        _meetingStartDate = null;
+        _meetingEndDate = null;
         _pageIndex = 0;
         await LoadMeetingsAsync();
     }
@@ -243,26 +256,22 @@
                 query = query.Where(x => x.Place != null && EF.Functions.ILike(x.Place, pattern));
             }
 
-            if (!string.IsNullOrWhiteSpace(_meetingStart))
+            if (_meetingStartDate.HasValue && _meetingEndDate.HasValue && _meetingStartDate.Value.Date > _meetingEndDate.Value.Date)
             {
-                if (!DateTime.TryParse(_meetingStart, out var start))
-                {
-                    inj_snackbar.Add("讨论开始时间格式不正确", Severity.Warning);
-                    return;
-                }
+                inj_snackbar.Add("讨论开始时间不能晚于结束时间", Severity.Warning);
+                return;
+            }
 
+            if (_meetingStartDate.HasValue)
+            {
+                var start = _meetingStartDate.Value.Date;
                 query = query.Where(x => x.MeetingTime >= start);
             }
 
-            if (!string.IsNullOrWhiteSpace(_meetingEnd))
+            if (_meetingEndDate.HasValue)
             {
-                if (!DateTime.TryParse(_meetingEnd, out var end))
-                {
-                    inj_snackbar.Add("讨论结束时间格式不正确", Severity.Warning);
-                    return;
-                }
-
-                query = query.Where(x => x.MeetingTime <= end);
+                var end = _meetingEndDate.Value.Date.AddDays(1);
+                query = query.Where(x => x.MeetingTime < end);
             }
 
             query = _meetingTab == EndedMeetingTab

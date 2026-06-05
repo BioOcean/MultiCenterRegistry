@@ -11,8 +11,13 @@ public sealed class RegistryCase
     public string? PatientNumber { get; set; }
     public string? DiseaseId { get; set; }
     public string? HospitalId { get; set; }
+    public string? HospitalName { get; set; }
     public string? DepartmentId { get; set; }
     public string? OperatorId { get; set; }
+    public string? OperatorName { get; set; }
+    public string? PatientSexText { get; set; }
+    public string? SurgeryTypeValue { get; set; }
+    public string? SurgeryTypeText { get; set; }
     public DateTime? AdmissionTime { get; set; }
     public DateTime? DischargeTime { get; set; }
     public DateTime? OperationTime { get; set; }

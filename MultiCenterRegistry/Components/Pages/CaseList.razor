@@ -35,6 +35,41 @@
         </div>
     }
 
+    @if (_showOperatorModal)
+    {
+        <div class="case-dialog-mask" role="presentation">
+            <section class="case-operator-dialog" role="dialog" aria-modal="true" aria-labelledby="case-operator-modal-title">
+                <div class="case-dialog-head">
+                    <div class="case-dialog-title">
+                        <span class="case-dialog-icon">
+                            <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" />
+                        </span>
+                        <div>
+                            <h2 id="case-operator-modal-title">替换术者</h2>
+                            <p>将已选择的 @SelectionCount 条病例术者替换为指定账号。</p>
+                        </div>
+                    </div>
+                    <MudIconButton Class="case-dialog-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Default" title="关闭" OnClick="CloseOperatorModal" />
+                </div>
+
+                <div class="case-dialog-body">
+                    <MudSelect T="string" @bind-Value="_targetOperatorId" Label="术者" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem T="string" Value="@("")">请选择术者</MudSelectItem>
+                        @foreach (var item in _operatorOptions)
+                        {
+                            <MudSelectItem T="string" Value="@item.Value">@item.Text</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+
+                <div class="case-dialog-actions">
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="CloseOperatorModal" Disabled="@_isChangingOperator">取消</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="ChangeOperatorAsync" Disabled="@(_isChangingOperator || string.IsNullOrWhiteSpace(_targetOperatorId))">确认替换</MudButton>
+                </div>
+            </section>
+        </div>
+    }
+
     @if (_showImportModal)
     {
         <div class="case-dialog-mask" role="presentation">
@@ -81,20 +116,18 @@
     @if (_showExportPanel)
     {
         <MudPaper Class="export-panel case-export-panel" Elevation="0">
-            <MudTextField T="string"
-                          @bind-Value="_exportStartDate"
-                          Label="开始时间"
-                          Placeholder="yyyy-MM-dd"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Immediate="true" />
-            <MudTextField T="string"
-                          @bind-Value="_exportEndDate"
-                          Label="结束时间"
-                          Placeholder="yyyy-MM-dd"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Immediate="true" />
+            <MudDatePicker @bind-Date="_exportStartDate"
+                           Label="开始时间"
+                           Placeholder="开始时间"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+            <MudDatePicker @bind-Date="_exportEndDate"
+                           Label="结束时间"
+                           Placeholder="结束时间"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
             @if (HasPermission(PermissionConstants.QualityManage))
             {
                 <MudSelect T="string" @bind-Value="_exportHospitalId" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
@@ -144,22 +177,21 @@
                       Margin="Margin.Dense"
                       Immediate="true"
                       OnKeyDown="OnSearchKeyDown" />
-        <MudTextField T="string"
-                      @bind-Value="_dischargeStartValue"
-                      Label="出院开始"
-                      Placeholder="yyyy-MM-dd"
-                      Variant="Variant.Outlined"
-                      Margin="Margin.Dense"
-                      Immediate="true"
-                      OnKeyDown="OnSearchKeyDown" />
-        <MudTextField T="string"
-                      @bind-Value="_dischargeEndValue"
-                      Label="出院结束"
-                      Placeholder="yyyy-MM-dd"
-                      Variant="Variant.Outlined"
-                      Margin="Margin.Dense"
-                      Immediate="true"
-                      OnKeyDown="OnSearchKeyDown" />
+        <div class="case-date-range">
+            <MudDatePicker @bind-Date="_dischargeStartDate"
+                           Label="出院开始"
+                           Placeholder="开始日期"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+            <span class="case-date-separator">-</span>
+            <MudDatePicker @bind-Date="_dischargeEndDate"
+                           Label="出院结束"
+                           Placeholder="结束日期"
+                           DateFormat="yyyy-MM-dd"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </div>
         <MudSelect T="string" @bind-Value="_surgeryTypeValue" Label="手术类别" Variant="Variant.Outlined" Margin="Margin.Dense">
             <MudSelectItem T="string" Value="@("")">全部</MudSelectItem>
             @foreach (var item in _surgeryTypeOptions)
@@ -204,6 +236,10 @@
             <div class="table-wrap">
                 <table class="case-table">
                     <colgroup>
+                        @if (_isBatchOperatorMode)
+                        {
+                            <col class="case-select-col" />
+                        }
                         <col class="case-hospital-col" />
                         <col class="case-status-col" />
                         <col class="case-created-col" />
@@ -217,23 +253,36 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th>所属医院</th>
-                            <th>状态</th>
-                            <th>创建时间</th>
-                            <th>病案号</th>
-                            <th>患者姓名</th>
-                            <th>性别</th>
-                            <th>出院时间</th>
-                            <th>术者</th>
-                            <th>手术类别</th>
+                            @if (_isBatchOperatorMode)
+                            {
+                                <th class="selection-cell">
+                                    <input class="case-check" type="checkbox" checked="@IsCurrentPageSelected" @onchange="ToggleCurrentPageSelection" title="选择全部可替换病例" />
+                                </th>
+                            }
+                            <th>@SortHeader("hospital", "所属医院")</th>
+                            <th>@SortHeader("status", "状态")</th>
+                            <th>@SortHeader("createdAt", "创建时间")</th>
+                            <th>@SortHeader("patientNumber", "病案号")</th>
+                            <th>@SortHeader("patientName", "患者姓名")</th>
+                            <th>@SortHeader("sex", "性别")</th>
+                            <th>@SortHeader("dischargeTime", "出院时间")</th>
+                            <th>@SortHeader("operator", "术者")</th>
+                            <th>@SortHeader("surgeryType", "手术类别")</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var item in _cases)
                         {
-                            var surgeryTypeText = ShowValue(GetFieldValue(item, "手术类别"));
+                            var surgeryTypeText = ShowValue(item.SurgeryTypeText);
+                            var sexText = ShowSex(item.PatientSexText ?? item.PatientSex);
                             <tr>
+                                @if (_isBatchOperatorMode)
+                                {
+                                    <td class="selection-cell">
+                                        <input class="case-check" type="checkbox" checked="@IsCaseSelected(item)" disabled="@(!CanSelectForOperator(item))" @onchange="@((ChangeEventArgs args) => ToggleCaseSelection(item, args))" title="选择病例" />
+                                    </td>
+                                }
                                 <td><span class="case-cell-text" title="@ShowValue(item.HospitalName)">@ShowValue(item.HospitalName)</span></td>
                                 <td>
                                     <span class="status-pill @GetStatusClass(item.Status)">@GetStatusText(item.Status)</span>
@@ -241,7 +290,7 @@
                                 <td>@FormatDate(item.CreatedAt)</td>
                                 <td><span class="case-cell-text" title="@ShowValue(item.PatientNumber)">@ShowValue(item.PatientNumber)</span></td>
                                 <td><span class="case-cell-text" title="@ShowValue(item.PatientName)">@ShowValue(item.PatientName)</span></td>
-                                <td>@ShowSex(item.PatientSex)</td>
+                                <td>@sexText</td>
                                 <td>@ShowDischargeTime(item)</td>
                                 <td><span class="case-cell-text" title="@ShowValue(item.OperatorName)">@ShowValue(item.OperatorName)</span></td>
                                 <td><span class="case-cell-text" title="@surgeryTypeText">@surgeryTypeText</span></td>
@@ -250,8 +299,11 @@
                                         <MudButton Variant="Variant.Text"
                                                    Color="Color.Primary"
                                                    Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.Visibility"
-                                                   OnClick="@(() => OpenCase(item.Id))">查看</MudButton>
+                                                   OnClick="@(() => OpenCase(item.Id))">查看病例</MudButton>
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => OpenCaseAppraiseAsync(item.Id))">查看评价</MudButton>
                                         @if (CanDeleteCase(item))
                                         {
                                             <MudButton Variant="Variant.Text"
@@ -270,17 +322,44 @@
         }
 
         <div class="pager case-pager">
+            @if (CanShowBatchChangeOperator)
+            {
+                <div class="case-batch-actions">
+                    @if (!_isBatchOperatorMode)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.ManageAccounts" OnClick="EnterBatchOperatorMode">批量更换术者</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.ManageAccounts" Disabled="@(SelectionCount == 0)" OnClick="OpenOperatorModalAsync">更换术者</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" OnClick="CancelBatchOperatorMode">返回</MudButton>
+                    }
+                </div>
+            }
             <div class="pager-total">共 @_totalCount 条</div>
-            <button type="button" class="pager-page wide" disabled="@(_pageIndex == 0 || _isLoading)" @onclick="PreviousPageAsync">上一页</button>
+            <div class="pager-pages">
+                <button type="button" class="pager-page wide" disabled="@(_pageIndex == 0 || _isLoading)" @onclick="PreviousPageAsync">上一页</button>
+                @foreach (var page in GetPagerItems())
+                {
+                    if (page < 0)
+                    {
+                        <span class="pager-ellipsis">...</span>
+                    }
+                    else
+                    {
+                        <button type="button" class="@GetPageButtonClass(page)" disabled="@_isLoading" @onclick="@(() => GoToPageAsync(page))">@(page + 1)</button>
+                    }
+                }
+                <button type="button" class="pager-page wide" disabled="@(_pageIndex + 1 >= TotalPages || _isLoading)" @onclick="NextPageAsync">下一页</button>
+            </div>
             <div class="pager-summary">第 @(_pageIndex + 1) / @TotalPages 页 · 每页 @PageSize 条</div>
-            <button type="button" class="pager-page wide" disabled="@(_pageIndex + 1 >= TotalPages || _isLoading)" @onclick="NextPageAsync">下一页</button>
         </div>
     </MudPaper>
 </div>
 
 @code {
-    private const int PageSize = 20;
-    private static readonly string[] ListFieldNames = ["手术类别", "术者"];
+    private const int PageSize = 10;
+    private static readonly string[] SurgeonFieldNames = ["术者"];
 
     private readonly List<CaseListItem> _cases = [];
     private readonly StatusTab[] _statusTabs =
@@ -302,38 +381,57 @@
     private string _statusValue = "";
     private string _patientNumberValue = "";
     private string _patientNameValue = "";
-    private string _dischargeStartValue = "";
-    private string _dischargeEndValue = "";
+    private DateTime? _dischargeStartDate;
+    private DateTime? _dischargeEndDate;
     private string _surgeryTypeValue = "";
     private string _surgeonValue = "";
     private string _tabValue = "";
-    private string _exportStartDate = "";
-    private string _exportEndDate = "";
+    private string _sortColumn = "";
+    private bool _sortAscending = true;
+    private DateTime? _exportStartDate;
+    private DateTime? _exportEndDate;
     private string _exportHospitalId = "";
     private readonly List<HospitalFilterOption> _hospitalOptions = [];
     private readonly List<CaseFilterOption> _surgeryTypeOptions = [];
     private readonly List<CaseFilterOption> _surgeonOptions = [];
+    private readonly List<CaseFilterOption> _operatorOptions = [];
+    private readonly HashSet<Guid> _selectedCaseIds = [];
+    private readonly HashSet<Guid> _excludedCaseIds = [];
     private readonly List<string> _scopeHospitalIds = [];
     private readonly List<string> _scopeDepartmentIds = [];
+    private string _targetOperatorId = "";
     private int _pageIndex;
     private int _totalCount;
+    private int _eligibleBatchTotalCount;
     private bool _isLoading;
     private bool _hasHospitalWideScope;
     private bool _showExportPanel;
     private bool _showCreateCaseModal;
     private bool _showImportModal;
     private bool _isImporting;
+    private bool _showOperatorModal;
+    private bool _isChangingOperator;
+    private bool _selectAllFiltered;
+    private bool _isBatchOperatorMode;
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    private int SelectionCount => _selectAllFiltered ? Math.Max(0, _eligibleBatchTotalCount - _excludedCaseIds.Count) : _selectedCaseIds.Count;
+
+    private bool IsCurrentPageSelected => _isBatchOperatorMode && _cases.Any(CanSelectForOperator) && _cases.Where(CanSelectForOperator).All(x => IsCaseSelected(x.Id));
 
     private bool IsQualityCenterMode => HasPermission(PermissionConstants.QualityManage);
 
     private IReadOnlyList<StatusTab> CurrentStatusTabs => IsQualityCenterMode ? _qualityCenterTabs : _statusTabs;
 
+    private bool CanBatchChangeOperator => HasPermission(PermissionConstants.CaseCreate);
+
+    private bool CanShowBatchChangeOperator => CanBatchChangeOperator && _cases.Count > 0 && string.IsNullOrEmpty(_tabValue);
+
     private bool CanExport
-        => DateTime.TryParse(_exportStartDate, out var start)
-           && DateTime.TryParse(_exportEndDate, out var end)
-           && start.Date <= end.Date;
+        => _exportStartDate.HasValue
+           && _exportEndDate.HasValue
+           && _exportStartDate.Value.Date <= _exportEndDate.Value.Date;
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -350,6 +448,7 @@
         }
 
         _pageIndex = 0;
+        CancelBatchOperatorMode();
         await LoadCasesAsync();
     }
 
@@ -359,12 +458,14 @@
         _statusValue = "";
         _patientNumberValue = "";
         _patientNameValue = "";
-        _dischargeStartValue = "";
-        _dischargeEndValue = "";
+        _dischargeStartDate = null;
+        _dischargeEndDate = null;
         _surgeryTypeValue = "";
         _surgeonValue = "";
         _tabValue = "";
+        ClearSort();
         _pageIndex = 0;
+        CancelBatchOperatorMode();
         await LoadCasesAsync();
     }
 
@@ -372,6 +473,7 @@
     {
         _tabValue = value;
         _pageIndex = 0;
+        CancelBatchOperatorMode();
         await LoadCasesAsync();
     }
 
@@ -396,6 +498,53 @@
         _pageIndex++;
         await LoadCasesAsync();
     }
+
+    private async Task GoToPageAsync(int pageIndex)
+    {
+        if (_isLoading || pageIndex == _pageIndex || pageIndex < 0 || pageIndex >= TotalPages)
+        {
+            return;
+        }
+
+        _pageIndex = pageIndex;
+        await LoadCasesAsync();
+    }
+
+    private IEnumerable<int> GetPagerItems()
+    {
+        if (TotalPages <= 7)
+        {
+            for (var i = 0; i < TotalPages; i++)
+            {
+                yield return i;
+            }
+
+            yield break;
+        }
+
+        yield return 0;
+        var start = Math.Max(1, _pageIndex - 2);
+        var end = Math.Min(TotalPages - 2, _pageIndex + 2);
+        if (start > 1)
+        {
+            yield return -1;
+        }
+
+        for (var i = start; i <= end; i++)
+        {
+            yield return i;
+        }
+
+        if (end < TotalPages - 2)
+        {
+            yield return -1;
+        }
+
+        yield return TotalPages - 1;
+    }
+
+    private string GetPageButtonClass(int pageIndex)
+        => pageIndex == _pageIndex ? "pager-page active" : "pager-page";
 
     private async Task OnSearchKeyDown(KeyboardEventArgs args)
     {
@@ -435,53 +584,34 @@
                 .ToListAsync());
         }
 
-        var visibleCaseIds = await visibleQuery.Select(x => x.Id).ToListAsync();
-        if (visibleCaseIds.Count == 0)
-        {
-            _surgeryTypeOptions.Clear();
-            _surgeonOptions.Clear();
-            return;
-        }
-
-        var values = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == "case" && visibleCaseIds.Contains(x.OwnerId))
-            .Join(
-                _registryContext.FormFieldValues.AsNoTracking().Where(x => ListFieldNames.Contains(x.FieldName)),
-                instance => instance.Id,
-                value => value.FormInstanceId,
-                (instance, value) => new { value.FieldName, value.FieldText, value.FieldValue })
-            .Where(x => (x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != ""))
+        var surgeryValues = await visibleQuery
+            .Where(x => (x.SurgeryTypeValue != null && x.SurgeryTypeValue != "") || (x.SurgeryTypeText != null && x.SurgeryTypeText != ""))
+            .Select(x => new { x.SurgeryTypeValue, x.SurgeryTypeText })
+            .Distinct()
             .ToListAsync();
 
         _surgeryTypeOptions.Clear();
-        _surgeryTypeOptions.AddRange(values
-            .Where(x => x.FieldName == "手术类别")
-            .Select(x => NormalizeFieldValue(x.FieldName, x.FieldText, x.FieldValue))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x)
-            .Select(x => new CaseFilterOption(x, x)));
+        _surgeryTypeOptions.AddRange(surgeryValues
+            .Select(x => new CaseFilterOption(
+                GetRawFieldValue(x.SurgeryTypeText, x.SurgeryTypeValue),
+                NormalizeFieldValue("手术类别", x.SurgeryTypeText, x.SurgeryTypeValue)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value) || !string.IsNullOrWhiteSpace(x.Text))
+            .GroupBy(x => x.Text, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .OrderBy(x => x.Text));
 
-        var surgeonValues = values
-            .Where(x => x.FieldName == "术者")
-            .Select(x => GetRawFieldValue(x.FieldText, x.FieldValue))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var surgeonIds = surgeonValues
-            .Select(TryParseGuid)
-            .Where(x => x.HasValue)
-            .Select(x => x!.Value)
-            .ToList();
-        var surgeonNames = surgeonIds.Count == 0
-            ? new Dictionary<Guid, string>()
-            : await _registryContext.SystemUsers.AsNoTracking()
-                .Where(x => surgeonIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+        var surgeonValues = await visibleQuery
+            .Where(x => x.OperatorId != null && x.OperatorId != "")
+            .Select(x => new { x.OperatorId, x.OperatorName })
+            .Distinct()
+            .ToListAsync();
 
         _surgeonOptions.Clear();
         _surgeonOptions.AddRange(surgeonValues
-            .Select(x => new CaseFilterOption(x, ShowValue(GetDisplayName(x, surgeonNames))))
+            .Select(x => new CaseFilterOption(x.OperatorId ?? "", ShowValue(string.IsNullOrWhiteSpace(x.OperatorName) ? x.OperatorId : x.OperatorName)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
             .OrderBy(x => x.Text));
     }
 
@@ -521,125 +651,42 @@
         _isLoading = true;
         try
         {
-            var query = ApplyRoleScope(_registryContext.Cases.AsNoTracking());
-            query = ApplyTabFilter(query);
-
-            if (int.TryParse(_statusValue, out var status))
-            {
-                query = query.Where(x => x.Status == status);
-            }
-
-            if (!string.IsNullOrWhiteSpace(_hospitalFilterValue))
-            {
-                query = query.Where(x => x.HospitalId == _hospitalFilterValue);
-            }
-
-            if (!string.IsNullOrWhiteSpace(_patientNumberValue))
-            {
-                var patientNumber = _patientNumberValue.Trim();
-                query = query.Where(x => x.PatientNumber != null && EF.Functions.ILike(x.PatientNumber, $"%{patientNumber}%"));
-            }
-
-            if (!string.IsNullOrWhiteSpace(_patientNameValue))
-            {
-                var patientName = _patientNameValue.Trim();
-                query = query.Where(x => EF.Functions.ILike(x.PatientName, $"%{patientName}%"));
-            }
-
-            if (!TryReadDischargeRange(out var dischargeStart, out var dischargeEnd))
+            var query = await BuildCaseQueryAsync();
+            if (query == null)
             {
                 _cases.Clear();
                 _totalCount = 0;
+                _eligibleBatchTotalCount = 0;
                 return;
             }
 
-            if (dischargeStart.HasValue)
-            {
-                query = query.Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value >= dischargeStart.Value.Date);
-            }
-
-            if (dischargeEnd.HasValue)
-            {
-                var endExclusive = dischargeEnd.Value.Date.AddDays(1);
-                query = query.Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value < endExclusive);
-            }
-
-            if (!string.IsNullOrWhiteSpace(_surgeryTypeValue))
-            {
-                var matchedCaseIds = await GetCaseIdsByFieldValueAsync("手术类别", _surgeryTypeValue);
-                query = matchedCaseIds.Count == 0 ? query.Where(x => false) : query.Where(x => matchedCaseIds.Contains(x.Id));
-            }
-
-            if (!string.IsNullOrWhiteSpace(_surgeonValue))
-            {
-                var matchedCaseIds = await GetCaseIdsByFieldValueAsync("术者", _surgeonValue);
-                query = matchedCaseIds.Count == 0 ? query.Where(x => false) : query.Where(x => matchedCaseIds.Contains(x.Id));
-            }
-
             _totalCount = await query.CountAsync();
+            _eligibleBatchTotalCount = CanBatchChangeOperator ? await query.Where(x => x.Status == 3).CountAsync() : 0;
             if (_pageIndex >= TotalPages)
             {
                 _pageIndex = TotalPages - 1;
             }
 
-            var records = await query
-                .OrderByDescending(x => x.Sort)
-                .ThenByDescending(x => x.CreatedAt)
-                .ThenBy(x => x.PatientName)
+            var records = await ApplyCaseOrdering(query)
                 .Skip(_pageIndex * PageSize)
                 .Take(PageSize)
                 .ToListAsync();
 
-            var fieldValuesByCase = await LoadCaseFieldValuesAsync(records.Select(x => x.Id).ToList());
-            var userIds = records
-                .Select(x => TryParseGuid(x.OperatorId))
-                .Where(x => x.HasValue)
-                .Select(x => x!.Value)
-                .ToList();
-            userIds.AddRange(fieldValuesByCase.Values
-                .Select(x => x.TryGetValue("术者", out var value) ? value : null)
-                .Select(TryParseGuid)
-                .Where(x => x.HasValue)
-                .Select(x => x!.Value));
-            userIds = userIds.Distinct().ToList();
-            var hospitalIds = records
-                .Select(x => TryParseGuid(x.HospitalId))
-                .Where(x => x.HasValue)
-                .Select(x => x!.Value)
-                .Distinct()
-                .ToList();
-
-            var users = userIds.Count == 0
-                ? new Dictionary<Guid, string>()
-                : await _registryContext.SystemUsers.AsNoTracking()
-                    .Where(x => userIds.Contains(x.Id))
-                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
-            var hospitals = hospitalIds.Count == 0
-                ? new Dictionary<Guid, string>()
-                : await _registryContext.SystemHospitals.AsNoTracking()
-                    .Where(x => hospitalIds.Contains(x.Id))
-                    .ToDictionaryAsync(x => x.Id, x => x.Name);
-
             _cases.Clear();
             _cases.AddRange(records.Select(x =>
-            {
-                var fieldValues = fieldValuesByCase.TryGetValue(x.Id, out var values)
-                    ? values
-                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var surgeonId = fieldValues.TryGetValue("术者", out var surgeonValue) ? surgeonValue : x.OperatorId;
-
-                return new CaseListItem(
+                new CaseListItem(
                     x.Id,
                     x.PatientName,
                     x.PatientSex,
+                    x.PatientSexText,
                     x.PatientNumber,
-                    GetDisplayName(x.HospitalId, hospitals),
+                    x.HospitalName ?? x.HospitalId,
                     x.DischargeTime,
-                    GetDisplayName(surgeonId, users),
+                    x.OperatorName ?? x.OperatorId,
+                    x.SurgeryTypeText,
                     x.Status,
-                    x.CreatedAt,
-                    fieldValues);
-            }));
+                    x.Sort,
+                    x.CreatedAt)));
         }
         finally
         {
@@ -647,53 +694,78 @@
         }
     }
 
-    private async Task<Dictionary<Guid, Dictionary<string, string>>> LoadCaseFieldValuesAsync(List<Guid> caseIds)
+    private RenderFragment SortHeader(string column, string title) => builder =>
     {
-        if (_registryContext == null || caseIds.Count == 0)
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "type", "button");
+        builder.AddAttribute(2, "class", GetSortHeaderClass(column));
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create(this, () => ChangeSortAsync(column)));
+        builder.OpenElement(4, "span");
+        builder.AddContent(5, title);
+        builder.CloseElement();
+        builder.OpenElement(6, "span");
+        builder.AddAttribute(7, "class", "case-sort-icon");
+        builder.AddContent(8, GetSortText(column));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private async Task ChangeSortAsync(string column)
+    {
+        if (_sortColumn == column)
         {
-            return [];
+            _sortAscending = !_sortAscending;
+        }
+        else
+        {
+            _sortColumn = column;
+            _sortAscending = true;
         }
 
-        var instances = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == "case" && caseIds.Contains(x.OwnerId))
-            .Select(x => new { x.Id, x.OwnerId })
-            .ToListAsync();
-        if (instances.Count == 0)
+        _pageIndex = 0;
+        await LoadCasesAsync();
+    }
+
+    private void ClearSort()
+    {
+        _sortColumn = "";
+        _sortAscending = true;
+    }
+
+    private string GetSortHeaderClass(string column)
+        => _sortColumn == column ? "case-sort-header active" : "case-sort-header";
+
+    private string GetSortText(string column)
+        => _sortColumn == column ? (_sortAscending ? "↑" : "↓") : "";
+
+    private IOrderedQueryable<RegistryCase> ApplyCaseOrdering(IQueryable<RegistryCase> query)
+    {
+        if (string.IsNullOrWhiteSpace(_sortColumn))
         {
-            return [];
+            return query
+                .OrderByDescending(x => x.Sort)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenBy(x => x.PatientName);
         }
 
-        var caseByInstanceId = instances.ToDictionary(x => x.Id, x => x.OwnerId);
-        var instanceIds = instances.Select(x => x.Id).ToList();
-        var values = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId)
-                        && ListFieldNames.Contains(x.FieldName)
-                        && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
-            .OrderBy(x => x.Sort)
-            .Select(x => new { x.FormInstanceId, x.FieldName, x.FieldText, x.FieldValue })
-            .ToListAsync();
-
-        var result = new Dictionary<Guid, Dictionary<string, string>>();
-        foreach (var value in values)
+        var ordered = _sortColumn switch
         {
-            if (!caseByInstanceId.TryGetValue(value.FormInstanceId, out var caseId))
-            {
-                continue;
-            }
+            "hospital" => _sortAscending ? query.OrderBy(x => x.HospitalName) : query.OrderByDescending(x => x.HospitalName),
+            "status" => _sortAscending ? query.OrderBy(x => x.Status) : query.OrderByDescending(x => x.Status),
+            "createdAt" => _sortAscending ? query.OrderBy(x => x.CreatedAt) : query.OrderByDescending(x => x.CreatedAt),
+            "patientNumber" => _sortAscending ? query.OrderBy(x => x.PatientNumber) : query.OrderByDescending(x => x.PatientNumber),
+            "patientName" => _sortAscending ? query.OrderBy(x => x.PatientName) : query.OrderByDescending(x => x.PatientName),
+            "sex" => _sortAscending ? query.OrderBy(x => x.PatientSexText) : query.OrderByDescending(x => x.PatientSexText),
+            "dischargeTime" => _sortAscending ? query.OrderBy(x => x.DischargeTime) : query.OrderByDescending(x => x.DischargeTime),
+            "operator" => _sortAscending ? query.OrderBy(x => x.OperatorName) : query.OrderByDescending(x => x.OperatorName),
+            "surgeryType" => _sortAscending ? query.OrderBy(x => x.SurgeryTypeText) : query.OrderByDescending(x => x.SurgeryTypeText),
+            _ => _sortAscending ? query.OrderBy(x => x.CreatedAt) : query.OrderByDescending(x => x.CreatedAt)
+        };
 
-            if (!result.TryGetValue(caseId, out var caseValues))
-            {
-                caseValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                result[caseId] = caseValues;
-            }
-
-            if (!caseValues.ContainsKey(value.FieldName))
-            {
-                caseValues[value.FieldName] = NormalizeFieldValue(value.FieldName, value.FieldText, value.FieldValue);
-            }
-        }
-
-        return result;
+        return ordered
+            .ThenByDescending(x => x.Sort)
+            .ThenByDescending(x => x.CreatedAt)
+            .ThenBy(x => x.PatientName);
     }
 
     private IQueryable<RegistryCase> ApplyTabFilter(IQueryable<RegistryCase> query)
@@ -714,6 +786,303 @@
     }
 
     private void OpenCase(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(id));
+
+    private async Task OpenCaseAppraiseAsync(Guid caseId)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var meetingId = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.CaseId == caseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => (Guid?)x.MeetingId)
+            .FirstOrDefaultAsync();
+        if (!meetingId.HasValue)
+        {
+            meetingId = await _registryContext.CaseSummaries.AsNoTracking()
+                .Where(x => x.CaseId == caseId)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (Guid?)x.MeetingId)
+                .FirstOrDefaultAsync();
+        }
+
+        if (!meetingId.HasValue)
+        {
+            inj_snackbar.Add("该病例暂无评价记录", Severity.Info);
+            return;
+        }
+
+        inj_navigationManager.NavigateTo(RouteConstants.AppraiseDetail(meetingId.Value, caseId));
+    }
+
+    private async Task OpenOperatorModalAsync()
+    {
+        if (!_isBatchOperatorMode)
+        {
+            return;
+        }
+
+        if (SelectionCount == 0)
+        {
+            inj_snackbar.Add("请先选择病例", Severity.Warning);
+            return;
+        }
+
+        await EnsureOperatorOptionsAsync();
+        if (_operatorOptions.Count == 0)
+        {
+            inj_snackbar.Add("未找到可选术者账号", Severity.Warning);
+            return;
+        }
+
+        _targetOperatorId = "";
+        _showOperatorModal = true;
+    }
+
+    private void CloseOperatorModal()
+    {
+        if (_isChangingOperator)
+        {
+            return;
+        }
+
+        _showOperatorModal = false;
+        _targetOperatorId = "";
+    }
+
+    private async Task EnsureOperatorOptionsAsync()
+    {
+        if (_registryContext == null || _operatorOptions.Count > 0)
+        {
+            return;
+        }
+
+        string[] operatorPermissionCodes = [PermissionConstants.CaseSubmit, "Power-MCR-N-N-N-Operator"];
+        var rows = await (
+            from user in _registryContext.SystemUsers.AsNoTracking()
+            join userRole in _registryContext.SystemMapUserRoles.AsNoTracking() on user.Id equals userRole.UserId
+            join rolePermission in _registryContext.SystemMapRolePermissions.AsNoTracking() on userRole.RoleId equals rolePermission.RoleId
+            join permission in _registryContext.SystemPermissions.AsNoTracking() on rolePermission.PermissionId equals permission.Id
+            where user.IsValid && permission.Code != null && operatorPermissionCodes.Contains(permission.Code)
+            select new { user.Id, user.DisplayName, user.Account })
+            .ToListAsync();
+
+        _operatorOptions.AddRange(rows
+            .GroupBy(x => x.Id)
+            .Select(x => x.First())
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.Account)
+            .Select(x => new CaseFilterOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName)));
+    }
+
+    private async Task ChangeOperatorAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        if (!_isBatchOperatorMode || !CanBatchChangeOperator)
+        {
+            inj_snackbar.Add("当前账号没有该操作权限", Severity.Warning);
+            return;
+        }
+
+        if (!Guid.TryParse(_targetOperatorId, out var operatorId))
+        {
+            inj_snackbar.Add("请选择术者", Severity.Warning);
+            return;
+        }
+
+        var operatorName = await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => x.Id == operatorId && x.IsValid)
+            .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+            .FirstOrDefaultAsync();
+        if (string.IsNullOrWhiteSpace(operatorName))
+        {
+            inj_snackbar.Add("术者不存在或已停用", Severity.Warning);
+            return;
+        }
+
+        var caseIds = await GetSelectedCaseIdsAsync();
+        if (caseIds.Count == 0)
+        {
+            inj_snackbar.Add("请先选择病例", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync($"确认将 {caseIds.Count} 条病例的术者替换为“{operatorName}”？"))
+        {
+            return;
+        }
+
+        _isChangingOperator = true;
+        try
+        {
+            var now = DateTime.Now;
+            await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+
+            var cases = await _registryContext.Cases
+                .Where(x => caseIds.Contains(x.Id) && x.Status == 3)
+                .ToListAsync();
+            if (cases.Count == 0)
+            {
+                inj_snackbar.Add("未找到可替换的待填写病例", Severity.Warning);
+                return;
+            }
+
+            var changedCaseIds = cases.Select(x => x.Id).ToList();
+            foreach (var item in cases)
+            {
+                item.OperatorId = _targetOperatorId;
+                item.OperatorName = operatorName;
+                item.UpdatedAt = now;
+                item.UpdatedBy = CurrentUserId;
+            }
+
+            var instanceIds = await _registryContext.FormInstances.AsNoTracking()
+                .Where(x => x.OwnerType == "case" && changedCaseIds.Contains(x.OwnerId))
+                .Select(x => x.Id)
+                .ToListAsync();
+            if (instanceIds.Count > 0)
+            {
+                var operatorValues = await _registryContext.FormFieldValues
+                    .Where(x => instanceIds.Contains(x.FormInstanceId) && SurgeonFieldNames.Contains(x.FieldName))
+                    .ToListAsync();
+                foreach (var value in operatorValues)
+                {
+                    value.FieldValue = _targetOperatorId;
+                    value.FieldText = operatorName;
+                    value.UpdatedAt = now;
+                    value.UpdatedBy = CurrentUserId;
+                }
+            }
+
+            _registryContext.OperationLogs.Add(CreateOperationLog("病例", "批量替换术者", "case", Guid.Empty, $"{operatorName}:{changedCaseIds.Count}"));
+            await _registryContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            inj_snackbar.Add("术者已替换", Severity.Success);
+            _showOperatorModal = false;
+            _targetOperatorId = "";
+            CancelBatchOperatorMode();
+            await LoadFilterOptionsAsync();
+            await LoadCasesAsync();
+        }
+        finally
+        {
+            _isChangingOperator = false;
+        }
+    }
+
+    private async Task<List<Guid>> GetSelectedCaseIdsAsync()
+    {
+        if (!_selectAllFiltered)
+        {
+            return await _registryContext!.Cases.AsNoTracking()
+                .Where(x => _selectedCaseIds.Contains(x.Id) && x.Status == 3)
+                .Select(x => x.Id)
+                .ToListAsync();
+        }
+
+        var query = await BuildCaseQueryAsync();
+        if (query == null)
+        {
+            return [];
+        }
+
+        return await query
+            .Where(x => x.Status == 3 && !_excludedCaseIds.Contains(x.Id))
+            .Select(x => x.Id)
+            .ToListAsync();
+    }
+
+    private void ToggleCaseSelection(CaseListItem item, ChangeEventArgs args)
+    {
+        if (!_isBatchOperatorMode || !CanSelectForOperator(item))
+        {
+            return;
+        }
+
+        var caseId = item.Id;
+        var isChecked = args.Value is bool value && value;
+        if (_selectAllFiltered)
+        {
+            if (isChecked)
+            {
+                _excludedCaseIds.Remove(caseId);
+            }
+            else
+            {
+                _excludedCaseIds.Add(caseId);
+            }
+
+            return;
+        }
+
+        if (isChecked)
+        {
+            _selectedCaseIds.Add(caseId);
+        }
+        else
+        {
+            _selectedCaseIds.Remove(caseId);
+        }
+    }
+
+    private void ToggleCurrentPageSelection(ChangeEventArgs args)
+    {
+        if (!_isBatchOperatorMode)
+        {
+            return;
+        }
+
+        var isChecked = args.Value is bool value && value;
+        if (isChecked)
+        {
+            _selectAllFiltered = true;
+            _selectedCaseIds.Clear();
+            _excludedCaseIds.Clear();
+            return;
+        }
+
+        ClearSelection();
+    }
+
+    private bool IsCaseSelected(Guid caseId)
+        => _selectAllFiltered ? !_excludedCaseIds.Contains(caseId) : _selectedCaseIds.Contains(caseId);
+
+    private bool IsCaseSelected(CaseListItem item)
+        => CanSelectForOperator(item) && IsCaseSelected(item.Id);
+
+    private static bool CanSelectForOperator(CaseListItem item)
+        => item.Status == 3;
+
+    private void EnterBatchOperatorMode()
+    {
+        if (!CanShowBatchChangeOperator)
+        {
+            return;
+        }
+
+        ClearSelection();
+        _isBatchOperatorMode = true;
+    }
+
+    private void CancelBatchOperatorMode()
+    {
+        ClearSelection();
+        _isBatchOperatorMode = false;
+    }
+
+    private void ClearSelection()
+    {
+        _selectAllFiltered = false;
+        _selectedCaseIds.Clear();
+        _excludedCaseIds.Clear();
+    }
 
     private void CreateCase() => _showCreateCaseModal = true;
 
@@ -743,11 +1112,11 @@
     private void ToggleExportPanel()
     {
         _showExportPanel = !_showExportPanel;
-        if (_showExportPanel && string.IsNullOrWhiteSpace(_exportStartDate) && string.IsNullOrWhiteSpace(_exportEndDate))
+        if (_showExportPanel && !_exportStartDate.HasValue && !_exportEndDate.HasValue)
         {
             var today = DateTime.Today;
-            _exportStartDate = new DateTime(today.Year, 1, 1).ToString("yyyy-MM-dd");
-            _exportEndDate = today.ToString("yyyy-MM-dd");
+            _exportStartDate = new DateTime(today.Year, 1, 1);
+            _exportEndDate = today;
         }
     }
 
@@ -755,8 +1124,8 @@
     {
         var parts = new List<string>
         {
-            $"start={Uri.EscapeDataString(_exportStartDate.Trim())}",
-            $"end={Uri.EscapeDataString(_exportEndDate.Trim())}"
+            $"start={Uri.EscapeDataString(FormatExportDate(_exportStartDate))}",
+            $"end={Uri.EscapeDataString(FormatExportDate(_exportEndDate))}"
         };
         if (!string.IsNullOrWhiteSpace(_exportHospitalId))
         {
@@ -796,15 +1165,71 @@
         return query;
     }
 
+    private async Task<IQueryable<RegistryCase>?> BuildCaseQueryAsync()
+    {
+        if (_registryContext == null)
+        {
+            return null;
+        }
+
+        var query = ApplyRoleScope(_registryContext.Cases.AsNoTracking());
+        query = ApplyTabFilter(query);
+
+        if (int.TryParse(_statusValue, out var status))
+        {
+            query = query.Where(x => x.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_hospitalFilterValue))
+        {
+            query = query.Where(x => x.HospitalId == _hospitalFilterValue);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_patientNumberValue))
+        {
+            var patientNumber = _patientNumberValue.Trim();
+            query = query.Where(x => x.PatientNumber != null && EF.Functions.ILike(x.PatientNumber, $"%{patientNumber}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_patientNameValue))
+        {
+            var patientName = _patientNameValue.Trim();
+            query = query.Where(x => EF.Functions.ILike(x.PatientName, $"%{patientName}%"));
+        }
+
+        if (!TryReadDischargeRange(out var dischargeStart, out var dischargeEnd))
+        {
+            return null;
+        }
+
+        if (dischargeStart.HasValue)
+        {
+            query = query.Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value >= dischargeStart.Value.Date);
+        }
+
+        if (dischargeEnd.HasValue)
+        {
+            var endExclusive = dischargeEnd.Value.Date.AddDays(1);
+            query = query.Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value < endExclusive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_surgeryTypeValue))
+        {
+            query = query.Where(x => x.SurgeryTypeValue == _surgeryTypeValue || x.SurgeryTypeText == _surgeryTypeValue);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_surgeonValue))
+        {
+            query = query.Where(x => x.OperatorId == _surgeonValue);
+        }
+
+        return query;
+    }
+
     private bool TryReadDischargeRange(out DateTime? start, out DateTime? end)
     {
-        start = null;
-        end = null;
-        if (!TryParseDate(_dischargeStartValue, out start) || !TryParseDate(_dischargeEndValue, out end))
-        {
-            inj_snackbar.Add("出院时间格式不正确，请使用 yyyy-MM-dd", Severity.Warning);
-            return false;
-        }
+        start = _dischargeStartDate?.Date;
+        end = _dischargeEndDate?.Date;
 
         if (start.HasValue && end.HasValue && start.Value.Date > end.Value.Date)
         {
@@ -813,30 +1238,6 @@
         }
 
         return true;
-    }
-
-    private async Task<List<Guid>> GetCaseIdsByFieldValueAsync(string fieldName, string value)
-    {
-        if (_registryContext == null || string.IsNullOrWhiteSpace(value))
-        {
-            return [];
-        }
-
-        var expected = value.Trim();
-        var values = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == "case")
-            .Join(
-                _registryContext.FormFieldValues.AsNoTracking().Where(x => x.FieldName == fieldName),
-                instance => instance.Id,
-                value => value.FormInstanceId,
-                (instance, value) => new { instance.OwnerId, value.FieldText, value.FieldValue })
-            .ToListAsync();
-
-        return values
-            .Where(x => NormalizeFieldValue(fieldName, x.FieldText, x.FieldValue).Equals(expected, StringComparison.OrdinalIgnoreCase))
-            .Select(x => x.OwnerId)
-            .Distinct()
-            .ToList();
     }
 
     private async Task DeleteCaseAsync(Guid id, string patientName)
@@ -987,6 +1388,15 @@
                 .ThenBy(x => x.StorageKey)
                 .ToListAsync();
             var definitionsByTemplate = definitions.GroupBy(x => x.FormTemplateId).ToDictionary(x => x.Key, x => x.ToList());
+            var hospitalNames = (await _registryContext.SystemHospitals.AsNoTracking()
+                    .Select(x => new { Id = x.Id.ToString(), x.Name })
+                    .ToListAsync())
+                .ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var userNames = (await _registryContext.SystemUsers.AsNoTracking()
+                    .Where(x => x.IsValid)
+                    .Select(x => new { Id = x.Id.ToString(), Name = x.DisplayName == "" ? x.Account : x.DisplayName })
+                    .ToListAsync())
+                .ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var maxSort = await _registryContext.Cases.Select(x => (int?)x.Sort).MaxAsync() ?? 0;
 
             foreach (var row in rows)
@@ -1016,19 +1426,28 @@
 
                 var caseId = Guid.NewGuid();
                 maxSort++;
+                var patientSex = EmptyToNull(GetCell(row, "性别"));
+                var hospitalId = EmptyToNull(GetCell(row, "医院ID"));
+                var operatorId = EmptyToNull(GetCell(row, "经办人ID"));
+                var surgeryType = EmptyToNull(GetCell(row, "手术类别"));
                 _registryContext.Cases.Add(new RegistryCase
                 {
                     Id = caseId,
                     OldCaseId = caseId.ToString(),
                     PatientName = patientName,
-                    PatientSex = EmptyToNull(GetCell(row, "性别")),
+                    PatientSex = patientSex,
+                    PatientSexText = NormalizeFieldValue("性别", patientSex, patientSex),
                     PatientAge = EmptyToNull(GetCell(row, "年龄")),
                     PatientNumber = EmptyToNull(patientNumber),
                     IdNumber = EmptyToNull(GetCell(row, "身份证号")),
                     DiseaseId = diseaseId,
-                    HospitalId = EmptyToNull(GetCell(row, "医院ID")),
+                    HospitalId = hospitalId,
+                    HospitalName = hospitalId != null && hospitalNames.TryGetValue(hospitalId, out var hospitalName) ? hospitalName : null,
                     DepartmentId = EmptyToNull(GetCell(row, "科室ID")),
-                    OperatorId = EmptyToNull(GetCell(row, "经办人ID")),
+                    OperatorId = operatorId,
+                    OperatorName = operatorId != null && userNames.TryGetValue(operatorId, out var operatorName) ? operatorName : null,
+                    SurgeryTypeValue = surgeryType,
+                    SurgeryTypeText = NormalizeFieldValue("手术类别", surgeryType, surgeryType),
                     AdmissionTime = admissionTime,
                     DischargeTime = dischargeTime,
                     OperationTime = operationTime,
@@ -1114,9 +1533,6 @@
     private static string ShowDischargeTime(CaseListItem item)
         => FormatDate(item.DischargeTime);
 
-    private static string? GetFieldValue(CaseListItem item, string fieldName)
-        => item.FieldValues.TryGetValue(fieldName, out var value) ? value : null;
-
     private static string NormalizeFieldValue(string fieldName, string? fieldText, string? fieldValue)
         => FormValueDisplayMapper.GetDisplayText(fieldName, fieldText, fieldValue);
 
@@ -1127,12 +1543,6 @@
         => _tabValue == value ? "status-tab active" : "status-tab";
 
     private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
-
-    private static string? GetDisplayName(string? id, IReadOnlyDictionary<Guid, string> names)
-    {
-        var guid = TryParseGuid(id);
-        return guid.HasValue && names.TryGetValue(guid.Value, out var name) ? name : id;
-    }
 
     private static string GetCell(IReadOnlyDictionary<string, string> row, string name)
         => row.TryGetValue(name, out var value) ? value.Trim() : "";
@@ -1157,6 +1567,8 @@
     }
 
     private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
+
+    private static string FormatExportDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "";
 
     private static string GetStatusText(int status)
         => status switch
@@ -1184,13 +1596,15 @@
         Guid Id,
         string PatientName,
         string? PatientSex,
+        string? PatientSexText,
         string? PatientNumber,
         string? HospitalName,
         DateTime? DischargeTime,
         string? OperatorName,
+        string? SurgeryTypeText,
         int Status,
-        DateTime CreatedAt,
-        IReadOnlyDictionary<string, string> FieldValues);
+        int Sort,
+        DateTime CreatedAt);
 
     private sealed record StatusTab(string Value, string Text);
     private sealed record CaseFilterOption(string Value, string Text);

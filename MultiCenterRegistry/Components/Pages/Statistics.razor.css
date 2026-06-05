@@ -2,6 +2,60 @@
     grid-template-columns: 180px 180px auto;
 }
 
+.statistics-page .filter-panel ::deep .mud-input-control {
+    width: 180px;
+    max-width: 180px;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+}
+
+.statistics-page .filter-panel ::deep .mud-input-control-input-container,
+.statistics-page .filter-panel ::deep .mud-input {
+    height: 40px;
+    min-height: 40px;
+}
+
+.statistics-page .filter-panel ::deep .mud-input {
+    align-items: center;
+}
+
+.statistics-page .filter-panel ::deep .mud-input-root {
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 38px;
+}
+
+.statistics-page .filter-panel ::deep .mud-input-adornment {
+    height: 38px;
+    margin-top: 0;
+}
+
+.statistics-page .filter-panel ::deep .mud-input-outlined-border {
+    top: 0;
+}
+
+.statistics-page .filter-panel ::deep .mud-input-label-outlined {
+    transform: translate(14px, 11px) scale(1);
+}
+
+.statistics-page .filter-panel ::deep .mud-input-label-outlined.mud-shrink {
+    transform: translate(14px, -6px) scale(.75);
+}
+
+.statistics-page .filter-panel ::deep .mud-input-root-outlined {
+    min-height: 40px;
+}
+
+.statistics-page .filter-panel ::deep .mud-button-root {
+    min-width: 72px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 7px;
+}
+
 .metric-grid,
 .panel-grid {
     display: grid;

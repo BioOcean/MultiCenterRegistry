@@ -71,6 +71,13 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
 
         modelBuilder.Entity<RegistryCase>().HasIndex(x => x.OldCaseId).IsUnique();
         modelBuilder.Entity<RegistryCase>().HasIndex(x => new { x.HospitalId, x.Status });
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => new { x.Status, x.CreatedAt });
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.DischargeTime);
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.PatientNumber);
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.PatientName);
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.OperatorId);
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.SurgeryTypeValue);
+        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.SurgeryTypeText);
         modelBuilder.Entity<QualityReport>().HasIndex(x => x.OldQualityId).IsUnique();
         modelBuilder.Entity<ReviewMeeting>().HasIndex(x => x.OldMeetingId).IsUnique();
         modelBuilder.Entity<MigrationMap>().HasIndex(x => new { x.SourceTable, x.SourceId }).IsUnique();

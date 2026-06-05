@@ -152,10 +152,14 @@
             return;
         }
 
+        string? operatorName = null;
         if (!string.IsNullOrWhiteSpace(_operatorId) && Guid.TryParse(_operatorId, out var operatorGuid))
         {
-            var exists = await _registryContext.SystemUsers.AsNoTracking().AnyAsync(x => x.Id == operatorGuid);
-            if (!exists)
+            operatorName = await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => x.Id == operatorGuid)
+                .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+                .FirstOrDefaultAsync();
+            if (string.IsNullOrWhiteSpace(operatorName))
             {
                 inj_snackbar.Add("经办人用户 ID 不存在", Severity.Warning);
                 return;
@@ -177,13 +181,16 @@
             OldCaseId = caseId.ToString(),
             PatientName = _patientName.Trim(),
             PatientSex = EmptyToNull(_patientSex),
+            PatientSexText = FormValueDisplayMapper.Normalize("性别", _patientSex),
             PatientAge = EmptyToNull(_patientAge),
             PatientNumber = EmptyToNull(_patientNumber),
             IdNumber = EmptyToNull(_idNumber),
             DiseaseId = _diseaseId,
             HospitalId = EmptyToNull(_hospitalId),
+            HospitalName = _hospitals.FirstOrDefault(x => x.Id.ToString().Equals(_hospitalId, StringComparison.OrdinalIgnoreCase))?.Name,
             DepartmentId = EmptyToNull(_departmentId),
             OperatorId = EmptyToNull(_operatorId),
+            OperatorName = operatorName,
             AdmissionTime = admissionTime,
             DischargeTime = dischargeTime,
             OperationTime = operationTime,

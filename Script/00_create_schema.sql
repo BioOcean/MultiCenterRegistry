@@ -10,8 +10,13 @@ create table if not exists mcr.case_record (
     patient_number text null,
     disease_id text null,
     hospital_id text null,
+    hospital_name text null,
     department_id text null,
     operator_id text null,
+    operator_name text null,
+    patient_sex_text text null,
+    surgery_type_value text null,
+    surgery_type_text text null,
     admission_time timestamp null,
     discharge_time timestamp null,
     operation_time timestamp null,
@@ -137,6 +142,11 @@ create table if not exists mcr.migration_map (
 
 create unique index if not exists ux_migration_map_source on mcr.migration_map(source_table, source_id);
 create index if not exists ix_case_record_hospital_status on mcr.case_record(hospital_id, status);
+create index if not exists ix_case_record_status_created on mcr.case_record(status, created_at desc);
+create index if not exists ix_case_record_discharge_time on mcr.case_record(discharge_time);
+create index if not exists ix_case_record_operator_created on mcr.case_record(operator_id, created_at desc);
+create index if not exists ix_case_record_surgery_type_value on mcr.case_record(surgery_type_value);
+create index if not exists ix_case_record_surgery_type_text on mcr.case_record(surgery_type_text);
 create index if not exists ix_case_form_data_case on mcr.case_form_data(case_id, form_code, section_code);
 create index if not exists ix_quality_report_hospital_status on mcr.quality_report(hospital_id, status);
 create index if not exists ix_meeting_expert_meeting on mcr.meeting_expert(meeting_id);

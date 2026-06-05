@@ -19,7 +19,7 @@
 }
 
 .quality-list-filter {
-    grid-template-columns: 260px 180px 180px 150px 150px max-content;
+    grid-template-columns: 260px 180px 180px 180px 150px max-content;
 }
 
 .quality-export-panel {

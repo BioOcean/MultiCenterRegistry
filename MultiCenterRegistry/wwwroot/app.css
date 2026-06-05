@@ -347,6 +347,11 @@ textarea {
     letter-spacing: 0;
 }
 
+.page-header h1:focus,
+.detail-header h1:focus {
+    outline: none;
+}
+
 :where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h2 {
     margin: 0;
     color: var(--mcr-text);
@@ -440,6 +445,68 @@ textarea {
     padding: 14px;
 }
 
+.case-filter-panel {
+    grid-template-columns: 180px 180px 180px 180px 386px 180px 180px max-content !important;
+}
+
+.case-export-panel {
+    grid-template-columns: 180px 180px 220px max-content max-content !important;
+}
+
+.meeting-filter-panel {
+    grid-template-columns: 180px 386px 180px max-content !important;
+}
+
+.quality-center-filter {
+    display: block !important;
+}
+
+.quality-center-filter-row {
+    display: grid;
+    grid-template-columns: 180px max-content;
+    align-items: end;
+    justify-content: start;
+    gap: 10px;
+}
+
+.quality-list-filter {
+    grid-template-columns: 260px 180px 180px 180px 150px max-content !important;
+}
+
+.quality-export-panel {
+    grid-template-columns: 180px 180px 220px 180px max-content max-content !important;
+}
+
+.statistics-page .filter-panel {
+    grid-template-columns: 180px 180px max-content !important;
+}
+
+.case-date-range,
+.meeting-date-range {
+    display: grid;
+    grid-template-columns: 180px 10px 180px;
+    align-items: end;
+    gap: 8px;
+    width: 386px;
+    min-width: 386px;
+    max-width: 386px;
+}
+
+.case-date-range .mud-picker,
+.case-date-range .mud-input-control,
+.meeting-date-range .mud-picker,
+.meeting-date-range .mud-input-control,
+.filter-panel > .mud-picker,
+.filter-panel > .mud-input-control.mud-picker,
+.export-panel > .mud-picker,
+.export-panel > .mud-input-control.mud-picker,
+.quality-center-month-field .mud-picker,
+.quality-center-month-field .mud-input-control {
+    width: 180px !important;
+    min-width: 180px !important;
+    max-width: 180px !important;
+}
+
 .filter-panel .mud-input-control,
 .export-panel .mud-input-control,
 .article-filter-panel .mud-input-control,
@@ -450,11 +517,165 @@ textarea {
 
 .filter-action-bar,
 .case-filter-actions,
-.quality-center-filter-actions {
+.meeting-filter-actions,
+.quality-center-filter-actions,
+.quality-list-filter-actions {
     display: flex;
-    align-items: end;
+    align-items: flex-end;
     gap: 8px;
     height: 40px;
+}
+
+.filter-panel .mud-button-root,
+.export-panel .mud-button-root {
+    height: 40px;
+    min-height: 40px;
+}
+
+.filter-panel > *,
+.export-panel > *,
+.user-filter-panel > *,
+.article-filter-panel > *,
+.quality-center-filter-row > * {
+    align-self: end !important;
+}
+
+.filter-panel .mud-picker,
+.export-panel .mud-picker,
+.user-filter-panel .mud-picker,
+.article-filter-panel .mud-picker,
+.quality-center-filter .mud-picker,
+.quality-detail-filter .mud-picker,
+.filter-panel .mud-input-control,
+.export-panel .mud-input-control,
+.user-filter-panel .mud-input-control,
+.article-filter-panel .mud-input-control,
+.quality-center-filter .mud-input-control,
+.quality-detail-filter .mud-input-control {
+    height: 40px !important;
+    min-height: 40px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.filter-panel .mud-input-control-input-container,
+.filter-panel .mud-input,
+.export-panel .mud-input-control-input-container,
+.export-panel .mud-input,
+.user-filter-panel .mud-input-control-input-container,
+.user-filter-panel .mud-input,
+.article-filter-panel .mud-input-control-input-container,
+.article-filter-panel .mud-input,
+.quality-center-filter .mud-input-control-input-container,
+.quality-center-filter .mud-input,
+.quality-detail-filter .mud-input-control-input-container,
+.quality-detail-filter .mud-input {
+    height: 40px !important;
+    min-height: 40px !important;
+}
+
+.filter-panel .mud-input,
+.export-panel .mud-input,
+.user-filter-panel .mud-input,
+.article-filter-panel .mud-input,
+.quality-center-filter .mud-input,
+.quality-detail-filter .mud-input {
+    align-items: center !important;
+}
+
+.filter-panel .mud-input-root,
+.filter-panel .mud-select-input,
+.export-panel .mud-input-root,
+.export-panel .mud-select-input,
+.user-filter-panel .mud-input-root,
+.user-filter-panel .mud-select-input,
+.article-filter-panel .mud-input-root,
+.article-filter-panel .mud-select-input,
+.quality-center-filter .mud-input-root,
+.quality-center-filter .mud-select-input,
+.quality-detail-filter .mud-input-root,
+.quality-detail-filter .mud-select-input {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 38px !important;
+}
+
+.filter-panel .mud-input-adornment,
+.export-panel .mud-input-adornment,
+.user-filter-panel .mud-input-adornment,
+.article-filter-panel .mud-input-adornment,
+.quality-center-filter .mud-input-adornment,
+.quality-detail-filter .mud-input-adornment {
+    height: 38px !important;
+    margin-top: 0 !important;
+}
+
+.filter-panel .mud-input-outlined-border,
+.export-panel .mud-input-outlined-border,
+.user-filter-panel .mud-input-outlined-border,
+.article-filter-panel .mud-input-outlined-border,
+.quality-center-filter .mud-input-outlined-border,
+.quality-detail-filter .mud-input-outlined-border {
+    top: 0 !important;
+}
+
+.filter-panel .mud-input-label-outlined,
+.export-panel .mud-input-label-outlined,
+.user-filter-panel .mud-input-label-outlined,
+.article-filter-panel .mud-input-label-outlined,
+.quality-center-filter .mud-input-label-outlined,
+.quality-detail-filter .mud-input-label-outlined {
+    transform: translate(14px, -6px) scale(.75) !important;
+    transform-origin: top left !important;
+    padding: 0 4px !important;
+    background: var(--mcr-surface) !important;
+}
+
+.filter-panel .mud-input-label-outlined.mud-input-label-adorned-start,
+.export-panel .mud-input-label-outlined.mud-input-label-adorned-start,
+.user-filter-panel .mud-input-label-outlined.mud-input-label-adorned-start,
+.article-filter-panel .mud-input-label-outlined.mud-input-label-adorned-start,
+.quality-center-filter .mud-input-label-outlined.mud-input-label-adorned-start,
+.quality-detail-filter .mud-input-label-outlined.mud-input-label-adorned-start {
+    transform: translate(40px, -6px) scale(.75) !important;
+    transform-origin: top left !important;
+    padding: 0 4px !important;
+    background: var(--mcr-surface) !important;
+}
+
+.filter-panel .mud-input-label-outlined.mud-shrink,
+.export-panel .mud-input-label-outlined.mud-shrink,
+.user-filter-panel .mud-input-label-outlined.mud-shrink,
+.article-filter-panel .mud-input-label-outlined.mud-shrink,
+.quality-center-filter .mud-input-label-outlined.mud-shrink,
+.quality-detail-filter .mud-input-label-outlined.mud-shrink {
+    transform: translate(14px, -6px) scale(.75) !important;
+}
+
+.filter-panel .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.export-panel .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.user-filter-panel .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.article-filter-panel .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.quality-center-filter .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink,
+.quality-detail-filter .mud-input-label-outlined.mud-input-label-adorned-start.mud-shrink {
+    transform: translate(40px, -6px) scale(.75) !important;
+}
+
+.filter-panel .mud-button-root,
+.export-panel .mud-button-root,
+.filter-action-bar .mud-button-root,
+.case-filter-actions .mud-button-root,
+.meeting-filter-actions .mud-button-root,
+.quality-center-filter-actions .mud-button-root,
+.quality-list-filter-actions .mud-button-root,
+.quality-detail-filter .mud-button-root {
+    height: 40px !important;
+    min-height: 40px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    align-self: end !important;
 }
 
 .list-panel,

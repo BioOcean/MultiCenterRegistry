@@ -3,7 +3,7 @@
 }
 
 .meeting-filter-panel {
-    grid-template-columns: 240px 180px 180px 220px max-content;
+    grid-template-columns: 180px 386px 180px max-content !important;
 }
 
 .meeting-filter-actions {
@@ -74,6 +74,31 @@
 
 .meeting-filter-panel ::deep .mud-input-root-outlined {
     min-height: 40px;
+}
+
+.meeting-date-range {
+    display: grid;
+    grid-template-columns: 180px 10px 180px;
+    align-items: end;
+    gap: 8px;
+    width: 386px;
+    min-width: 386px;
+    max-width: 386px;
+}
+
+.meeting-date-range ::deep .mud-input-control {
+    width: 180px;
+    min-width: 180px;
+    max-width: 180px;
+}
+
+.meeting-date-separator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    color: var(--mcr-muted);
+    font-weight: 800;
 }
 
 .review-tabs {

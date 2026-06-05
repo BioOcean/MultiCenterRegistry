@@ -34,8 +34,20 @@
     @if (_showExportPanel)
     {
         <MudPaper Class="export-panel quality-export-panel" Elevation="0">
-            <MudTextField T="string" @bind-Value="_exportStartMonth" Label="开始月份" Placeholder="yyyy-MM" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
-            <MudTextField T="string" @bind-Value="_exportEndMonth" Label="结束月份" Placeholder="yyyy-MM" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+            <MudDatePicker @bind-Date="_exportStartMonth"
+                           Label="开始月份"
+                           Placeholder="开始月份"
+                           DateFormat="yyyy-MM"
+                           OpenTo="OpenTo.Month"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+            <MudDatePicker @bind-Date="_exportEndMonth"
+                           Label="结束月份"
+                           Placeholder="结束月份"
+                           DateFormat="yyyy-MM"
+                           OpenTo="OpenTo.Month"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
             <MudSelect T="string" @bind-Value="_exportHospitalId" Label="医院" Variant="Variant.Outlined" Margin="Margin.Dense">
                 <MudSelectItem T="string" Value="@("")">全部医院</MudSelectItem>
                 @foreach (var hospital in _hospitalOptions)
@@ -60,14 +72,13 @@
         <MudPaper Class="filter-panel quality-center-filter" Elevation="0">
             <div class="quality-center-filter-row">
                 <div class="quality-center-month-field">
-                    <MudTextField T="string"
-                                  @bind-Value="_monthValue"
-                                  Label="质控时间"
-                                  Placeholder="yyyy-MM"
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"
-                                  Immediate="true"
-                                  OnKeyDown="OnSearchKeyDown" />
+                    <MudDatePicker @bind-Date="_monthValue"
+                                   Label="质控时间"
+                                   Placeholder="质控时间"
+                                   DateFormat="yyyy-MM"
+                                   OpenTo="OpenTo.Month"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" />
                 </div>
                 <div class="quality-center-filter-actions">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Search" OnClick="SearchAsync">查询</MudButton>
@@ -103,14 +114,13 @@
                     <MudSelectItem T="string" Value="@template.Id">@template.Name</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField T="string"
-                          @bind-Value="_monthValue"
-                          Label="月份"
-                          Placeholder="yyyy-MM"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Immediate="true"
-                          OnKeyDown="OnSearchKeyDown" />
+            <MudDatePicker @bind-Date="_monthValue"
+                           Label="月份"
+                           Placeholder="月份"
+                           DateFormat="yyyy-MM"
+                           OpenTo="OpenTo.Month"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
             <MudSelect T="string" @bind-Value="_statusValue" Label="状态" Variant="Variant.Outlined" Margin="Margin.Dense">
                 <MudSelectItem T="string" Value="@("")">全部</MudSelectItem>
                 <MudSelectItem T="string" Value="@("0")">未填报</MudSelectItem>
@@ -354,10 +364,10 @@
     private string _keyword = "";
     private string _hospitalFilterValue = "";
     private string _templateFilterValue = "";
-    private string _monthValue = "";
+    private DateTime? _monthValue;
     private string _statusValue = "";
-    private string _exportStartMonth = "";
-    private string _exportEndMonth = "";
+    private DateTime? _exportStartMonth;
+    private DateTime? _exportEndMonth;
     private string _exportHospitalId = "";
     private string _exportTemplateId = "";
     private string _qualityDetailType = "";
@@ -387,9 +397,9 @@
         => !_selectedQualityMonth.HasValue ? "等待选择统计项" : $"共 {_qualityHospitalDetails.Count} 家";
 
     private bool CanExport
-        => DateTime.TryParse($"{_exportStartMonth.Trim()}-01", out var start)
-           && DateTime.TryParse($"{_exportEndMonth.Trim()}-01", out var end)
-           && start.Date <= end.Date;
+        => _exportStartMonth.HasValue
+           && _exportEndMonth.HasValue
+           && ToMonthStart(_exportStartMonth.Value) <= ToMonthStart(_exportEndMonth.Value);
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -409,7 +419,7 @@
         _keyword = "";
         _hospitalFilterValue = "";
         _templateFilterValue = "";
-        _monthValue = "";
+        _monthValue = null;
         _statusValue = "";
         _selectedQualityMonth = null;
         _qualityDetailType = "";
@@ -504,14 +514,9 @@
                 query = query.Where(x => x.Status == status);
             }
 
-            if (!string.IsNullOrWhiteSpace(_monthValue))
+            if (_monthValue.HasValue)
             {
-                if (!DateTime.TryParse($"{_monthValue.Trim()}-01", out var month))
-                {
-                    inj_snackbar.Add("月份格式不正确", Severity.Warning);
-                    return;
-                }
-
+                var month = ToMonthStart(_monthValue.Value);
                 var nextMonth = month.AddMonths(1);
                 query = query.Where(x => x.QualityDate >= month && x.QualityDate < nextMonth);
             }
@@ -602,15 +607,9 @@
         }
 
         var query = _registryContext.QualityReports.AsNoTracking();
-        if (!string.IsNullOrWhiteSpace(_monthValue))
+        if (_monthValue.HasValue)
         {
-            if (!DateTime.TryParse($"{_monthValue.Trim()}-01", out var month))
-            {
-                inj_snackbar.Add("质控时间格式不正确", Severity.Warning);
-                _qualityMonthSummaries.Clear();
-                return;
-            }
-
+            var month = ToMonthStart(_monthValue.Value);
             var nextMonth = month.AddMonths(1);
             query = query.Where(x => x.QualityDate >= month && x.QualityDate < nextMonth);
         }
@@ -621,9 +620,9 @@
             .Distinct()
             .OrderByDescending(x => x)
             .ToList();
-        if (months.Count == 0 && !string.IsNullOrWhiteSpace(_monthValue) && DateTime.TryParse($"{_monthValue.Trim()}-01", out var selectedMonth))
+        if (months.Count == 0 && _monthValue.HasValue)
         {
-            months.Add(new DateTime(selectedMonth.Year, selectedMonth.Month, 1));
+            months.Add(ToMonthStart(_monthValue.Value));
         }
 
         _qualityMonthSummaries.Clear();
@@ -809,13 +808,13 @@
         }
 
         var month = DateTime.Today;
-        if (!string.IsNullOrWhiteSpace(_monthValue) && DateTime.TryParse($"{_monthValue.Trim()}-01", out var parsed))
+        if (_monthValue.HasValue)
         {
-            month = parsed;
+            month = _monthValue.Value;
         }
 
-        _exportStartMonth = string.IsNullOrWhiteSpace(_exportStartMonth) ? month.ToString("yyyy-MM") : _exportStartMonth;
-        _exportEndMonth = string.IsNullOrWhiteSpace(_exportEndMonth) ? month.ToString("yyyy-MM") : _exportEndMonth;
+        _exportStartMonth ??= month;
+        _exportEndMonth ??= month;
         _exportHospitalId = string.IsNullOrWhiteSpace(_exportHospitalId) ? _hospitalFilterValue : _exportHospitalId;
         _exportTemplateId = string.IsNullOrWhiteSpace(_exportTemplateId) ? _templateFilterValue : _exportTemplateId;
     }
@@ -824,8 +823,8 @@
     {
         var parts = new List<string>
         {
-            $"start={Uri.EscapeDataString(_exportStartMonth.Trim())}",
-            $"end={Uri.EscapeDataString(_exportEndMonth.Trim())}"
+            $"start={Uri.EscapeDataString(FormatMonth(_exportStartMonth))}",
+            $"end={Uri.EscapeDataString(FormatMonth(_exportEndMonth))}"
         };
         if (!string.IsNullOrWhiteSpace(_exportHospitalId))
         {
@@ -858,12 +857,12 @@
         }
 
         var month = DateTime.Today;
-        if (!string.IsNullOrWhiteSpace(_monthValue) && !DateTime.TryParse($"{_monthValue.Trim()}-01", out month))
+        if (_monthValue.HasValue)
         {
-            month = DateTime.Today;
+            month = _monthValue.Value;
         }
 
-        month = new DateTime(month.Year, month.Month, 1);
+        month = ToMonthStart(month);
         var nextMonth = month.AddMonths(1);
         _summaryMonthText = month.ToString("yyyy-MM");
 
@@ -898,6 +897,10 @@
     private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static DateTime ToMonthStart(DateTime value) => new(value.Year, value.Month, 1);
+
+    private static string FormatMonth(DateTime? value) => value.HasValue ? ToMonthStart(value.Value).ToString("yyyy-MM") : "";
 
     private static string GetStatusText(int status)
         => status switch

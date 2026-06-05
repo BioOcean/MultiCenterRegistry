@@ -320,11 +320,64 @@
             value.UpdatedBy = CurrentUserId;
         }
 
+        await SyncCaseListFieldsAsync(values);
         _registryContext.OperationLogs.Add(CreateOperationLog("病例", "保存表单", "case", CaseId));
         await _registryContext.SaveChangesAsync();
         _isEditing = false;
         inj_snackbar.Add("病例表单已保存", Severity.Success);
         await LoadCaseAsync();
+    }
+
+    private async Task SyncCaseListFieldsAsync(List<RegistryFormFieldValue> values)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var registryCase = await _registryContext.Cases.FirstOrDefaultAsync(x => x.Id == CaseId);
+        if (registryCase == null)
+        {
+            return;
+        }
+
+        var sexValue = values.LastOrDefault(x => x.FieldName.Equals("性别", StringComparison.OrdinalIgnoreCase));
+        if (sexValue != null)
+        {
+            registryCase.PatientSexText = NormalizeFieldValue("性别", sexValue.FieldText, sexValue.FieldValue);
+        }
+
+        var surgeryValue = values.LastOrDefault(x => x.FieldName.Equals("手术类别", StringComparison.OrdinalIgnoreCase)
+                                                     || x.FieldName.Equals("手术类型", StringComparison.OrdinalIgnoreCase));
+        if (surgeryValue != null)
+        {
+            registryCase.SurgeryTypeValue = GetRawFieldValue(surgeryValue.FieldText, surgeryValue.FieldValue);
+            registryCase.SurgeryTypeText = NormalizeFieldValue(surgeryValue.FieldName, surgeryValue.FieldText, surgeryValue.FieldValue);
+        }
+
+        var surgeonValue = values.LastOrDefault(x => x.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase));
+        if (surgeonValue != null)
+        {
+            var operatorId = GetRawFieldValue(surgeonValue.FieldText, surgeonValue.FieldValue);
+            registryCase.OperatorId = string.IsNullOrWhiteSpace(operatorId) ? registryCase.OperatorId : operatorId;
+            registryCase.OperatorName = await GetUserDisplayNameAsync(operatorId) ?? operatorId;
+        }
+
+        registryCase.UpdatedAt = DateTime.Now;
+        registryCase.UpdatedBy = CurrentUserId;
+    }
+
+    private async Task<string?> GetUserDisplayNameAsync(string? userId)
+    {
+        if (_registryContext == null || !Guid.TryParse(userId, out var id))
+        {
+            return null;
+        }
+
+        return await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+            .FirstOrDefaultAsync();
     }
 
     private async Task SubmitCaseAsync()
@@ -540,6 +593,12 @@
         var value = FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue);
         return ShowValue(value);
     }
+
+    private static string NormalizeFieldValue(string fieldName, string? fieldText, string? fieldValue)
+        => FormValueDisplayMapper.GetDisplayText(fieldName, fieldText, fieldValue);
+
+    private static string GetRawFieldValue(string? fieldText, string? fieldValue)
+        => string.IsNullOrWhiteSpace(fieldText) ? fieldValue?.Trim() ?? "" : fieldText.Trim();
 
     private static string GetFileUrl(RegistryFile file, bool download)
         => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
