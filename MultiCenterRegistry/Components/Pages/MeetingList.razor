@@ -13,7 +13,6 @@
             @if (HasPermission(PermissionConstants.QualityManage))
             {
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateMeeting">新建会议</MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" Href="/exports/meetings.xlsx" Target="_blank">导出</MudButton>
             }
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadMeetingsAsync">刷新</MudButton>
         </div>

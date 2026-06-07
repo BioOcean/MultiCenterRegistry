@@ -10,6 +10,7 @@
 @using System.Security.Claims
 // Microsoft 相关
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Hosting
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
@@ -43,6 +44,7 @@
 @inject IDbContextFactory<RegistryDbContext> inj_registryDbContextFactory
 @inject IJSRuntime inj_jsRuntime
 @inject IConfiguration inj_configuration
+@inject IWebHostEnvironment inj_webHostEnvironment
 @inject ISnackbar inj_snackbar
 @inject IDialogService inj_dialogService
 @inject ILoggerFactory inj_loggerFactory

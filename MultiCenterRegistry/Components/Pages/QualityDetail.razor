@@ -13,7 +13,7 @@
         <MudSpacer />
         @if (_quality != null)
         {
-            <span class="status-pill">@GetStatusText(_quality.Status)</span>
+            <span class="status-pill @GetStatusClass(_quality.Status)">@GetStatusText(_quality.Status)</span>
         }
     </div>
 
@@ -61,7 +61,7 @@
             }
             @if (!_isPreview && _isEditing && HasPermission(PermissionConstants.QualityCreate))
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveFormsAsync">保存表单</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveItemsAsync">保存表单</MudButton>
             }
             @if (!_isPreview && (_quality.Status is 0 or 2) && HasPermission(PermissionConstants.QualityCreate))
             {
@@ -70,10 +70,6 @@
             @if (!_isPreview && _quality.Status == 1 && HasPermission(PermissionConstants.QualityManage))
             {
                 <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Reply" OnClick="RejectQualityAsync">驳回质控</MudButton>
-            }
-            @if (!_isPreview && HasPermission(PermissionConstants.QualityManage))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteQualityAsync">删除质控</MudButton>
             }
         </MudPaper>
 
@@ -96,63 +92,43 @@
             </MudPaper>
         }
 
-        @if (_forms.Count == 0)
-        {
-            <MudPaper Class="loading-panel" Elevation="0">该质控报表暂无表单数据</MudPaper>
-        }
-        else
-        {
-            @if (_forms.Count > 1)
+        <MudPaper Class="form-panel" Elevation="0">
+            <div class="panel-title">
+                <div>
+                    <h2>质控指标</h2>
+                    <div class="page-subtitle">@ShowValue(_quality.TemplateName)</div>
+                </div>
+                <span>@_items.Count 个指标</span>
+            </div>
+
+            @if (_items.Count == 0)
             {
-                <MudPaper Class="form-nav" Elevation="0">
-                    @foreach (var form in _forms)
-                    {
-                        <a href="@($"#{form.Anchor}")">@form.Name</a>
-                    }
-                </MudPaper>
+                <div class="empty-row">该质控报表暂无指标</div>
             }
-
-            @foreach (var form in _forms)
+            else
             {
-                <MudPaper id="@form.Anchor" Class="form-panel" Elevation="0">
-                    <div class="panel-title">
-                        <div>
-                            <h2>@form.Name</h2>
-                            <div class="page-subtitle">创建时间 @FormatDateTime(form.CreatedAt)</div>
-                        </div>
-                        <span>@form.Fields.Count 个字段</span>
-                    </div>
-
-                    <div class="field-grid">
-                        @foreach (var field in form.Fields)
-                        {
-                            if (field.IsSection)
+                <div class="field-grid">
+                    @foreach (var item in _items)
+                    {
+                        <div class="field-card">
+                            <div class="field-name">@item.MetricName</div>
+                            @if (_isEditing)
                             {
-                                <div class="section-title">@field.FieldName</div>
+                                <input class="quality-number-input"
+                                       type="number"
+                                       min="0"
+                                       value="@(item.CaseCount?.ToString(CultureInfo.InvariantCulture) ?? "")"
+                                       @onchange="@((ChangeEventArgs args) => item.CaseCount = ParseInt(args.Value?.ToString()))" />
                             }
                             else
                             {
-                                <div class="field-card">
-                                    <div class="field-name">@field.FieldName</div>
-                                    @if (_isEditing)
-                                    {
-                                        <MudTextField T="string"
-                                                      @bind-Value="field.EditValue"
-                                                      Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense"
-                                                      Lines="3" />
-                                    }
-                                    else
-                                    {
-                                        <div class="field-value">@GetDisplayValue(field)</div>
-                                    }
-                                </div>
+                                <div class="field-value">@ShowCount(item.CaseCount)</div>
                             }
-                        }
-                    </div>
-                </MudPaper>
+                        </div>
+                    }
+                </div>
             }
-        }
+        </MudPaper>
     }
 </MudContainer>
 
@@ -162,10 +138,7 @@
 
     private QualityReport? _quality;
     private readonly List<QualityReject> _rejects = [];
-    private readonly List<FormBlock> _forms = [];
-    private string? _templateName;
-    private string? _hospitalName;
-    private string? _qualityUserName;
+    private readonly List<QualityItemModel> _items = [];
     private bool _isLoading = true;
     private bool _isEditing;
     private bool _isPreview;
@@ -187,95 +160,23 @@
         {
             _quality = await _registryContext.QualityReports.AsNoTracking().FirstOrDefaultAsync(x => x.Id == QualityId);
             _rejects.Clear();
-            _forms.Clear();
+            _items.Clear();
             if (_quality == null)
             {
                 return;
             }
 
-            _templateName = await _registryContext.FormTemplateMaps.AsNoTracking()
-                .Where(x => x.BusinessType == "quality" && x.SourceFollowTemplateId == _quality.TemplateId)
-                .OrderBy(x => x.TemplateName)
-                .Select(x => x.TemplateName)
-                .FirstOrDefaultAsync();
-            _hospitalName = Guid.TryParse(_quality.HospitalId, out var hospitalId)
-                ? await _registryContext.SystemHospitals.AsNoTracking()
-                    .Where(x => x.Id == hospitalId)
-                    .Select(x => x.Name)
-                    .FirstOrDefaultAsync()
-                : _quality.HospitalId;
-            _qualityUserName = Guid.TryParse(_quality.QualityUserId, out var userId)
-                ? await _registryContext.SystemUsers.AsNoTracking()
-                    .Where(x => x.Id == userId)
-                    .Select(x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Account : x.DisplayName)
-                    .FirstOrDefaultAsync()
-                : _quality.QualityUserId;
-
-            var rejects = await _registryContext.QualityRejects.AsNoTracking()
+            _rejects.AddRange(await _registryContext.QualityRejects.AsNoTracking()
                 .Where(x => x.QualityReportId == QualityId)
                 .OrderByDescending(x => x.CreatedAt)
-                .ToListAsync();
-            _rejects.AddRange(rejects);
+                .ToListAsync());
 
-            var instances = await _registryContext.FormInstances.AsNoTracking()
-                .Where(x => x.OwnerType == "quality" && x.OwnerId == QualityId)
-                .OrderBy(x => x.CreatedAt)
-                .ToListAsync();
-            var instanceIds = instances.Select(x => x.Id).ToList();
-            if (instanceIds.Count == 0)
-            {
-                return;
-            }
-
-            var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
-            var templates = await _registryContext.FormTemplates.AsNoTracking()
-                .Where(x => templateIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id);
-
-            var values = await _registryContext.FormFieldValues.AsNoTracking()
-                .Where(x => instanceIds.Contains(x.FormInstanceId))
+            var items = await _registryContext.QualityReportItems.AsNoTracking()
+                .Where(x => x.QualityReportId == QualityId)
                 .OrderBy(x => x.Sort)
-                .ThenBy(x => x.StorageKey)
+                .ThenBy(x => x.MetricName)
                 .ToListAsync();
-
-            var definitionIds = values
-                .Where(x => x.FormFieldDefinitionId.HasValue)
-                .Select(x => x.FormFieldDefinitionId!.Value)
-                .Distinct()
-                .ToList();
-            var definitions = definitionIds.Count == 0
-                ? new Dictionary<Guid, RegistryFormFieldDefinition>()
-                : await _registryContext.FormFieldDefinitions.AsNoTracking()
-                    .Where(x => definitionIds.Contains(x.Id))
-                    .ToDictionaryAsync(x => x.Id);
-
-            foreach (var instance in instances)
-            {
-                var fields = values
-                    .Where(x => x.FormInstanceId == instance.Id)
-                    .Select(value =>
-                    {
-                        RegistryFormFieldDefinition? definition = null;
-                        if (value.FormFieldDefinitionId.HasValue)
-                        {
-                            definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
-                        }
-
-                        return new FieldItem(
-                            value.Id,
-                            value.FieldName,
-                            value.FieldValue,
-                            value.FieldText,
-                            definition?.Level ?? 2,
-                            value.Sort);
-                    })
-                    .ToList();
-
-                var name = templates.TryGetValue(instance.FormTemplateId, out var template)
-                    ? template.FormName
-                    : "质控表单";
-                _forms.Add(new FormBlock(instance.Id, name, instance.CreatedAt, fields));
-            }
+            _items.AddRange(items.Select(QualityItemModel.FromEntity));
         }
         finally
         {
@@ -302,28 +203,27 @@
     private void ToggleEdit()
     {
         _isEditing = !_isEditing;
-        foreach (var field in _forms.SelectMany(x => x.Fields))
+        if (!_isEditing)
         {
-            field.EditValue = string.IsNullOrWhiteSpace(field.FieldText) ? field.FieldValue : field.FieldText;
+            _ = LoadQualityAsync();
         }
     }
 
-    private async Task SaveFormsAsync()
+    private async Task SaveItemsAsync()
     {
         if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityCreate) || !await ConfirmAsync("确认保存当前质控表单修改？"))
         {
             return;
         }
 
-        var fields = _forms.SelectMany(x => x.Fields).ToList();
-        var ids = fields.Select(x => x.Id).ToList();
-        var values = await _registryContext.FormFieldValues.Where(x => ids.Contains(x.Id)).ToListAsync();
+        var ids = _items.Select(x => x.Id).ToList();
+        var values = await _registryContext.QualityReportItems.Where(x => ids.Contains(x.Id)).ToListAsync();
+        var now = ToDbTimestamp(DateTime.Now);
         foreach (var value in values)
         {
-            var field = fields.First(x => x.Id == value.Id);
-            value.FieldValue = field.EditValue;
-            value.FieldText = field.EditValue;
-            value.UpdatedAt = DateTime.Now;
+            var item = _items.First(x => x.Id == value.Id);
+            value.CaseCount = item.CaseCount;
+            value.UpdatedAt = now;
             value.UpdatedBy = CurrentUserId;
         }
 
@@ -347,11 +247,15 @@
             return;
         }
 
+        var now = ToDbTimestamp(DateTime.Now);
+        var userName = await GetCurrentUserNameAsync();
         await _registryContext.QualityReports.Where(x => x.Id == QualityId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, 1)
                 .SetProperty(x => x.QualityUserId, CurrentUserId)
-                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.QualityUserName, userName)
+                .SetProperty(x => x.SubmittedAt, now)
+                .SetProperty(x => x.UpdatedAt, now)
                 .SetProperty(x => x.UpdatedBy, CurrentUserId));
         _registryContext.OperationLogs.Add(CreateOperationLog("质控", "提交", "quality", QualityId));
         await _registryContext.SaveChangesAsync();
@@ -383,84 +287,23 @@
             return;
         }
 
+        var now = ToDbTimestamp(DateTime.Now);
         await _registryContext.QualityReports.Where(x => x.Id == QualityId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, 2)
-                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedAt, now)
                 .SetProperty(x => x.UpdatedBy, CurrentUserId));
         _registryContext.QualityRejects.Add(new QualityReject
         {
             QualityReportId = QualityId,
             Content = reason,
-            CreatedAt = DateTime.Now,
+            CreatedAt = now!.Value,
             CreatedBy = CurrentUserId
         });
         _registryContext.OperationLogs.Add(CreateOperationLog("质控", "驳回", "quality", QualityId, reason));
         await _registryContext.SaveChangesAsync();
         inj_snackbar.Add("质控已驳回", Severity.Success);
         await LoadQualityAsync();
-    }
-
-    private async Task DeleteQualityAsync()
-    {
-        if (_registryContext == null || _quality == null || !await RequirePermissionAsync(PermissionConstants.QualityManage))
-        {
-            return;
-        }
-
-        if (!await ConfirmAsync("确认删除该质控报表？表单、附件记录和驳回记录都会删除。"))
-        {
-            return;
-        }
-
-        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
-        var rejectIds = await _registryContext.QualityRejects.AsNoTracking()
-            .Where(x => x.QualityReportId == QualityId)
-            .Select(x => x.Id)
-            .ToListAsync();
-        await DeleteFormInstancesAsync("quality", new List<Guid> { QualityId });
-        await _registryContext.QualityRejects.Where(x => x.QualityReportId == QualityId).ExecuteDeleteAsync();
-
-        var targetIds = new List<Guid> { QualityId };
-        targetIds.AddRange(rejectIds);
-        await _registryContext.MigrationMaps.Where(x => targetIds.Contains(x.TargetId)).ExecuteDeleteAsync();
-        await _registryContext.QualityReports.Where(x => x.Id == QualityId).ExecuteDeleteAsync();
-
-        _registryContext.OperationLogs.Add(CreateOperationLog("质控", "删除", "quality", QualityId, _quality.Name));
-        await _registryContext.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        inj_snackbar.Add("质控报表已删除", Severity.Success);
-        inj_navigationManager.NavigateTo(RouteConstants.QualityList);
-    }
-
-    private async Task DeleteFormInstancesAsync(string ownerType, List<Guid> ownerIds)
-    {
-        if (_registryContext == null || ownerIds.Count == 0)
-        {
-            return;
-        }
-
-        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == ownerType && ownerIds.Contains(x.OwnerId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (instanceIds.Count == 0)
-        {
-            return;
-        }
-
-        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (valueIds.Count > 0)
-        {
-            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
-            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
-        }
-
-        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
     }
 
     private IEnumerable<SummaryItem> BuildSummaryItems()
@@ -471,21 +314,39 @@
         }
 
         yield return new("质控月份", FormatDate(_quality.QualityDate));
-        yield return new("疾病类型", _templateName ?? _quality.TemplateId);
-        yield return new("医院", _hospitalName ?? _quality.HospitalId);
-        yield return new("质控员", _qualityUserName ?? _quality.QualityUserId);
+        yield return new("疾病类型", _quality.TemplateName ?? RegistryFixedCatalog.GetDiseaseName(_quality.TemplateId));
+        yield return new("医院", _quality.HospitalName ?? _quality.HospitalId);
+        yield return new("质控员", _quality.QualityUserName ?? _quality.QualityUserId);
+        yield return new("提交时间", FormatDateTime(_quality.SubmittedAt));
         yield return new("创建时间", FormatDateTime(_quality.CreatedAt));
         yield return new("更新时间", FormatDateTime(_quality.UpdatedAt));
     }
 
-    private static string GetDisplayValue(FieldItem field)
-        => ShowValue(FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue));
+    private async Task<string?> GetCurrentUserNameAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId))
+        {
+            return null;
+        }
+
+        return await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+            .FirstOrDefaultAsync();
+    }
 
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string ShowCount(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "-";
+
+    private static int? ParseInt(string? value) => int.TryParse(value, out var result) ? Math.Max(0, result) : null;
 
     private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static DateTime? ToDbTimestamp(DateTime? value)
+        => value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified) : null;
 
     private static string GetStatusText(int status)
         => status switch
@@ -496,28 +357,33 @@
             _ => $"状态 {status}"
         };
 
+    private static string GetStatusClass(int status)
+        => status switch
+        {
+            0 => "status-draft",
+            1 => "status-submitted",
+            2 => "status-returned",
+            _ => "status-unknown"
+        };
+
     private sealed record SummaryItem(string Label, string? Value);
 
-    private sealed record FormBlock(Guid Id, string Name, DateTime CreatedAt, List<FieldItem> Fields)
+    private sealed class QualityItemModel
     {
-        public string Anchor => $"quality-form-{Id:N}";
-    }
+        public Guid Id { get; init; }
+        public string MetricCode { get; init; } = "";
+        public string MetricName { get; init; } = "";
+        public int? CaseCount { get; set; }
+        public int Sort { get; init; }
 
-    private sealed class FieldItem(
-        Guid id,
-        string fieldName,
-        string? fieldValue,
-        string? fieldText,
-        int level,
-        int sort)
-    {
-        public Guid Id { get; } = id;
-        public string FieldName { get; } = fieldName;
-        public string? FieldValue { get; set; } = fieldValue;
-        public string? FieldText { get; set; } = fieldText;
-        public string? EditValue { get; set; } = string.IsNullOrWhiteSpace(fieldText) ? fieldValue : fieldText;
-        public int Level { get; } = level;
-        public int Sort { get; } = sort;
-        public bool IsSection => Level <= 1;
+        public static QualityItemModel FromEntity(QualityReportItem item)
+            => new()
+            {
+                Id = item.Id,
+                MetricCode = item.MetricCode,
+                MetricName = item.MetricName,
+                CaseCount = item.CaseCount,
+                Sort = item.Sort
+            };
     }
 }

@@ -292,11 +292,6 @@
 
         if (removedExpertIds.Count > 0)
         {
-            var removedAppraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
-                .Where(x => x.MeetingId == meetingId && removedExpertIds.Contains(x.ExpertId))
-                .Select(x => x.Id)
-                .ToListAsync();
-            await DeleteAppraiseFormsAsync(removedAppraiseIds);
             await _registryContext.CaseVotes.Where(x => x.MeetingId == meetingId && x.CreatedBy != null && removedExpertIds.Contains(x.CreatedBy)).ExecuteDeleteAsync();
             await _registryContext.CaseAppraises.Where(x => x.MeetingId == meetingId && removedExpertIds.Contains(x.ExpertId)).ExecuteDeleteAsync();
         }
@@ -316,37 +311,11 @@
             return;
         }
 
-        var cases = await _registryContext.Cases.AsNoTracking()
-            .Where(x => caseIds.Contains(x.Id))
-            .ToListAsync();
-        var appraiseTemplateMaps = await _registryContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "appraise")
-            .ToListAsync();
-        var templateMapByDisease = appraiseTemplateMaps
-            .Where(x => !string.IsNullOrWhiteSpace(x.SourceFollowTemplateId))
-            .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-        var templateIds = cases
-            .Where(x => !string.IsNullOrWhiteSpace(x.DiseaseId) && templateMapByDisease.ContainsKey(x.DiseaseId))
-            .Select(x => templateMapByDisease[x.DiseaseId!].FormTemplateId)
-            .Distinct()
-            .ToList();
-        List<RegistryFormFieldDefinition> definitions = templateIds.Count == 0
-            ? []
-            : await _registryContext.FormFieldDefinitions.AsNoTracking()
-                .Where(x => templateIds.Contains(x.FormTemplateId))
-                .OrderBy(x => x.Sort)
-                .ThenBy(x => x.StorageKey)
-                .ToListAsync();
-        var definitionsByTemplate = definitions
-            .GroupBy(x => x.FormTemplateId)
-            .ToDictionary(x => x.Key, x => x.ToList());
-
         foreach (var expertId in addedExpertIds)
         {
-            foreach (var item in cases)
+            foreach (var caseId in caseIds)
             {
-                if (existingAppraises.Any(x => x.CaseId == item.Id && x.ExpertId.Equals(expertId, StringComparison.OrdinalIgnoreCase)))
+                if (existingAppraises.Any(x => x.CaseId == caseId && x.ExpertId.Equals(expertId, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -354,94 +323,13 @@
                 var appraise = new CaseAppraise
                 {
                     MeetingId = meetingId,
-                    CaseId = item.Id,
+                    CaseId = caseId,
                     ExpertId = expertId,
                     Status = 0,
                     CreatedAt = now
                 };
                 _registryContext.CaseAppraises.Add(appraise);
-
-                if (!string.IsNullOrWhiteSpace(item.DiseaseId) && templateMapByDisease.TryGetValue(item.DiseaseId, out var templateMap))
-                {
-                    AddAppraiseForm(appraise.Id, templateMap, definitionsByTemplate, now);
-                }
             }
-        }
-    }
-
-    private async Task DeleteAppraiseFormsAsync(List<Guid> appraiseIds)
-    {
-        if (_registryContext == null || appraiseIds.Count == 0)
-        {
-            return;
-        }
-
-        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == "appraise" && appraiseIds.Contains(x.OwnerId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (instanceIds.Count == 0)
-        {
-            return;
-        }
-
-        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (valueIds.Count > 0)
-        {
-            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
-            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
-        }
-
-        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
-    }
-
-    private void AddAppraiseForm(
-        Guid appraiseId,
-        RegistryFormTemplateMap templateMap,
-        IReadOnlyDictionary<Guid, List<RegistryFormFieldDefinition>> definitionsByTemplate,
-        DateTime now)
-    {
-        if (_registryContext == null)
-        {
-            return;
-        }
-
-        var instance = new RegistryFormInstance
-        {
-            OwnerType = "appraise",
-            OwnerId = appraiseId,
-            FormTemplateId = templateMap.FormTemplateId,
-            FormTemplateMapId = templateMap.Id,
-            SourceCustomFormId = templateMap.SourceCustomFormId,
-            SourceFollowTemplateId = templateMap.SourceFollowTemplateId,
-            Status = 0,
-            CreatedAt = now,
-            CreatedBy = CurrentUserId
-        };
-        _registryContext.FormInstances.Add(instance);
-
-        if (!definitionsByTemplate.TryGetValue(templateMap.FormTemplateId, out var definitions))
-        {
-            return;
-        }
-
-        foreach (var definition in definitions)
-        {
-            _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
-            {
-                FormInstanceId = instance.Id,
-                FormFieldDefinitionId = definition.Id,
-                StorageKey = definition.StorageKey,
-                SourceSubjectId = definition.SourceSubjectId,
-                FieldCode = definition.FieldCode,
-                FieldName = definition.FieldName,
-                Sort = definition.Sort,
-                CreatedAt = now,
-                CreatedBy = CurrentUserId
-            });
         }
     }
 }

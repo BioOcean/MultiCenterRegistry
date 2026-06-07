@@ -19,15 +19,8 @@ public static class FeatureCatalog
     public static readonly IReadOnlyList<FeatureItem> Items =
     [
         new(
-            "statistics",
-            "数据统计",
-            RouteConstants.Statistics,
-            Icons.Material.Filled.QueryStats,
-            [PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.QualityManage, PermissionConstants.DataStatistics],
-            ClinicalGroup),
-        new(
             "cases",
-            "病例填报与管理",
+            "病例管理",
             RouteConstants.CaseList,
             Icons.Material.Filled.Assignment,
             [
@@ -41,22 +34,15 @@ public static class FeatureCatalog
             ],
             ClinicalGroup),
         new(
-            "followups",
-            "随访消息",
-            RouteConstants.Followups,
-            Icons.Material.Filled.Notifications,
-            [PermissionConstants.CaseSubmit],
-            ClinicalGroup),
-        new(
             "quality",
-            "质控管理",
+            "数据报表",
             RouteConstants.QualityList,
             Icons.Material.Filled.FactCheck,
             [PermissionConstants.QualityCreate, PermissionConstants.QualityView, PermissionConstants.QualityManage],
             ClinicalGroup),
         new(
             "meetings",
-            "专家评审",
+            "评审会议",
             RouteConstants.MeetingList,
             Icons.Material.Filled.RateReview,
             [PermissionConstants.QualityManage, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView],
@@ -98,19 +84,19 @@ public static class FeatureCatalog
             return RouteConstants.QualityList;
         }
 
-        if (HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove))
+        if (IsHospitalQualityRole(permissionCodes) || IsOperatorRole(permissionCodes))
         {
             return RouteConstants.CaseList;
         }
 
-        if (HasAny(permissionCodes, PermissionConstants.QualityManage, PermissionConstants.DataStatistics))
-        {
-            return RouteConstants.Statistics;
-        }
-
-        if (HasAny(permissionCodes, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView))
+        if (IsAppraiseRole(permissionCodes))
         {
             return RouteConstants.MeetingList;
+        }
+
+        if (HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove))
+        {
+            return RouteConstants.CaseList;
         }
 
         if (HasAny(permissionCodes, PermissionConstants.MessageManager))
@@ -128,9 +114,10 @@ public static class FeatureCatalog
 
     public static List<FeatureItem> GetMenus(string path, IReadOnlyCollection<string> permissionCodes)
     {
-        if (!path.Equals(RouteConstants.Admin, StringComparison.OrdinalIgnoreCase)
-            && !path.StartsWith($"{RouteConstants.Admin}/", StringComparison.OrdinalIgnoreCase)
-            && IsQualityCenterRole(permissionCodes))
+        var isAdminPath = path.Equals(RouteConstants.Admin, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith($"{RouteConstants.Admin}/", StringComparison.OrdinalIgnoreCase);
+
+        if (!isAdminPath && IsQualityCenterRole(permissionCodes))
         {
             return
             [
@@ -154,6 +141,60 @@ public static class FeatureCatalog
                     RouteConstants.MeetingList,
                     Icons.Material.Filled.RateReview,
                     [PermissionConstants.QualityManage],
+                    ReviewGroup)
+            ];
+        }
+
+        if (!isAdminPath && IsHospitalQualityRole(permissionCodes))
+        {
+            return
+            [
+                new(
+                    "cases",
+                    "病例管理",
+                    RouteConstants.CaseList,
+                    Icons.Material.Filled.Assignment,
+                    [
+                        PermissionConstants.CaseApprove,
+                        PermissionConstants.CaseCreate,
+                        PermissionConstants.CaseEdit,
+                        PermissionConstants.CaseDelete
+                    ],
+                    ClinicalGroup),
+                new(
+                    "quality",
+                    "数据报表",
+                    RouteConstants.QualityList,
+                    Icons.Material.Filled.FactCheck,
+                    [PermissionConstants.QualityCreate],
+                    ClinicalGroup)
+            ];
+        }
+
+        if (!isAdminPath && IsOperatorRole(permissionCodes))
+        {
+            return
+            [
+                new(
+                    "cases",
+                    "病例管理",
+                    RouteConstants.CaseList,
+                    Icons.Material.Filled.Assignment,
+                    [PermissionConstants.CaseSubmit, PermissionConstants.CaseEdit],
+                    ClinicalGroup)
+            ];
+        }
+
+        if (!isAdminPath && IsAppraiseRole(permissionCodes))
+        {
+            return
+            [
+                new(
+                    "review-meetings",
+                    "评审会议",
+                    RouteConstants.MeetingList,
+                    Icons.Material.Filled.RateReview,
+                    [PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView],
                     ReviewGroup)
             ];
         }
@@ -191,16 +232,6 @@ public static class FeatureCatalog
             || path.Equals(RouteConstants.AdminPortal, StringComparison.OrdinalIgnoreCase))
         {
             return HasAny(permissionCodes, PermissionConstants.MessageManager);
-        }
-
-        if (path.Equals(RouteConstants.Statistics, StringComparison.OrdinalIgnoreCase))
-        {
-            return HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove, PermissionConstants.DataStatistics);
-        }
-
-        if (path.Equals(RouteConstants.Followups, StringComparison.OrdinalIgnoreCase))
-        {
-            return HasAny(permissionCodes, PermissionConstants.CaseSubmit);
         }
 
         if (path.Equals(RouteConstants.CaseList, StringComparison.OrdinalIgnoreCase))
@@ -265,4 +296,17 @@ public static class FeatureCatalog
     private static bool IsQualityCenterRole(IReadOnlyCollection<string> permissionCodes)
         => HasAny(permissionCodes, PermissionConstants.QualityManage)
            && !HasAny(permissionCodes, PermissionConstants.CaseSubmit, PermissionConstants.CaseApprove);
+
+    private static bool IsHospitalQualityRole(IReadOnlyCollection<string> permissionCodes)
+        => HasAny(permissionCodes, PermissionConstants.QualityCreate)
+           && HasAny(permissionCodes, PermissionConstants.CaseApprove)
+           && !HasAny(permissionCodes, PermissionConstants.QualityManage);
+
+    private static bool IsOperatorRole(IReadOnlyCollection<string> permissionCodes)
+        => HasAny(permissionCodes, PermissionConstants.CaseSubmit)
+           && !HasAny(permissionCodes, PermissionConstants.CaseApprove, PermissionConstants.QualityManage);
+
+    private static bool IsAppraiseRole(IReadOnlyCollection<string> permissionCodes)
+        => HasAny(permissionCodes, PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView)
+           && !HasAny(permissionCodes, PermissionConstants.QualityManage);
 }

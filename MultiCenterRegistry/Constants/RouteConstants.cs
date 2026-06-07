@@ -10,8 +10,6 @@ public static class RouteConstants
     public const string CaseList = "/cases";
     public const string QualityList = "/quality";
     public const string MeetingList = "/meetings";
-    public const string Statistics = "/statistics";
-    public const string Followups = "/followups";
     public const string Admin = "/admin";
     public const string AdminUsers = "/admin/users";
     public const string AdminArticles = "/admin/articles";

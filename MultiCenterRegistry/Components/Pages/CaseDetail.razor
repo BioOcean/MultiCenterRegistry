@@ -23,15 +23,9 @@
         @if (_case != null && CanShowCaseActions())
         {
             <div class="header-actions case-header-actions">
-                @if (HasPermission(PermissionConstants.CaseEdit))
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@(_isEditing ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" OnClick="ToggleEdit">
-                        @(_isEditing ? "取消编辑" : "编辑表单")
-                    </MudButton>
-                }
                 @if (_isEditing && HasPermission(PermissionConstants.CaseEdit))
                 {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveFormsAsync">保存表单</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveCaseAsync">保存表单</MudButton>
                 }
                 @if ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
                 {
@@ -46,7 +40,7 @@
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Reply" OnClick="@(() => RejectCaseAsync(1))">质控退回</MudButton>
                 }
-                @if (HasPermission(PermissionConstants.CaseDelete))
+                @if (CanDeleteCase)
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteCaseAsync">删除病例</MudButton>
                 }
@@ -61,183 +55,72 @@
             <span>正在加载病例详情</span>
         </MudPaper>
     }
-    else if (_case == null)
+    else if (_case == null || _edit == null)
     {
         <MudPaper Class="loading-panel" Elevation="0">未找到病例</MudPaper>
     }
     else
     {
-        @if (_advices.Count > 0)
-        {
-            <MudPaper Class="advice-panel" Elevation="0">
-                <div class="panel-title">
-                    <h2>审核意见</h2>
-                    <span>@_advices.Count 条</span>
-                </div>
-                <div class="advice-list">
-                    @foreach (var advice in _advices)
-                    {
-                        <div class="advice-item">
-                            <div>@ShowValue(advice.Content)</div>
-                            <span>@GetAdviceTypeText(advice.AdviceType) · @FormatDateTime(advice.CreatedAt)</span>
-                        </div>
-                    }
-                </div>
-            </MudPaper>
-        }
+        <div class="case-detail-scroll">
+            @if (_advices.Count > 0)
+            {
+                <MudPaper Class="advice-panel" Elevation="0">
+                    <div class="panel-title">
+                        <h2>审核意见</h2>
+                        <span>@_advices.Count 条</span>
+                    </div>
+                    <div class="advice-list">
+                        @foreach (var advice in _advices)
+                        {
+                            <div class="advice-item">
+                                <div>@ShowValue(advice.Content)</div>
+                                <span>@GetAdviceTypeText(advice.AdviceType) · @FormatDateTime(advice.CreatedAt)</span>
+                            </div>
+                        }
+                    </div>
+                </MudPaper>
+            }
 
-        @if (_sections.Count == 0)
-        {
-            <MudPaper Class="loading-panel" Elevation="0">该病例暂无表单数据</MudPaper>
-        }
-        else
-        {
             <div class="form-layout">
                 <nav class="form-nav">
                     <div class="form-nav-title">表单目录</div>
-                    @foreach (var formSection in _sections)
+                    @foreach (var navItem in _sections)
                     {
-                        var navFieldCount = GetVisibleFields(formSection).Count;
+                        var visibleFields = GetVisibleFields(navItem);
                         <button type="button"
                                 class="form-nav-link"
-                                title="@formSection.Title"
-                                @onclick="@(() => ScrollToSectionAsync(formSection.AnchorId))">
+                                title="@navItem.Title"
+                                @onclick="@(() => ScrollToSectionAsync(navItem.AnchorId))">
                             <span class="form-nav-dot"></span>
-                            <span class="form-nav-text">@formSection.Title</span>
-                            <span class="form-nav-count">@navFieldCount</span>
+                            <span class="form-nav-text">@navItem.Title</span>
+                            <span class="form-nav-count">@visibleFields.Count</span>
                         </button>
                     }
                 </nav>
+
                 <div class="form-content">
                     @foreach (var formSection in _sections)
                     {
                         var visibleFields = GetVisibleFields(formSection);
                         <MudPaper Class="form-section" Elevation="0">
-                            <button type="button" id="@formSection.AnchorId" class="section-header" @onclick="@(() => ToggleSection(formSection))">
+                            <button type="button" id="@formSection.AnchorId" class="section-header" @onclick="@(() => ToggleSection(formSection.AnchorId))">
                                 <span class="section-title">
                                     <span class="section-marker"></span>
                                     <span>@formSection.Title</span>
                                 </span>
                                 <span class="section-count">@visibleFields.Count 项</span>
-                                <MudIcon Icon="@(formSection.IsExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                                <MudIcon Icon="@GetSectionIcon(formSection.AnchorId)" Size="Size.Small" />
                             </button>
-
-                            @if (formSection.IsExpanded)
+                            @if (IsSectionExpanded(formSection.AnchorId))
                             {
                                 <div class="@GetSectionFieldsClass(formSection)">
-                                    @for (var fieldIndex = 0; fieldIndex < visibleFields.Count; fieldIndex++)
+                                    @foreach (var field in visibleFields)
                                     {
-                                        var field = visibleFields[fieldIndex];
-                                        <div class="@GetQuestionClass(formSection, field)">
-                                            <div class="question-title">
-                                                @if (HasFieldValue(field))
-                                                {
-                                                    <MudIcon Class="question-state"
-                                                             Icon="@Icons.Material.Filled.CheckCircle"
-                                                             Color="Color.Primary"
-                                                             Size="Size.Small" />
-                                                }
-                                                <label class="question-label">@field.FieldName</label>
-                                            </div>
-                                            <div class="question-control">
-                                                @if (field.IsFile)
-                                                {
-                                                    <div class="@GetFileFieldClass(field)">
-                                                        @if (field.Files.Count == 0)
-                                                        {
-                                                            <label class="@GetUploadButtonClass(field)">
-                                                                <MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />
-                                                                <span>上传图片</span>
-                                                                <InputFile class="file-input"
-                                                                           OnChange="@((InputFileChangeEventArgs args) => UploadFieldFileAsync(field, args))"
-                                                                           disabled="@IsFieldDisabled(field)" />
-                                                            </label>
-                                                        }
-                                                        else
-                                                        {
-                                                            <div class="file-preview">
-                                                                @if (GetFirstPreviewImage(field) is { } image)
-                                                                {
-                                                                    <a href="@GetFileUrl(image, false)" target="_blank" title="@image.FileName">
-                                                                        <img src="@GetFileUrl(image, false)" alt="@image.FileName" />
-                                                                    </a>
-                                                                }
-                                                                else if (field.Files.FirstOrDefault() is { } file)
-                                                                {
-                                                                    <a class="file-preview-file" href="@GetFileUrl(file, false)" target="_blank" title="@file.FileName">
-                                                                        <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" />
-                                                                        <span>@file.FileName</span>
-                                                                    </a>
-                                                                }
-                                                            </div>
-
-                                                            <div class="file-meta">
-                                                                <textarea class="form-textarea file-remark"
-                                                                          @bind="field.EditValue"
-                                                                          disabled="@IsFieldDisabled(field)"
-                                                                          rows="3"
-                                                                          placeholder="备注"></textarea>
-                                                                <div class="file-toolbar">
-                                                                    <label class="@GetUploadButtonClass(field)">
-                                                                        <MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />
-                                                                        <span>重新上传</span>
-                                                                        <InputFile class="file-input"
-                                                                                   OnChange="@((InputFileChangeEventArgs args) => UploadFieldFileAsync(field, args))"
-                                                                                   disabled="@IsFieldDisabled(field)" />
-                                                                    </label>
-                                                                    <span class="muted">@GetFileSummary(field)</span>
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                }
-                                                else if (IsSelectField(field))
-                                                {
-                                                    <select class="form-select"
-                                                            value="@GetSelectValue(field)"
-                                                            disabled="@IsFieldDisabled(field)"
-                                                            @onchange="@((ChangeEventArgs args) => SetFieldValue(field, args.Value?.ToString()))">
-                                                        <option value="">请选择</option>
-                                                        @foreach (var option in GetFieldOptions(field))
-                                                        {
-                                                            <option value="@option.Value">@option.Text</option>
-                                                        }
-                                                    </select>
-                                                }
-                                                else if (IsChoiceField(field))
-                                                {
-                                                    <div class="@GetChoiceTagsClass(field)">
-                                                        @foreach (var option in GetFieldOptions(field))
-                                                        {
-                                                            <button type="button"
-                                                                    class="@GetChoiceTagClass(field, option)"
-                                                                    disabled="@IsFieldDisabled(field)"
-                                                                    @onclick="@(() => SetChoiceValue(field, option.Value))">@option.Text</button>
-                                                        }
-                                                        @if (GetFieldOptions(field).Count == 0)
-                                                        {
-                                                            <span class="choice-tag disabled">未配置选项</span>
-                                                        }
-                                                    </div>
-                                                }
-                                                else if (IsLongTextField(field))
-                                                {
-                                                    <textarea class="form-textarea"
-                                                              @bind="field.EditValue"
-                                                              @bind:event="oninput"
-                                                              disabled="@IsFieldDisabled(field)"
-                                                              rows="@GetTextareaRows(field)"></textarea>
-                                                }
-                                                else
-                                                {
-                                                    <input class="@GetInputClass(field)"
-                                                           type="@GetInputType(field)"
-                                                           value="@GetInputValue(field)"
-                                                           disabled="@IsFieldDisabled(field)"
-                                                           @onchange="@((ChangeEventArgs args) => field.EditValue = args.Value?.ToString())" />
-                                                }
-                                                </div>
-                                            </div>
+                                        @FieldRow(field)
+                                    }
+                                    @if (NeedsGridFiller(visibleFields))
+                                    {
+                                        <div class="question-row filler" aria-hidden="true"></div>
                                     }
                                 </div>
                             }
@@ -245,7 +128,7 @@
                     }
                 </div>
             </div>
-        }
+        </div>
     }
 </div>
 
@@ -254,15 +137,53 @@
     public Guid CaseId { get; set; }
 
     private RegistryCase? _case;
+    private CaseEditModel? _edit;
     private readonly List<CaseAdvice> _advices = [];
-    private readonly List<SectionBlock> _sections = [];
+    private readonly List<RegistryFile> _files = [];
+    private readonly List<CaseFormSection> _sections = [];
+    private readonly List<FieldOption> _hospitalOptions = [];
     private readonly List<FieldOption> _operatorOptions = [];
+    private readonly HashSet<string> _expandedSections = new(StringComparer.OrdinalIgnoreCase);
     private bool _isLoading = true;
     private bool _isEditing;
 
+    private bool CanDeleteCase
+        => _case != null
+           && HasPermission(PermissionConstants.CaseDelete)
+           && _case.Status != 2
+           && (!IsHospitalQualityRole || string.Equals(_case.CreatedBy, CurrentUserId, StringComparison.OrdinalIgnoreCase));
+
+    private bool IsHospitalQualityRole
+        => HasPermission(PermissionConstants.CaseApprove)
+           && !HasPermission(PermissionConstants.QualityManage)
+           && !HasPermission(PermissionConstants.CaseSubmit);
+
     protected override async Task OnPageInitializedAsync()
     {
+        await LoadOptionsAsync();
         await LoadCaseAsync();
+    }
+
+    private async Task LoadOptionsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        _hospitalOptions.Clear();
+        _hospitalOptions.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => new FieldOption(x.Id.ToString(), x.Name))
+            .ToListAsync());
+
+        _operatorOptions.Clear();
+        _operatorOptions.AddRange(await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => x.IsValid)
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.Account)
+            .Select(x => new FieldOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName))
+            .ToListAsync());
     }
 
     private async Task LoadCaseAsync()
@@ -276,94 +197,28 @@
         try
         {
             _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
+            _edit = _case == null ? null : CaseEditModel.FromCase(_case);
+            _isEditing = CanEditCaseForm();
+
             _advices.Clear();
+            _files.Clear();
             _sections.Clear();
+            _expandedSections.Clear();
             if (_case == null)
             {
                 return;
             }
 
-            var advices = await _registryContext.CaseAdvices.AsNoTracking()
+            BuildCaseSections();
+
+            _advices.AddRange(await _registryContext.CaseAdvices.AsNoTracking()
                 .Where(x => x.CaseId == CaseId)
                 .OrderByDescending(x => x.CreatedAt)
-                .ToListAsync();
-            _advices.AddRange(advices);
-
-            var instances = await _registryContext.FormInstances.AsNoTracking()
+                .ToListAsync());
+            _files.AddRange(await _registryContext.Files.AsNoTracking()
                 .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
-                .OrderBy(x => x.CreatedAt)
-                .ToListAsync();
-            var instanceIds = instances.Select(x => x.Id).ToList();
-            if (instanceIds.Count == 0)
-            {
-                return;
-            }
-
-            var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
-            var templates = await _registryContext.FormTemplates.AsNoTracking()
-                .Where(x => templateIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id);
-
-            var values = await _registryContext.FormFieldValues.AsNoTracking()
-                .Where(x => instanceIds.Contains(x.FormInstanceId))
-                .OrderBy(x => x.Sort)
-                .ThenBy(x => x.StorageKey)
-                .ToListAsync();
-
-            var definitionIds = values
-                .Where(x => x.FormFieldDefinitionId.HasValue)
-                .Select(x => x.FormFieldDefinitionId!.Value)
-                .Distinct()
-                .ToList();
-            var definitions = definitionIds.Count == 0
-                ? new Dictionary<Guid, RegistryFormFieldDefinition>()
-                : await _registryContext.FormFieldDefinitions.AsNoTracking()
-                    .Where(x => definitionIds.Contains(x.Id))
-                    .ToDictionaryAsync(x => x.Id);
-
-            var valueIds = values.Select(x => x.Id).ToList();
-            var files = valueIds.Count == 0
-                ? []
-                : await _registryContext.Files.AsNoTracking()
-                    .Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId))
-                    .OrderBy(x => x.CreatedAt)
-                    .ThenBy(x => x.FileName)
-                    .ToListAsync();
-            var filesByValue = files
-                .GroupBy(x => x.OwnerId)
-                .ToDictionary(x => x.Key, x => x.ToList());
-
-            await LoadOperatorOptionsAsync();
-
-            foreach (var instance in instances)
-            {
-                var formValues = values.Where(x => x.FormInstanceId == instance.Id).ToList();
-                var fields = formValues.Select(value =>
-                {
-                    RegistryFormFieldDefinition? definition = null;
-                    if (value.FormFieldDefinitionId.HasValue)
-                    {
-                        definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
-                    }
-
-                    filesByValue.TryGetValue(value.Id, out var fieldFiles);
-                    return new FieldItem(
-                        value.Id,
-                        value.FieldName,
-                        value.FieldValue,
-                        value.FieldText,
-                        definition?.ControlType,
-                        definition?.Level ?? 2,
-                        value.Sort,
-                        definition?.DefaultOptions,
-                        fieldFiles ?? []);
-                }).ToList();
-
-                var name = templates.TryGetValue(instance.FormTemplateId, out var template)
-                    ? template.FormName
-                    : "病例表单";
-                AddSections(name, fields);
-            }
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync());
         }
         finally
         {
@@ -371,100 +226,174 @@
         }
     }
 
-    private void BackToList() => inj_navigationManager.NavigateTo(RouteConstants.CaseList);
-
-    private void ToggleEdit()
+    private void BuildCaseSections()
     {
-        _isEditing = !_isEditing;
-        foreach (var field in _sections.SelectMany(x => x.Fields))
+        var basicFields = new List<CaseFormField>
         {
-            field.EditValue = field.IsFile
-                ? GetFileRemark(field.FieldText, field.FieldValue)
-                : GetRawEditValue(field);
+            new("patient_number", "病案号"),
+            new("patient_name", "患者姓名"),
+            new("patient_sex", "性别"),
+            new("patient_age", "年龄"),
+            new("id_number", "身份证号码"),
+            new("department_name", "住院科室"),
+            new("admission_time", "入院时间"),
+            new("discharge_time", "出院时间"),
+            new("hospital_stay_days", "住院天数", true),
+            new("surgery_type", "手术类型", true),
+            new("operator", "术者"),
+            new("is_emergency_intervention", "是否急诊介入"),
+            new("death_time", "死亡时间"),
+            new("situation_reason", "情况说明/原因说明"),
+            new("situation_supplement", "补充说明", true),
+            new("discharge_mode", "离院方式")
+        };
+
+        if (GetDiseaseSpecificField() is { } diseaseSpecificField)
+        {
+            basicFields.Add(diseaseSpecificField);
         }
+
+        AddCaseSection("case-basic", "患者基本信息", basicFields);
+        AddCaseSection("case-summary", "病历摘要", [new("case_summary", "摘要内容", true)]);
+        AddCaseSection("case-discharge-diagnosis", "出院诊断", [new("discharge_diagnosis", "出院诊断", true)]);
+        AddCaseSection("case-lab-exam", "相关实验室检查", [new("lab_file", "化验单图片上传", true, true)]);
+        AddCaseSection("case-assist-exam", "主要辅助检查",
+        [
+            new("ecg_file", "心电图图片上传", true, true),
+            new("echo_file", "心脏彩超", true, true),
+            new("other_exam", "其他检查", true)
+        ]);
+        AddCaseSection("case-intervention", "介入诊疗情况",
+        [
+            new("angiography_result", "造影检查结果", true),
+            new("intervention_process", "介入经过", true)
+        ]);
+        AddCaseSection("case-rescue", "并发症救治情况", [new("rescue_process", "救治经过", true)]);
+        AddCaseSection("case-discussion", "并发症讨论结论",
+        [
+            new("complication_discussion", "是否组织医院或科室并发症讨论"),
+            new("occurrence_reason", "发生原因", true),
+            new("death_reason", "死亡原因", true),
+            new("lessons_learned", "经验教训", true),
+            new("improvement_measures", "改进措施", true)
+        ]);
     }
 
-    private async Task SaveFormsAsync()
+    private void AddCaseSection(string anchorId, string title, List<CaseFormField> fields)
     {
-        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.CaseEdit) || !await ConfirmAsync("确认保存当前病例表单修改？"))
+        _sections.Add(new CaseFormSection(title, anchorId, fields));
+        _expandedSections.Add(anchorId);
+    }
+
+    private CaseFormField? GetDiseaseSpecificField()
+    {
+        if (IsSameValue(_edit?.DiseaseId, "6237dd62-15b9-4676-972d-bf32476b3546"))
+        {
+            return new("coronary_intervention", "冠心病介入");
+        }
+
+        if (IsSameValue(_edit?.DiseaseId, "ae92e4fa-5e02-4d4c-a773-3dc79c4935bc"))
+        {
+            return new("ablation_intervention", "导管消融");
+        }
+
+        if (IsSameValue(_edit?.DiseaseId, "c1174c60-2ef2-45f6-85dd-5269b567f996"))
+        {
+            return new("structural_intervention", "结构性心脏病介入");
+        }
+
+        return null;
+    }
+
+    private void BackToList() => inj_navigationManager.NavigateTo(RouteConstants.CaseList);
+
+    private async Task SaveCaseAsync()
+    {
+        if (_registryContext == null || _edit == null || !await RequirePermissionAsync(PermissionConstants.CaseEdit))
         {
             return;
         }
 
-        var fields = _sections.SelectMany(x => x.Fields).ToList();
-        var ids = fields.Select(x => x.Id).ToList();
-        var values = await _registryContext.FormFieldValues.Where(x => ids.Contains(x.Id)).ToListAsync();
-        foreach (var value in values)
+        if (!CanEditCaseForm())
         {
-            var field = fields.First(x => x.Id == value.Id);
-            if (!field.IsFile)
-            {
-                value.FieldValue = field.EditValue;
-            }
-
-            value.FieldText = field.EditValue;
-            value.UpdatedAt = DateTime.Now;
-            value.UpdatedBy = CurrentUserId;
+            inj_snackbar.Add("当前病例状态不能编辑表单", Severity.Warning);
+            return;
         }
 
-        await SyncCaseListFieldsAsync(values);
+        if (string.IsNullOrWhiteSpace(_edit.PatientNumber) || string.IsNullOrWhiteSpace(_edit.DiseaseId))
+        {
+            inj_snackbar.Add("请填写病案号和手术类型", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认保存当前病例表单修改？"))
+        {
+            return;
+        }
+
+        var item = await _registryContext.Cases.FirstOrDefaultAsync(x => x.Id == CaseId);
+        if (item == null)
+        {
+            inj_snackbar.Add("病例不存在", Severity.Warning);
+            return;
+        }
+
+        ApplyEdit(item, _edit);
+        item.UpdatedAt = ToDbTimestamp(DateTime.Now);
+        item.UpdatedBy = CurrentUserId;
+
         _registryContext.OperationLogs.Add(CreateOperationLog("病例", "保存表单", "case", CaseId));
         await _registryContext.SaveChangesAsync();
-        _isEditing = false;
+        _isEditing = CanEditCaseForm();
         inj_snackbar.Add("病例表单已保存", Severity.Success);
         await LoadCaseAsync();
     }
 
-    private async Task SyncCaseListFieldsAsync(List<RegistryFormFieldValue> values)
+    private void ApplyEdit(RegistryCase item, CaseEditModel edit)
     {
-        if (_registryContext == null)
+        item.PatientName = edit.PatientName.Trim();
+        item.PatientNumber = EmptyToNull(edit.PatientNumber);
+        item.PatientSex = EmptyToNull(edit.PatientSex);
+        item.PatientSexText = RegistryFixedCatalog.GetSexName(edit.PatientSex);
+        item.PatientAge = EmptyToNull(edit.PatientAge);
+        item.IdNumber = EmptyToNull(edit.IdNumber);
+        item.DiseaseId = EmptyToNull(edit.DiseaseId);
+        item.DiseaseName = RegistryFixedCatalog.GetDiseaseName(edit.DiseaseId);
+        item.SurgeryTypeValue = EmptyToNull(edit.DiseaseId);
+        item.SurgeryTypeText = RegistryFixedCatalog.GetDiseaseName(edit.DiseaseId);
+        item.HospitalId = EmptyToNull(edit.HospitalId);
+        item.HospitalName = _hospitalOptions.FirstOrDefault(x => IsSameValue(x.Value, edit.HospitalId))?.Text;
+        item.DepartmentName = EmptyToNull(edit.DepartmentName);
+        item.OperatorId = EmptyToNull(edit.OperatorId);
+        item.OperatorName = _operatorOptions.FirstOrDefault(x => IsSameValue(x.Value, edit.OperatorId))?.Text;
+        item.AdmissionTime = ToDbTimestamp(edit.AdmissionTime);
+        item.DischargeTime = ToDbTimestamp(edit.DischargeTime);
+        item.OperationTime = ToDbTimestamp(edit.OperationTime);
+        item.HospitalStayDays = edit.HospitalStayDays;
+        if (!item.HospitalStayDays.HasValue && item.AdmissionTime.HasValue && item.DischargeTime.HasValue)
         {
-            return;
+            item.HospitalStayDays = Math.Max(0, (int)(item.DischargeTime.Value.Date - item.AdmissionTime.Value.Date).TotalDays);
         }
 
-        var registryCase = await _registryContext.Cases.FirstOrDefaultAsync(x => x.Id == CaseId);
-        if (registryCase == null)
-        {
-            return;
-        }
-
-        var sexValue = values.LastOrDefault(x => x.FieldName.Equals("性别", StringComparison.OrdinalIgnoreCase));
-        if (sexValue != null)
-        {
-            registryCase.PatientSexText = NormalizeFieldValue("性别", sexValue.FieldText, sexValue.FieldValue);
-        }
-
-        var surgeryValue = values.LastOrDefault(x => x.FieldName.Equals("手术类别", StringComparison.OrdinalIgnoreCase)
-                                                     || x.FieldName.Equals("手术类型", StringComparison.OrdinalIgnoreCase));
-        if (surgeryValue != null)
-        {
-            registryCase.SurgeryTypeValue = GetRawFieldValue(surgeryValue.FieldText, surgeryValue.FieldValue);
-            registryCase.SurgeryTypeText = NormalizeFieldValue(surgeryValue.FieldName, surgeryValue.FieldText, surgeryValue.FieldValue);
-        }
-
-        var surgeonValue = values.LastOrDefault(x => x.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase));
-        if (surgeonValue != null)
-        {
-            var operatorId = GetRawFieldValue(surgeonValue.FieldText, surgeonValue.FieldValue);
-            registryCase.OperatorId = string.IsNullOrWhiteSpace(operatorId) ? registryCase.OperatorId : operatorId;
-            registryCase.OperatorName = await GetUserDisplayNameAsync(operatorId) ?? operatorId;
-        }
-
-        registryCase.UpdatedAt = DateTime.Now;
-        registryCase.UpdatedBy = CurrentUserId;
-    }
-
-    private async Task<string?> GetUserDisplayNameAsync(string? userId)
-    {
-        if (_registryContext == null || !Guid.TryParse(userId, out var id))
-        {
-            return null;
-        }
-
-        return await _registryContext.SystemUsers.AsNoTracking()
-            .Where(x => x.Id == id)
-            .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
-            .FirstOrDefaultAsync();
+        item.CoronaryIntervention = EmptyToNull(edit.CoronaryIntervention);
+        item.AblationIntervention = EmptyToNull(edit.AblationIntervention);
+        item.StructuralIntervention = EmptyToNull(edit.StructuralIntervention);
+        item.IsEmergencyIntervention = EmptyToNull(edit.IsEmergencyIntervention);
+        item.DischargeMode = EmptyToNull(edit.DischargeMode);
+        item.SituationReason = EmptyToNull(edit.SituationReason);
+        item.SituationSupplement = ShouldShowSituationSupplement(edit) ? EmptyToNull(edit.SituationSupplement) : null;
+        item.DeathTime = ShouldShowDeathTime(edit) ? ToDbTimestamp(edit.DeathTime) : null;
+        item.CaseSummary = EmptyToNull(edit.CaseSummary);
+        item.DischargeDiagnosis = EmptyToNull(edit.DischargeDiagnosis);
+        item.OtherExam = EmptyToNull(edit.OtherExam);
+        item.AngiographyResult = EmptyToNull(edit.AngiographyResult);
+        item.InterventionProcess = EmptyToNull(edit.InterventionProcess);
+        item.RescueProcess = EmptyToNull(edit.RescueProcess);
+        item.ComplicationDiscussion = EmptyToNull(edit.ComplicationDiscussion);
+        item.OccurrenceReason = ShouldShowDiscussionFollowup(edit) ? EmptyToNull(edit.OccurrenceReason) : null;
+        item.DeathReason = ShouldShowDiscussionFollowup(edit) ? EmptyToNull(edit.DeathReason) : null;
+        item.LessonsLearned = ShouldShowDiscussionFollowup(edit) ? EmptyToNull(edit.LessonsLearned) : null;
+        item.ImprovementMeasures = ShouldShowDiscussionFollowup(edit) ? EmptyToNull(edit.ImprovementMeasures) : null;
     }
 
     private async Task SubmitCaseAsync()
@@ -483,7 +412,7 @@
         await _registryContext.Cases.Where(x => x.Id == CaseId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, 0)
-                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedAt, ToDbTimestamp(DateTime.Now))
                 .SetProperty(x => x.UpdatedBy, CurrentUserId));
         _registryContext.OperationLogs.Add(CreateOperationLog("病例", "提交审核", "case", CaseId));
         await _registryContext.SaveChangesAsync();
@@ -508,7 +437,7 @@
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, 2)
                 .SetProperty(x => x.SubStatus, 0)
-                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedAt, ToDbTimestamp(DateTime.Now))
                 .SetProperty(x => x.UpdatedBy, CurrentUserId));
         _registryContext.OperationLogs.Add(CreateOperationLog("病例", "审核通过", "case", CaseId));
         await _registryContext.SaveChangesAsync();
@@ -540,7 +469,7 @@
             await _registryContext.Cases.Where(x => x.Id == CaseId)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.Status, 4)
-                    .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                    .SetProperty(x => x.UpdatedAt, ToDbTimestamp(DateTime.Now))
                     .SetProperty(x => x.UpdatedBy, CurrentUserId));
         }
         else if (type == 1 && _case.Status == 2)
@@ -549,7 +478,7 @@
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.Status, 1)
                     .SetProperty(x => x.SubStatus, -1)
-                    .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                    .SetProperty(x => x.UpdatedAt, ToDbTimestamp(DateTime.Now))
                     .SetProperty(x => x.UpdatedBy, CurrentUserId));
         }
         else
@@ -563,7 +492,7 @@
             CaseId = CaseId,
             AdviceType = type,
             Content = advice,
-            CreatedAt = DateTime.Now,
+            CreatedAt = ToDbTimestamp(DateTime.Now)!.Value,
             CreatedBy = CurrentUserId
         });
         _registryContext.OperationLogs.Add(CreateOperationLog("病例", type == 0 ? "审核不通过" : "质控退回", "case", CaseId, advice));
@@ -579,7 +508,19 @@
             return;
         }
 
-        if (!await ConfirmAsync("确认删除该病例？病例表单、附件记录、意见、评审、汇总和投票都会删除。"))
+        if (_case.Status == 2)
+        {
+            inj_snackbar.Add("已上报病例不能删除", Severity.Warning);
+            return;
+        }
+
+        if (IsHospitalQualityRole && !string.Equals(_case.CreatedBy, CurrentUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            inj_snackbar.Add("医院质控员只能删除自己创建的病例", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync("确认删除该病例？病例附件、意见、评审、汇总和投票都会删除。"))
         {
             return;
         }
@@ -602,13 +543,11 @@
             .Select(x => x.Id)
             .ToListAsync();
 
-        await DeleteFormInstancesAsync("appraise", appraiseIds);
-        await DeleteFormInstancesAsync("case", new List<Guid> { CaseId });
         await _registryContext.CaseVotes.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
         await _registryContext.CaseSummaries.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
         await _registryContext.CaseAppraises.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
         await _registryContext.CaseAdvices.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
-        await _registryContext.CaseFormData.Where(x => x.CaseId == CaseId).ExecuteDeleteAsync();
+        await _registryContext.Files.Where(x => x.OwnerType == "case" && x.OwnerId == CaseId).ExecuteDeleteAsync();
 
         var targetIds = new List<Guid> { CaseId };
         targetIds.AddRange(appraiseIds);
@@ -626,201 +565,464 @@
         inj_navigationManager.NavigateTo(RouteConstants.CaseList);
     }
 
-    private async Task DeleteFormInstancesAsync(string ownerType, List<Guid> ownerIds)
+    private RenderFragment FieldRow(CaseFormField field) => builder =>
     {
-        if (_registryContext == null || ownerIds.Count == 0)
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", GetQuestionClass(field));
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "question-title");
+        if (HasCaseFieldValue(field))
+        {
+            builder.OpenComponent<MudIcon>(4);
+            builder.AddAttribute(5, "Class", "question-state");
+            builder.AddAttribute(6, "Icon", Icons.Material.Filled.CheckCircle);
+            builder.AddAttribute(7, "Color", Color.Success);
+            builder.AddAttribute(8, "Size", Size.Small);
+            builder.CloseComponent();
+        }
+
+        builder.OpenElement(9, "label");
+        builder.AddAttribute(10, "class", "question-label");
+        builder.AddContent(11, field.Title);
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.OpenElement(12, "div");
+        builder.AddAttribute(13, "class", "question-control");
+        builder.AddContent(14, RenderCaseField(field));
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment FieldRow(string title, RenderFragment child, bool fullRow = false) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", _isEditing
+            ? fullRow ? "question-row full-row" : "question-row"
+            : fullRow ? "question-row full-row is-disabled" : "question-row is-disabled");
+        builder.OpenElement(2, "div");
+        builder.AddAttribute(3, "class", "question-title");
+        builder.OpenElement(4, "label");
+        builder.AddAttribute(5, "class", "question-label");
+        builder.AddContent(6, title);
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.OpenElement(7, "div");
+        builder.AddAttribute(8, "class", "question-control");
+        builder.AddContent(9, child);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private RenderFragment RenderCaseField(CaseFormField field)
+        => field.Key switch
+        {
+            "patient_number" => TextInput(_edit?.PatientNumber, value => _edit!.PatientNumber = value),
+            "patient_name" => TextInput(_edit?.PatientName, value => _edit!.PatientName = value ?? ""),
+            "patient_sex" => ChoiceField(RegistryFixedCatalog.SexOptions, _edit?.PatientSex, value => _edit!.PatientSex = value),
+            "patient_age" => TextInput(_edit?.PatientAge, value => _edit!.PatientAge = value),
+            "id_number" => TextInput(_edit?.IdNumber, value => _edit!.IdNumber = value),
+            "department_name" => TextInput(_edit?.DepartmentName, value => _edit!.DepartmentName = value),
+            "admission_time" => DateInput(_edit?.AdmissionTime, value => _edit!.AdmissionTime = value),
+            "discharge_time" => DateInput(_edit?.DischargeTime, value => _edit!.DischargeTime = value),
+            "hospital_stay_days" => NumberInput(_edit?.HospitalStayDays, value => _edit!.HospitalStayDays = value),
+            "surgery_type" => ChoiceField(RegistryFixedCatalog.Diseases, _edit?.DiseaseId, SetDisease),
+            "operator" => OperatorField(),
+            "is_emergency_intervention" => ChoiceField(RegistryFixedCatalog.YesNoOptions, _edit?.IsEmergencyIntervention, value => _edit!.IsEmergencyIntervention = value),
+            "death_time" => DateInput(_edit?.DeathTime, value => _edit!.DeathTime = value),
+            "situation_reason" => SelectField(RegistryFixedCatalog.SituationReasons, _edit?.SituationReason, value => _edit!.SituationReason = value),
+            "situation_supplement" => LongTextInput(_edit?.SituationSupplement, value => _edit!.SituationSupplement = value),
+            "discharge_mode" => SelectField(RegistryFixedCatalog.DischargeModes, _edit?.DischargeMode, value => _edit!.DischargeMode = value),
+            "coronary_intervention" => ChoiceField(RegistryFixedCatalog.CoronaryOptions, _edit?.CoronaryIntervention, value => _edit!.CoronaryIntervention = value),
+            "ablation_intervention" => TextInput(_edit?.AblationIntervention, value => _edit!.AblationIntervention = value),
+            "structural_intervention" => TextInput(_edit?.StructuralIntervention, value => _edit!.StructuralIntervention = value),
+            "case_summary" => LongTextInput(_edit?.CaseSummary, value => _edit!.CaseSummary = value),
+            "discharge_diagnosis" => LongTextInput(_edit?.DischargeDiagnosis, value => _edit!.DischargeDiagnosis = value),
+            "other_exam" => LongTextInput(_edit?.OtherExam, value => _edit!.OtherExam = value),
+            "angiography_result" => LongTextInput(_edit?.AngiographyResult, value => _edit!.AngiographyResult = value),
+            "intervention_process" => LongTextInput(_edit?.InterventionProcess, value => _edit!.InterventionProcess = value),
+            "rescue_process" => LongTextInput(_edit?.RescueProcess, value => _edit!.RescueProcess = value),
+            "complication_discussion" => ChoiceField(RegistryFixedCatalog.YesNoOptions, _edit?.ComplicationDiscussion, value => _edit!.ComplicationDiscussion = value),
+            "occurrence_reason" => LongTextInput(_edit?.OccurrenceReason, value => _edit!.OccurrenceReason = value),
+            "death_reason" => LongTextInput(_edit?.DeathReason, value => _edit!.DeathReason = value),
+            "lessons_learned" => LongTextInput(_edit?.LessonsLearned, value => _edit!.LessonsLearned = value),
+            "improvement_measures" => LongTextInput(_edit?.ImprovementMeasures, value => _edit!.ImprovementMeasures = value),
+            _ when field.IsFile => FileField(field),
+            _ => TextInput(null, _ => { })
+        };
+
+    private RenderFragment FileField(CaseFormField field) => builder =>
+    {
+        var files = GetFilesForField(field.Key);
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", files.Count == 0 ? "file-field empty" : "file-field has-file");
+        if (files.Count == 0)
+        {
+            builder.AddContent(2, FileUploadButton(field.Key, "上传图片"));
+        }
+        else
+        {
+            var file = files[0];
+            builder.OpenElement(2, "div");
+            builder.AddAttribute(3, "class", "file-preview");
+            if (IsImageFile(file))
+            {
+                builder.OpenElement(4, "a");
+                builder.AddAttribute(5, "href", GetFileUrl(file, false));
+                builder.AddAttribute(6, "target", "_blank");
+                builder.OpenElement(7, "img");
+                builder.AddAttribute(8, "src", GetFileUrl(file, false));
+                builder.AddAttribute(9, "alt", file.FileName);
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.OpenElement(4, "a");
+                builder.AddAttribute(5, "class", "file-preview-file");
+                builder.AddAttribute(6, "href", GetFileUrl(file, true));
+                builder.AddAttribute(7, "target", "_blank");
+                builder.OpenComponent<MudIcon>(8);
+                builder.AddAttribute(9, "Icon", Icons.Material.Filled.InsertDriveFile);
+                builder.AddAttribute(10, "Size", Size.Small);
+                builder.CloseComponent();
+                builder.OpenElement(11, "span");
+                builder.AddContent(12, file.FileName);
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+            builder.OpenElement(13, "div");
+            builder.AddAttribute(14, "class", "file-meta");
+            builder.OpenElement(15, "textarea");
+            builder.AddAttribute(16, "class", "form-textarea file-remark");
+            builder.AddAttribute(17, "placeholder", "备注");
+            builder.AddAttribute(18, "disabled", true);
+            builder.CloseElement();
+            builder.OpenElement(19, "div");
+            builder.AddAttribute(20, "class", "file-toolbar");
+            builder.AddContent(21, FileUploadButton(field.Key, "重新上传"));
+            builder.OpenElement(22, "a");
+            builder.AddAttribute(23, "class", "file-link");
+            builder.AddAttribute(24, "href", GetFileUrl(file, true));
+            builder.AddContent(25, file.FileName);
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private RenderFragment FileUploadButton(string fieldKey, string text) => builder =>
+    {
+        builder.OpenElement(0, "label");
+        builder.AddAttribute(1, "class", _isEditing ? "file-upload-button" : "file-upload-button disabled");
+        builder.OpenComponent<MudIcon>(2);
+        builder.AddAttribute(3, "Icon", Icons.Material.Filled.UploadFile);
+        builder.AddAttribute(4, "Size", Size.Small);
+        builder.CloseComponent();
+        builder.OpenElement(5, "span");
+        builder.AddContent(6, text);
+        builder.CloseElement();
+        builder.OpenComponent<InputFile>(7);
+        builder.AddAttribute(8, "class", "file-input");
+        builder.AddAttribute(9, "accept", "image/*");
+        builder.AddAttribute(10, "disabled", !_isEditing);
+        builder.AddAttribute(11, "OnChange", EventCallback.Factory.Create<InputFileChangeEventArgs>(this, args => UploadCaseFileAsync(fieldKey, args)));
+        builder.CloseComponent();
+        builder.CloseElement();
+    };
+
+    private List<RegistryFile> GetFilesForField(string fieldKey)
+        => _files
+            .Where(x => x.FilePath.Contains($"/{fieldKey}/", StringComparison.OrdinalIgnoreCase)
+                        || x.FilePath.Contains($"\\{fieldKey}\\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private static bool IsImageFile(RegistryFile file)
+        => file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
+           || IsImageExtension(Path.GetExtension(file.FileName));
+
+    private static bool IsImageExtension(string? extension)
+        => extension?.ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp";
+
+    private string GetFileUrl(RegistryFile file, bool download)
+        => $"{inj_navigationManager.BaseUri.TrimEnd('/')}/files/{file.Id}?download={download.ToString().ToLowerInvariant()}";
+
+    private async Task UploadCaseFileAsync(string fieldKey, InputFileChangeEventArgs args)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.CaseEdit))
         {
             return;
         }
 
-        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == ownerType && ownerIds.Contains(x.OwnerId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (instanceIds.Count == 0)
+        var file = args.File;
+        if (!IsImageFile(file.Name, file.ContentType))
         {
+            inj_snackbar.Add("请选择图片文件", Severity.Warning);
             return;
         }
 
-        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (valueIds.Count > 0)
+        const long maxFileSize = 50 * 1024 * 1024;
+        var uploadRoot = inj_configuration["FileStorage:UploadRoot"] ?? "FileStorage\\upload";
+        var rootPath = ResolveStorageRoot(uploadRoot);
+        var relativeDirectory = Path.Combine("cases", CaseId.ToString("N"), fieldKey);
+        var directory = Path.Combine(rootPath, relativeDirectory);
+        Directory.CreateDirectory(directory);
+
+        var extension = Path.GetExtension(file.Name);
+        if (string.IsNullOrWhiteSpace(extension))
         {
-            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
-            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
+            extension = ".img";
         }
 
-        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
+        var storedName = $"{Guid.NewGuid():N}{extension}";
+        var fullPath = Path.Combine(directory, storedName);
+        await using (var source = file.OpenReadStream(maxFileSize))
+        await using (var target = File.Create(fullPath))
+        {
+            await source.CopyToAsync(target);
+        }
+
+        _registryContext.Files.Add(new RegistryFile
+        {
+            OwnerType = "case",
+            OwnerId = CaseId,
+            FileName = SanitizeFileName(file.Name),
+            FilePath = NormalizeFilePath($"upload/{relativeDirectory}/{storedName}"),
+            ContentType = file.ContentType,
+            FileSize = file.Size,
+            CreatedAt = ToDbTimestamp(DateTime.Now)!.Value,
+            CreatedBy = CurrentUserId
+        });
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "上传图片", "case", CaseId, fieldKey));
+        await _registryContext.SaveChangesAsync();
+        await LoadCaseFilesAsync();
+        inj_snackbar.Add("图片已上传", Severity.Success);
     }
 
-    private void AddSections(string fallbackName, List<FieldItem> fields)
+    private static bool IsImageFile(string fileName, string? contentType)
+        => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
+           || IsImageExtension(Path.GetExtension(fileName));
+
+    private string ResolveStorageRoot(string root)
+        => Path.GetFullPath(Path.IsPathRooted(root) ? root : Path.Combine(inj_webHostEnvironment.ContentRootPath, root));
+
+    private static string NormalizeFilePath(string value) => value.Replace('\\', '/');
+
+    private static string SanitizeFileName(string fileName)
     {
-        SectionBlock? current = null;
-        foreach (var field in fields.OrderBy(x => x.Sort))
-        {
-            if (field.IsSection)
-            {
-                current = new SectionBlock(field.FieldName, $"case-section-{_sections.Count}");
-                _sections.Add(current);
-                continue;
-            }
-
-            if (current == null)
-            {
-                current = new SectionBlock(fallbackName, $"case-section-{_sections.Count}");
-                _sections.Add(current);
-            }
-
-            current.Fields.Add(field);
-        }
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var cleaned = new string(fileName.Select(x => invalidChars.Contains(x) ? '_' : x).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "upload" : cleaned;
     }
 
-    private static void ToggleSection(SectionBlock section) => section.IsExpanded = !section.IsExpanded;
-
-    private async Task ScrollToSectionAsync(string anchorId)
-        => await inj_jsRuntime.InvokeVoidAsync("mcrScrollToElement", anchorId);
-
-    private async Task LoadOperatorOptionsAsync()
+    private async Task LoadCaseFilesAsync()
     {
         if (_registryContext == null)
         {
             return;
         }
 
-        _operatorOptions.Clear();
-        var users = await _registryContext.SystemUsers.AsNoTracking()
-            .Where(x => x.IsValid)
-            .OrderBy(x => x.DisplayName)
-            .ThenBy(x => x.Account)
-            .Select(x => new { x.Id, x.DisplayName, x.Account })
-            .ToListAsync();
-
-        _operatorOptions.AddRange(users.Select(x =>
-            new FieldOption(x.Id.ToString().ToUpperInvariant(), string.IsNullOrWhiteSpace(x.DisplayName) ? x.Account : x.DisplayName)));
+        _files.Clear();
+        _files.AddRange(await _registryContext.Files.AsNoTracking()
+            .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync());
     }
 
-    private string GetDisplayValue(FieldItem field)
+    private bool HasCaseFieldValue(CaseFormField field)
+        => field.Key switch
+        {
+            "patient_number" => !string.IsNullOrWhiteSpace(_edit?.PatientNumber),
+            "patient_name" => !string.IsNullOrWhiteSpace(_edit?.PatientName),
+            "patient_sex" => !string.IsNullOrWhiteSpace(_edit?.PatientSex),
+            "patient_age" => !string.IsNullOrWhiteSpace(_edit?.PatientAge),
+            "id_number" => !string.IsNullOrWhiteSpace(_edit?.IdNumber),
+            "department_name" => !string.IsNullOrWhiteSpace(_edit?.DepartmentName),
+            "admission_time" => _edit?.AdmissionTime.HasValue == true,
+            "discharge_time" => _edit?.DischargeTime.HasValue == true,
+            "hospital_stay_days" => _edit?.HospitalStayDays.HasValue == true,
+            "surgery_type" => !string.IsNullOrWhiteSpace(_edit?.DiseaseId),
+            "operator" => !string.IsNullOrWhiteSpace(_edit?.OperatorId),
+            "is_emergency_intervention" => !string.IsNullOrWhiteSpace(_edit?.IsEmergencyIntervention),
+            "death_time" => _edit?.DeathTime.HasValue == true,
+            "situation_reason" => !string.IsNullOrWhiteSpace(_edit?.SituationReason),
+            "situation_supplement" => !string.IsNullOrWhiteSpace(_edit?.SituationSupplement),
+            "discharge_mode" => !string.IsNullOrWhiteSpace(_edit?.DischargeMode),
+            "coronary_intervention" => !string.IsNullOrWhiteSpace(_edit?.CoronaryIntervention),
+            "ablation_intervention" => !string.IsNullOrWhiteSpace(_edit?.AblationIntervention),
+            "structural_intervention" => !string.IsNullOrWhiteSpace(_edit?.StructuralIntervention),
+            "case_summary" => !string.IsNullOrWhiteSpace(_edit?.CaseSummary),
+            "discharge_diagnosis" => !string.IsNullOrWhiteSpace(_edit?.DischargeDiagnosis),
+            "other_exam" => !string.IsNullOrWhiteSpace(_edit?.OtherExam),
+            "angiography_result" => !string.IsNullOrWhiteSpace(_edit?.AngiographyResult),
+            "intervention_process" => !string.IsNullOrWhiteSpace(_edit?.InterventionProcess),
+            "rescue_process" => !string.IsNullOrWhiteSpace(_edit?.RescueProcess),
+            "complication_discussion" => !string.IsNullOrWhiteSpace(_edit?.ComplicationDiscussion),
+            "occurrence_reason" => !string.IsNullOrWhiteSpace(_edit?.OccurrenceReason),
+            "death_reason" => !string.IsNullOrWhiteSpace(_edit?.DeathReason),
+            "lessons_learned" => !string.IsNullOrWhiteSpace(_edit?.LessonsLearned),
+            "improvement_measures" => !string.IsNullOrWhiteSpace(_edit?.ImprovementMeasures),
+            _ when field.IsFile => GetFilesForField(field.Key).Count > 0,
+            _ => false
+        };
+
+    private RenderFragment TextInput(string? value, Action<string?> setter) => builder =>
     {
-        if (field.IsFile)
+        builder.OpenElement(0, "input");
+        builder.AddAttribute(1, "class", "form-input");
+        builder.AddAttribute(2, "type", "text");
+        builder.AddAttribute(3, "value", value ?? "");
+        builder.AddAttribute(4, "disabled", !_isEditing);
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(args.Value?.ToString())));
+        builder.CloseElement();
+    };
+
+    private RenderFragment NumberInput(int? value, Action<int?> setter) => builder =>
+    {
+        builder.OpenElement(0, "input");
+        builder.AddAttribute(1, "class", "form-input");
+        builder.AddAttribute(2, "type", "number");
+        builder.AddAttribute(3, "value", value?.ToString(CultureInfo.InvariantCulture) ?? "");
+        builder.AddAttribute(4, "disabled", !_isEditing);
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(ParseInt(args.Value?.ToString()))));
+        builder.CloseElement();
+    };
+
+    private RenderFragment DateInput(DateTime? value, Action<DateTime?> setter) => builder =>
+    {
+        builder.OpenElement(0, "input");
+        builder.AddAttribute(1, "class", string.IsNullOrWhiteSpace(FormatInputDate(value)) ? "form-input date-input date-empty" : "form-input date-input");
+        builder.AddAttribute(2, "type", "date");
+        builder.AddAttribute(3, "value", FormatInputDate(value));
+        builder.AddAttribute(4, "disabled", !_isEditing);
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(ParseDate(args.Value?.ToString()))));
+        builder.CloseElement();
+    };
+
+    private RenderFragment LongTextInput(string? value, Action<string?> setter) => builder =>
+    {
+        builder.OpenElement(0, "textarea");
+        builder.AddAttribute(1, "class", "form-textarea");
+        builder.AddAttribute(2, "rows", 4);
+        builder.AddAttribute(3, "disabled", !_isEditing);
+        builder.AddAttribute(4, "value", value ?? "");
+        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(args.Value?.ToString())));
+        builder.CloseElement();
+    };
+
+    private RenderFragment ChoiceField(IReadOnlyList<FixedOption> options, string? value, Action<string?> setter) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", _isEditing ? "choice-tags" : "choice-tags disabled");
+        var sequence = 2;
+        foreach (var option in options)
         {
-            return field.Files.Count == 0 ? "-" : $"{field.Files.Count} 个附件";
+            builder.OpenElement(sequence++, "button");
+            builder.AddAttribute(sequence++, "type", "button");
+            builder.AddAttribute(sequence++, "class", GetChoiceTagClass(value, option.Value));
+            builder.AddAttribute(sequence++, "disabled", !_isEditing);
+            builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => setter(IsSameValue(value, option.Value) ? null : option.Value)));
+            builder.AddContent(sequence++, option.Text);
+            builder.CloseElement();
         }
+        builder.CloseElement();
+    };
 
-        if (field.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase))
+    private RenderFragment SelectField(IReadOnlyList<FixedOption> options, string? value, Action<string?> setter) => builder =>
+    {
+        builder.OpenElement(0, "select");
+        builder.AddAttribute(1, "class", "form-select");
+        builder.AddAttribute(2, "value", value ?? "");
+        builder.AddAttribute(3, "disabled", !_isEditing);
+        builder.AddAttribute(4, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(EmptyToNull(args.Value?.ToString()))));
+        builder.OpenElement(5, "option");
+        builder.AddAttribute(6, "value", "");
+        builder.AddContent(7, "请选择");
+        builder.CloseElement();
+        var sequence = 8;
+        foreach (var option in options)
         {
-            var rawValue = GetRawEditValue(field);
-            var option = _operatorOptions.FirstOrDefault(x => IsSameOptionValue(rawValue, x.Value));
-            if (option != null)
-            {
-                return option.Text;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_case?.OperatorName))
-            {
-                return _case.OperatorName;
-            }
+            builder.OpenElement(sequence++, "option");
+            builder.AddAttribute(sequence++, "value", option.Value);
+            builder.AddContent(sequence++, option.Text);
+            builder.CloseElement();
         }
+        builder.CloseElement();
+    };
 
-        var value = FormValueDisplayMapper.GetDisplayText(field.FieldName, field.FieldText, field.FieldValue);
-        return ShowValue(value);
+    private RenderFragment HospitalField() => SelectField(_hospitalOptions.Select(x => new FixedOption(x.Value, x.Text)).ToList(), _edit?.HospitalId, value => _edit!.HospitalId = value);
+
+    private RenderFragment OperatorField() => SelectField(_operatorOptions.Select(x => new FixedOption(x.Value, x.Text)).ToList(), _edit?.OperatorId, value => _edit!.OperatorId = value);
+
+    private void SetDisease(string? value)
+    {
+        if (_edit != null)
+        {
+            _edit.DiseaseId = value;
+            _edit.CoronaryIntervention = null;
+            _edit.AblationIntervention = null;
+            _edit.StructuralIntervention = null;
+            _sections.Clear();
+            _expandedSections.Clear();
+            BuildCaseSections();
+        }
     }
 
-    private List<FieldItem> GetVisibleFields(SectionBlock section)
+    private List<CaseFormField> GetVisibleFields(CaseFormSection section)
         => section.Fields.Where(field => IsVisibleField(section, field)).ToList();
 
-    private string GetSectionFieldsClass(SectionBlock section)
-        => IsBasicSection(section) ? "section-fields basic-info-fields" : "section-fields";
-
-    private string GetQuestionClass(SectionBlock section, FieldItem field)
-        => IsFullRowQuestion(section, field) ? "question-row full-row" : "question-row";
-
-    private static bool IsBasicSection(SectionBlock section)
-        => section.Title.Contains("患者基本信息", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsFullRowQuestion(SectionBlock section, FieldItem field)
+    private bool IsVisibleField(CaseFormSection section, CaseFormField field)
     {
-        if (!IsBasicSection(section))
+        if (field.Key == "death_time")
         {
-            return true;
+            return ShouldShowDeathTime(_edit);
         }
 
-        return field.IsFile
-               || IsLongTextField(field)
-               || field.FieldName.Contains("住院天数", StringComparison.OrdinalIgnoreCase)
-               || field.FieldName.Contains("手术类型", StringComparison.OrdinalIgnoreCase)
-               || field.FieldName.Contains("手术类别", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool IsFieldDisabled(FieldItem field)
-        => !_isEditing || !HasPermission(PermissionConstants.CaseEdit);
-
-    private static bool HasFieldValue(FieldItem field)
-        => field.IsFile
-            ? field.Files.Count > 0
-            : !string.IsNullOrWhiteSpace(GetRawEditValue(field));
-
-    private static bool IsChoiceField(FieldItem field)
-        => field.ControlType is 2 or 3;
-
-    private static bool IsSelectField(FieldItem field)
-        => IsChoiceField(field)
-           && (field.FieldName.Equals("性别", StringComparison.OrdinalIgnoreCase)
-               || field.FieldName.Equals("术者", StringComparison.OrdinalIgnoreCase)
-               || field.FieldName.Equals("情况说明/原因说明", StringComparison.OrdinalIgnoreCase)
-               || field.FieldName.Equals("情况/原因说明", StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsLongTextField(FieldItem field)
-        => field.ControlType == 10;
-
-    private static bool IsDateField(FieldItem field)
-        => field.ControlType == 4
-           || field.FieldName.Contains("时间", StringComparison.OrdinalIgnoreCase)
-           || field.FieldName.Contains("日期", StringComparison.OrdinalIgnoreCase);
-
-    private string GetInputValue(FieldItem field)
-    {
-        if (IsDateField(field))
+        if (field.Key == "situation_supplement")
         {
-            return NormalizeDateValue(_isEditing ? field.EditValue : GetRawEditValue(field));
+            return ShouldShowSituationSupplement(_edit);
         }
 
-        return _isEditing ? field.EditValue ?? "" : GetDisplayValue(field);
+        if (section.AnchorId == "case-discussion" && field.Key != "complication_discussion")
+        {
+            return ShouldShowDiscussionFollowup(_edit);
+        }
+
+        return true;
     }
 
-    private static string GetInputType(FieldItem field)
-        => IsDateField(field) ? "date" : "text";
+    private static bool ShouldShowDeathTime(CaseEditModel? edit)
+        => IsSameValue(edit?.DischargeMode, "死亡");
 
-    private string GetInputClass(FieldItem field)
+    private static bool ShouldShowSituationSupplement(CaseEditModel? edit)
+        => IsSameValue(edit?.SituationReason, "4") || IsSameValue(edit?.SituationReason, "其他");
+
+    private static bool ShouldShowDiscussionFollowup(CaseEditModel? edit)
+        => IsSameValue(edit?.ComplicationDiscussion, "1") || IsSameValue(edit?.ComplicationDiscussion, "是");
+
+    private string GetQuestionClass(CaseFormField field)
     {
-        var classes = new List<string> { "form-input" };
-        if (IsDateField(field))
+        var classes = new List<string> { "question-row" };
+        if (field.FullRow || field.IsFile)
         {
-            classes.Add("date-input");
-            if (string.IsNullOrWhiteSpace(GetInputValue(field)))
-            {
-                classes.Add("date-empty");
-            }
+            classes.Add("full-row");
+        }
+
+        if (!_isEditing)
+        {
+            classes.Add("is-disabled");
         }
 
         return string.Join(" ", classes);
     }
 
-    private int GetTextareaRows(FieldItem field)
+    private string GetChoiceTagClass(string? currentValue, string optionValue)
     {
-        var value = GetInputValue(field);
-        return Math.Clamp((value.Length / 90) + 3, 3, 10);
-    }
-
-    private string GetChoiceTagsClass(FieldItem field)
-        => IsFieldDisabled(field) ? "choice-tags disabled" : "choice-tags";
-
-    private string GetChoiceTagClass(FieldItem field, FieldOption option)
-    {
-        var classes = new List<string> { "choice-tag" };
-        classes.Add(IsOptionSelected(field, option) ? "selected" : "unselected");
-        if (IsFieldDisabled(field))
+        var classes = new List<string> { "choice-tag", IsSameValue(currentValue, optionValue) ? "selected" : "unselected" };
+        if (!_isEditing)
         {
             classes.Add("disabled");
         }
@@ -828,342 +1030,60 @@
         return string.Join(" ", classes);
     }
 
-    private IReadOnlyList<FieldOption> GetFieldOptions(FieldItem field)
+    private static bool IsSameValue(string? left, string? right)
+        => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static string GetSectionFieldsClass(CaseFormSection section)
+        => section.AnchorId == "case-basic" ? "section-fields basic-info-fields" : "section-fields";
+
+    private static bool NeedsGridFiller(IReadOnlyList<CaseFormField> fields)
     {
-        var name = field.FieldName.Trim();
-        if (name.Equals("术者", StringComparison.OrdinalIgnoreCase))
+        var occupiedColumns = 0;
+        foreach (var field in fields)
         {
-            var options = _operatorOptions.ToList();
-            var rawValue = GetRawEditValue(field);
-            if (!string.IsNullOrWhiteSpace(rawValue) && options.All(x => !IsSameOptionValue(x.Value, rawValue)))
+            if (field.FullRow || field.IsFile)
             {
-                options.Add(new FieldOption(rawValue, string.IsNullOrWhiteSpace(_case?.OperatorName) ? rawValue : _case.OperatorName));
+                occupiedColumns = 0;
+                continue;
             }
 
-            return options;
-        }
-
-        if (name.Equals("性别", StringComparison.OrdinalIgnoreCase))
-        {
-            return [new("1", "男"), new("2", "女")];
-        }
-
-        if (name.Equals("手术类型", StringComparison.OrdinalIgnoreCase) || name.Equals("手术类别", StringComparison.OrdinalIgnoreCase))
-        {
-            return
-            [
-                new("6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入"),
-                new("C1174C60-2EF2-45F6-85DD-5269B567F996", "结构性心脏病介入"),
-                new("F827AE4A-F24F-4DF9-B92F-7601025A1864", "起搏器及CIED植入/置换"),
-                new("AE92E4FA-5E02-4D4C-A773-3DC79C4935BC", "导管消融")
-            ];
-        }
-
-        if (name.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase))
-        {
-            return [new("1", "急诊PCI"), new("2", "择期PCI"), new("3", "单纯CAG")];
-        }
-
-        if (name.Equals("情况说明/原因说明", StringComparison.OrdinalIgnoreCase) || name.Equals("情况/原因说明", StringComparison.OrdinalIgnoreCase))
-        {
-            return [new("1", "非心内科患者"), new("2", "患者自行离院"), new("3", "首页填写错误"), new("4", "其他")];
-        }
-
-        if (name.StartsWith("是否", StringComparison.OrdinalIgnoreCase) || field.DefaultOptions == "11")
-        {
-            return [new("1", "是"), new("2", "否")];
-        }
-
-        var optionCount = field.DefaultOptions?.Count(x => x == '1') ?? 0;
-        return optionCount == 0
-            ? []
-            : Enumerable.Range(1, optionCount).Select(x => new FieldOption(x.ToString(), $"选项 {x}")).ToList();
-    }
-
-    private string GetSelectValue(FieldItem field)
-        => NormalizeOptionValue(GetRawEditValue(field));
-
-    private void SetFieldValue(FieldItem field, string? value)
-        => field.EditValue = value;
-
-    private void SetChoiceValue(FieldItem field, string value)
-    {
-        if (IsFieldDisabled(field))
-        {
-            return;
-        }
-
-        if (field.ControlType != 3)
-        {
-            field.EditValue = value;
-            return;
-        }
-
-        var values = SplitChoiceValues(field.EditValue).ToList();
-        var existed = values.Any(x => IsSameOptionValue(x, value));
-        values = existed
-            ? values.Where(x => !IsSameOptionValue(x, value)).ToList()
-            : [.. values, value];
-        field.EditValue = values.Count == 0 ? null : string.Join(",", values);
-    }
-
-    private bool IsOptionSelected(FieldItem field, FieldOption option)
-    {
-        var values = SplitChoiceValues(GetRawEditValue(field)).ToList();
-        if (values.Count == 0)
-        {
-            return false;
-        }
-
-        return values.Any(x =>
-            IsSameOptionValue(x, option.Value)
-            || IsSameOptionValue(x, option.Text)
-            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), option.Text));
-    }
-
-    private bool IsVisibleField(SectionBlock section, FieldItem field)
-    {
-        if (IsComplicationFollowupField(section, field))
-        {
-            return IsFieldSelected("是否组织医院或科室并发症讨论", "1", "是");
-        }
-
-        if (field.FieldName.Equals("冠心病介入", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsFieldSelected("手术类型", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入")
-                   || IsFieldSelected("手术类别", "6237DD62-15B9-4676-972D-BF32476B3546", "冠心病介入");
-        }
-
-        if (field.FieldName.Equals("死亡时间", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsFieldSelected("离院方式", "死亡", "死亡");
-        }
-
-        if (field.FieldName.Equals("补充说明", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsFieldSelected("情况说明/原因说明", "4", "其他") || IsFieldSelected("情况/原因说明", "4", "其他");
-        }
-
-        return true;
-    }
-
-    private static bool IsComplicationFollowupField(SectionBlock section, FieldItem field)
-    {
-        if (!section.Title.Contains("并发症讨论", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var controller = section.Fields.FirstOrDefault(x => x.FieldName.Equals("是否组织医院或科室并发症讨论", StringComparison.OrdinalIgnoreCase));
-        return controller != null && field.Sort > controller.Sort;
-    }
-
-    private bool IsFieldSelected(string fieldName, string rawValue, string displayValue)
-    {
-        var field = _sections.SelectMany(x => x.Fields)
-            .LastOrDefault(x => x.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase));
-        if (field == null)
-        {
-            return false;
-        }
-
-        return SplitChoiceValues(GetRawEditValue(field)).Any(x =>
-            IsSameOptionValue(x, rawValue)
-            || IsSameOptionValue(x, displayValue)
-            || IsSameOptionValue(FormValueDisplayMapper.Normalize(field.FieldName, x), displayValue));
-    }
-
-    private static string GetRawEditValue(FieldItem field)
-        => field.EditValue?.Trim()
-           ?? field.FieldValue?.Trim()
-           ?? field.FieldText?.Trim()
-           ?? "";
-
-    private static IEnumerable<string> SplitChoiceValues(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(['、', ',', '，', ';', '；', '|', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static bool IsSameOptionValue(string? left, string? right)
-        => NormalizeOptionValue(left).Equals(NormalizeOptionValue(right), StringComparison.OrdinalIgnoreCase);
-
-    private static string NormalizeOptionValue(string? value)
-        => value?.Trim().Trim('{', '}').ToUpperInvariant() ?? "";
-
-    private static string NormalizeDateValue(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "";
-        }
-
-        var text = value.Trim();
-        if (DateTime.TryParse(text, out var date))
-        {
-            return date.ToString("yyyy-MM-dd");
-        }
-
-        return text.Length >= 10 ? text[..10] : text;
-    }
-
-    private static RegistryFile? GetFirstPreviewImage(FieldItem field)
-        => field.Files.FirstOrDefault(IsImageFile);
-
-    private static bool IsImageFile(RegistryFile file)
-    {
-        if (!string.IsNullOrWhiteSpace(file.ContentType) && file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var extension = System.IO.Path.GetExtension(file.FileName);
-        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase)
-               || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetFileSummary(FieldItem field)
-        => field.Files.Count == 0 ? "暂无附件" : $"{field.Files.Count} 个附件";
-
-    private static string GetFileFieldClass(FieldItem field)
-        => field.Files.Count == 0 ? "file-field empty" : "file-field has-file";
-
-    private string GetUploadButtonClass(FieldItem field)
-        => IsFieldDisabled(field) ? "file-upload-button disabled" : "file-upload-button";
-
-    private async Task UploadFieldFileAsync(FieldItem field, InputFileChangeEventArgs args)
-    {
-        if (_registryContext == null || IsFieldDisabled(field) || !await RequirePermissionAsync(PermissionConstants.CaseEdit))
-        {
-            return;
-        }
-
-        var uploadRoot = inj_configuration["FileStorage:UploadRoot"];
-        if (string.IsNullOrWhiteSpace(uploadRoot))
-        {
-            inj_snackbar.Add("未配置文件存储目录", Severity.Error);
-            return;
-        }
-
-        const long maxFileSize = 50 * 1024 * 1024;
-        var dateFolder = DateTime.Now.ToString("yyyyMMdd");
-        var rootPath = ResolveStorageRoot(uploadRoot);
-        var targetFolder = System.IO.Path.Combine(rootPath, dateFolder);
-        System.IO.Directory.CreateDirectory(targetFolder);
-
-        var uploaded = 0;
-        foreach (var browserFile in args.GetMultipleFiles(10))
-        {
-            var extension = System.IO.Path.GetExtension(browserFile.Name);
-            if (string.IsNullOrWhiteSpace(extension))
+            occupiedColumns++;
+            if (occupiedColumns == 2)
             {
-                extension = ".bin";
-            }
-
-            var storedName = $"{Guid.NewGuid():N}{extension}";
-            var fullPath = System.IO.Path.Combine(targetFolder, storedName);
-            await using (var readStream = browserFile.OpenReadStream(maxFileSize))
-            await using (var writeStream = System.IO.File.Create(fullPath))
-            {
-                await readStream.CopyToAsync(writeStream);
-            }
-
-            var entity = new RegistryFile
-            {
-                OwnerType = "form_field_value",
-                OwnerId = field.Id,
-                FileName = SanitizeFileName(browserFile.Name),
-                FilePath = $"upload/{dateFolder}/{storedName}",
-                ContentType = browserFile.ContentType,
-                FileSize = browserFile.Size,
-                CreatedAt = DateTime.Now,
-                CreatedBy = CurrentUserId
-            };
-            _registryContext.Files.Add(entity);
-            field.Files.Add(entity);
-            uploaded++;
-        }
-
-        if (uploaded == 0)
-        {
-            return;
-        }
-
-        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "上传附件", "case", CaseId, field.FieldName));
-        await _registryContext.SaveChangesAsync();
-        inj_snackbar.Add("附件已上传", Severity.Success);
-    }
-
-    private static string ResolveStorageRoot(string root)
-        => System.IO.Path.GetFullPath(System.IO.Path.IsPathRooted(root)
-            ? root
-            : System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), root));
-
-    private static string SanitizeFileName(string fileName)
-    {
-        var invalidChars = System.IO.Path.GetInvalidFileNameChars();
-        var chars = fileName.Select(x => invalidChars.Contains(x) ? '_' : x).ToArray();
-        return new string(chars);
-    }
-
-    private static string GetFileRemark(string? fieldText, string? fieldValue)
-    {
-        if (!string.IsNullOrWhiteSpace(fieldText))
-        {
-            return fieldText.Trim();
-        }
-
-        var descriptions = ExtractUploadDescriptions(fieldValue).ToList();
-        return descriptions.Count == 0 ? "" : string.Join("；", descriptions);
-    }
-
-    private static IEnumerable<string> ExtractUploadDescriptions(string? fieldValue)
-    {
-        if (string.IsNullOrWhiteSpace(fieldValue))
-        {
-            yield break;
-        }
-
-        var items = fieldValue.Split("&!&", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var item in items)
-        {
-            string? description = null;
-            try
-            {
-                using var document = JsonDocument.Parse(item);
-                if (document.RootElement.TryGetProperty("describe", out var describeElement))
-                {
-                    description = describeElement.GetString();
-                }
-            }
-            catch (JsonException)
-            {
-                description = null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(description))
-            {
-                yield return description.Trim();
+                occupiedColumns = 0;
             }
         }
+
+        return occupiedColumns == 1;
     }
 
-    private static string NormalizeFieldValue(string fieldName, string? fieldText, string? fieldValue)
-        => FormValueDisplayMapper.GetDisplayText(fieldName, fieldText, fieldValue);
+    private bool IsSectionExpanded(string key) => _expandedSections.Contains(key);
 
-    private static string GetRawFieldValue(string? fieldText, string? fieldValue)
-        => string.IsNullOrWhiteSpace(fieldText) ? fieldValue?.Trim() ?? "" : fieldText.Trim();
+    private void ToggleSection(string key)
+    {
+        if (!_expandedSections.Add(key))
+        {
+            _expandedSections.Remove(key);
+        }
+    }
+
+    private string GetSectionIcon(string key)
+        => IsSectionExpanded(key) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore;
+
+    private async Task ScrollToSectionAsync(string anchorId)
+        => await inj_jsRuntime.InvokeVoidAsync("mcrScrollToElement", anchorId);
 
     private bool CanShowCaseActions()
         => _case != null
-            && (HasPermission(PermissionConstants.CaseEdit)
+            && (CanEditCaseForm()
                 || ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
                 || (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
                 || (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
-                || HasPermission(PermissionConstants.CaseDelete));
+                || CanDeleteCase);
+
+    private bool CanEditCaseForm()
+        => _case?.Status is not null and not (0 or 2)
+           && HasPermission(PermissionConstants.CaseEdit);
 
     private string GetCaseSubtitle()
     {
@@ -1175,15 +1095,25 @@
         return $"{ShowSex(_case.PatientSexText ?? _case.PatientSex)} / {ShowValue(_case.PatientAge)}";
     }
 
-    private static string GetFileUrl(RegistryFile file, bool download)
-        => download ? $"/files/{file.Id}?download=true" : $"/files/{file.Id}";
-
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
     private static string ShowSex(string? value)
-        => ShowValue(FormValueDisplayMapper.Normalize("性别", value));
+        => ShowValue(RegistryFixedCatalog.GetSexName(value));
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
+
+    private static string FormatInputDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "";
+
+    private static DateTime? ParseDate(string? value)
+        => DateTime.TryParse(value, out var result) ? result.Date : null;
+
+    private static int? ParseInt(string? value)
+        => int.TryParse(value, out var result) ? result : null;
+
+    private static DateTime? ToDbTimestamp(DateTime? value)
+        => value.HasValue ? DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified) : null;
+
+    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string GetStatusText(int status)
         => status switch
@@ -1215,40 +1145,82 @@
             _ => "其他意见"
         };
 
-    private sealed class SectionBlock(string title, string anchorId)
-    {
-        public string Title { get; } = title;
-        public string AnchorId { get; } = anchorId;
-        public List<FieldItem> Fields { get; } = [];
-        public bool IsExpanded { get; set; } = true;
-    }
-
-    private sealed class FieldItem(
-        Guid id,
-        string fieldName,
-        string? fieldValue,
-        string? fieldText,
-        int? controlType,
-        int level,
-        int sort,
-        string? defaultOptions,
-        List<RegistryFile> files)
-    {
-        public Guid Id { get; } = id;
-        public string FieldName { get; } = fieldName;
-        public string? FieldValue { get; set; } = fieldValue;
-        public string? FieldText { get; set; } = fieldText;
-        public string? EditValue { get; set; } = controlType == 7
-            ? GetFileRemark(fieldText, fieldValue)
-            : string.IsNullOrWhiteSpace(fieldValue) ? fieldText : fieldValue;
-        public int? ControlType { get; } = controlType;
-        public int Level { get; } = level;
-        public int Sort { get; } = sort;
-        public string? DefaultOptions { get; } = defaultOptions;
-        public List<RegistryFile> Files { get; } = files;
-        public bool IsSection => Level <= 1;
-        public bool IsFile => ControlType == 7;
-    }
-
     private sealed record FieldOption(string Value, string Text);
+
+    private sealed record CaseFormSection(string Title, string AnchorId, List<CaseFormField> Fields);
+
+    private sealed record CaseFormField(string Key, string Title, bool FullRow = false, bool IsFile = false);
+
+    private sealed class CaseEditModel
+    {
+        public string PatientName { get; set; } = "";
+        public string? PatientSex { get; set; }
+        public string? PatientAge { get; set; }
+        public string? IdNumber { get; set; }
+        public string? PatientNumber { get; set; }
+        public string? DiseaseId { get; set; }
+        public string? HospitalId { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? OperatorId { get; set; }
+        public DateTime? AdmissionTime { get; set; }
+        public DateTime? DischargeTime { get; set; }
+        public DateTime? OperationTime { get; set; }
+        public int? HospitalStayDays { get; set; }
+        public string? CoronaryIntervention { get; set; }
+        public string? AblationIntervention { get; set; }
+        public string? StructuralIntervention { get; set; }
+        public string? IsEmergencyIntervention { get; set; }
+        public string? DischargeMode { get; set; }
+        public string? SituationReason { get; set; }
+        public string? SituationSupplement { get; set; }
+        public DateTime? DeathTime { get; set; }
+        public string? CaseSummary { get; set; }
+        public string? DischargeDiagnosis { get; set; }
+        public string? OtherExam { get; set; }
+        public string? AngiographyResult { get; set; }
+        public string? InterventionProcess { get; set; }
+        public string? RescueProcess { get; set; }
+        public string? ComplicationDiscussion { get; set; }
+        public string? OccurrenceReason { get; set; }
+        public string? DeathReason { get; set; }
+        public string? LessonsLearned { get; set; }
+        public string? ImprovementMeasures { get; set; }
+
+        public static CaseEditModel FromCase(RegistryCase item)
+            => new()
+            {
+                PatientName = item.PatientName,
+                PatientSex = item.PatientSex,
+                PatientAge = item.PatientAge,
+                IdNumber = item.IdNumber,
+                PatientNumber = item.PatientNumber,
+                DiseaseId = item.DiseaseId ?? item.SurgeryTypeValue,
+                HospitalId = item.HospitalId,
+                DepartmentName = item.DepartmentName,
+                OperatorId = item.OperatorId,
+                AdmissionTime = item.AdmissionTime,
+                DischargeTime = item.DischargeTime,
+                OperationTime = item.OperationTime,
+                HospitalStayDays = item.HospitalStayDays,
+                CoronaryIntervention = item.CoronaryIntervention,
+                AblationIntervention = item.AblationIntervention,
+                StructuralIntervention = item.StructuralIntervention,
+                IsEmergencyIntervention = item.IsEmergencyIntervention,
+                DischargeMode = item.DischargeMode,
+                SituationReason = item.SituationReason,
+                SituationSupplement = item.SituationSupplement,
+                DeathTime = item.DeathTime,
+                CaseSummary = item.CaseSummary,
+                DischargeDiagnosis = item.DischargeDiagnosis,
+                OtherExam = item.OtherExam,
+                AngiographyResult = item.AngiographyResult,
+                InterventionProcess = item.InterventionProcess,
+                RescueProcess = item.RescueProcess,
+                ComplicationDiscussion = item.ComplicationDiscussion,
+                OccurrenceReason = item.OccurrenceReason,
+                DeathReason = item.DeathReason,
+                LessonsLearned = item.LessonsLearned,
+                ImprovementMeasures = item.ImprovementMeasures
+            };
+    }
 }

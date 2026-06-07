@@ -540,9 +540,9 @@
                     x.TemplateId,
                     x.HospitalId,
                     x.QualityUserId,
-                    null,
-                    null,
-                    null,
+                    x.TemplateName,
+                    x.HospitalName,
+                    x.QualityUserName,
                     x.Status,
                     x.CreatedAt,
                     x.UpdatedAt))
@@ -581,9 +581,9 @@
                 x.TemplateId,
                 x.HospitalId,
                 x.QualityUserId,
-                x.TemplateId != null && templateNames.TryGetValue(x.TemplateId, out var templateName) ? templateName : x.TemplateId,
-                GetDisplayName(x.HospitalId, hospitals),
-                GetDisplayName(x.QualityUserId, users),
+                !string.IsNullOrWhiteSpace(x.TemplateName) ? x.TemplateName : x.TemplateId != null && templateNames.TryGetValue(x.TemplateId, out var templateName) ? templateName : x.TemplateId,
+                !string.IsNullOrWhiteSpace(x.HospitalName) ? x.HospitalName : GetDisplayName(x.HospitalId, hospitals),
+                !string.IsNullOrWhiteSpace(x.QualityUserName) ? x.QualityUserName : GetDisplayName(x.QualityUserId, users),
                 x.Status,
                 x.CreatedAt,
                 x.UpdatedAt)));
@@ -776,12 +776,7 @@
             .ToListAsync());
 
         _templateOptions.Clear();
-        _templateOptions.AddRange(await _registryContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "quality")
-            .OrderBy(x => x.TemplateName)
-            .Select(x => new TemplateOption(x.SourceFollowTemplateId, x.TemplateName))
-            .Distinct()
-            .ToListAsync());
+        _templateOptions.AddRange(RegistryFixedCatalog.Diseases.Select(x => new TemplateOption(x.Value, x.Text)));
     }
 
     private IQueryable<QualityReport> ApplyRoleScope(IQueryable<QualityReport> query)

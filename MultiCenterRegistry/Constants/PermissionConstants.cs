@@ -12,7 +12,6 @@ public static class PermissionConstants
     public const string QualityManage = "Power-MCR-N-N-N-CaseAllocation";
     public const string AppraiseEdit = "Power-MCR-N-N-N-CaseEvalueation";
     public const string AppraiseView = "Power-MCR-N-N-N-ViewEvalueation";
-    public const string DataStatistics = "Power-MCR-N-N-N-DataStatistics";
     public const string ImportCase = "Power-MCR-N-N-N-ImportCase";
     public const string AccountManager = "Power-MCR-N-N-N-AccountManager";
     public const string MessageManager = "Power-MCR-N-N-N-MessageManager";

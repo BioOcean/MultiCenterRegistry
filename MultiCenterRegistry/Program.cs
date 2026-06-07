@@ -211,97 +211,81 @@ try
         var hospitalNames = await LoadHospitalNamesAsync(dbContext, data.Select(x => x.HospitalId));
         var departmentNames = await LoadDepartmentNamesAsync(dbContext, data.Select(x => x.DepartmentId));
         var userNames = await LoadUserNamesAsync(dbContext, data.Select(x => x.OperatorId));
-        var diseaseNames = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case")
-            .GroupBy(x => x.SourceFollowTemplateId)
-            .Select(x => new { DiseaseId = x.Key, Name = x.Min(item => item.TemplateName) })
-            .ToDictionaryAsync(x => x.DiseaseId, x => x.Name);
-
-        var templateIds = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case")
-            .Select(x => x.FormTemplateId)
-            .Distinct()
-            .ToListAsync();
-        var fieldHeaders = templateIds.Count == 0
-            ? new List<ExportFieldHeader>()
-            : await dbContext.FormFieldDefinitions.AsNoTracking()
-                .Where(x => templateIds.Contains(x.FormTemplateId) && x.FieldName != "")
-                .GroupBy(x => x.FieldName)
-                .Select(x => new ExportFieldHeader(x.Key, x.Min(item => item.Sort)))
-                .OrderBy(x => x.Sort)
-                .ThenBy(x => x.Name)
-                .ToListAsync();
-        var fieldNames = fieldHeaders.Select(x => x.Name).ToList();
-
-        var caseIds = data.Select(x => x.Id).ToList();
-        var instances = caseIds.Count == 0
-            ? new List<ExportFormInstance>()
-            : await dbContext.FormInstances.AsNoTracking()
-                .Where(x => x.OwnerType == "case" && caseIds.Contains(x.OwnerId))
-                .Select(x => new ExportFormInstance(x.Id, x.OwnerId))
-                .ToListAsync();
-        var instanceById = instances.ToDictionary(x => x.Id, x => x.OwnerId);
-        var instanceIds = instances.Select(x => x.Id).ToList();
-        var values = instanceIds.Count == 0
-            ? new List<ExportFieldValue>()
-            : await dbContext.FormFieldValues.AsNoTracking()
-                .Where(x => instanceIds.Contains(x.FormInstanceId)
-                            && fieldNames.Contains(x.FieldName)
-                            && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
-                .Select(x => new ExportFieldValue(x.FormInstanceId, x.FieldName, x.FieldText, x.FieldValue))
-                .ToListAsync();
-
-        var valuesByCase = values
-            .Where(x => instanceById.ContainsKey(x.FormInstanceId))
-            .GroupBy(x => instanceById[x.FormInstanceId])
-            .ToDictionary(
-                x => x.Key,
-                x => x.GroupBy(item => item.FieldName).ToDictionary(
-                    item => item.Key,
-                    item => string.Join("；", item.Select(value => GetFieldValueText(value.FieldName, value.FieldText, value.FieldValue))
-                        .Where(value => !string.IsNullOrWhiteSpace(value))
-                        .Distinct())));
-
-        var headers = new List<string>
+        var headers = new[]
         {
             "医院",
             "住院号",
             "姓名",
             "性别",
             "年龄",
-            "ECMO临床适应症",
+            "身份证号",
+            "疾病类型",
             "科室名称",
-            "经办人",
-            "住院日期",
+            "术者",
+            "入院日期",
             "出院日期",
             "手术日期",
+            "住院天数",
+            "是否急诊介入",
+            "冠心病介入",
+            "导管消融",
+            "结构性心脏病介入",
+            "离院方式",
+            "情况/原因说明",
+            "补充说明",
+            "死亡时间",
+            "病例简介",
+            "出院诊断",
+            "其他检查",
+            "造影结果",
+            "介入过程",
+            "抢救过程",
+            "并发症讨论",
+            "发生原因",
+            "死亡原因",
+            "经验教训",
+            "改进措施",
             "数据状态",
             "创建时间"
         };
-        headers.AddRange(fieldNames);
 
-        var rows = data.Select(item =>
-        {
-            valuesByCase.TryGetValue(item.Id, out var fieldValues);
-            var row = new List<string?>
+        var rows = data.Select(item => (IReadOnlyList<string?>)new List<string?>
             {
                 GetName(item.HospitalId, hospitalNames),
                 item.PatientNumber,
                 item.PatientName,
-                item.PatientSex,
+                item.PatientSexText ?? RegistryFixedCatalog.GetSexName(item.PatientSex),
                 item.PatientAge,
-                item.DiseaseId != null && diseaseNames.TryGetValue(item.DiseaseId, out var diseaseName) ? diseaseName : item.DiseaseId,
+                item.IdNumber,
+                item.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(item.DiseaseId ?? item.SurgeryTypeValue),
                 GetName(item.DepartmentId, departmentNames),
                 GetName(item.OperatorId, userNames),
                 item.AdmissionTime?.ToString("yyyy-MM-dd") ?? "",
                 item.DischargeTime?.ToString("yyyy-MM-dd") ?? "",
                 item.OperationTime?.ToString("yyyy-MM-dd") ?? "",
+                item.HospitalStayDays?.ToString(CultureInfo.InvariantCulture) ?? "",
+                RegistryFixedCatalog.GetYesNoName(item.IsEmergencyIntervention),
+                RegistryFixedCatalog.GetText(RegistryFixedCatalog.CoronaryOptions, item.CoronaryIntervention),
+                item.AblationIntervention,
+                item.StructuralIntervention,
+                item.DischargeMode,
+                RegistryFixedCatalog.GetSituationReasonName(item.SituationReason),
+                item.SituationSupplement,
+                item.DeathTime?.ToString("yyyy-MM-dd") ?? "",
+                item.CaseSummary,
+                item.DischargeDiagnosis,
+                item.OtherExam,
+                item.AngiographyResult,
+                item.InterventionProcess,
+                item.RescueProcess,
+                item.ComplicationDiscussion,
+                item.OccurrenceReason,
+                item.DeathReason,
+                item.LessonsLearned,
+                item.ImprovementMeasures,
                 GetCaseStatusText(item.Status),
                 item.CreatedAt.ToString("yyyy-MM-dd HH:mm")
-            };
-            row.AddRange(fieldNames.Select(field => fieldValues != null && fieldValues.TryGetValue(field, out var value) ? value : ""));
-            return (IReadOnlyList<string?>)row;
-        }).ToList();
+            }).ToList();
 
         var bytes = SimpleXlsx.Build("病例", headers, rows);
         return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"病例_{startDate:yyyyMMdd}-{endDate:yyyyMMdd}_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
@@ -367,59 +351,24 @@ try
 
         var hospitalNames = await LoadHospitalNamesAsync(dbContext, data.Select(x => x.HospitalId));
         var userNames = await LoadUserNamesAsync(dbContext, data.Select(x => x.QualityUserId));
-        var templateNames = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "quality")
-            .GroupBy(x => x.SourceFollowTemplateId)
-            .Select(x => new { TemplateId = x.Key, Name = x.Min(item => item.TemplateName) })
-            .ToDictionaryAsync(x => x.TemplateId, x => x.Name);
-
-        var templateIds = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "quality")
-            .Select(x => x.FormTemplateId)
-            .Distinct()
-            .ToListAsync();
-        var fieldHeaders = templateIds.Count == 0
-            ? new List<ExportFieldHeader>()
-            : await dbContext.FormFieldDefinitions.AsNoTracking()
-                .Where(x => templateIds.Contains(x.FormTemplateId) && x.FieldName != "")
-                .GroupBy(x => x.FieldName)
-                .Select(x => new ExportFieldHeader(x.Key, x.Min(item => item.Sort)))
-                .OrderBy(x => x.Sort)
-                .ThenBy(x => x.Name)
-                .ToListAsync();
-        var fieldNames = fieldHeaders.Select(x => x.Name).ToList();
 
         var qualityIds = data.Select(x => x.Id).ToList();
-        var instances = qualityIds.Count == 0
-            ? new List<ExportFormInstance>()
-            : await dbContext.FormInstances.AsNoTracking()
-                .Where(x => x.OwnerType == "quality" && qualityIds.Contains(x.OwnerId))
-                .Select(x => new ExportFormInstance(x.Id, x.OwnerId))
+        var metricCodes = RegistryFixedCatalog.QualityMetrics.Select(x => x.Code).ToList();
+        var qualityItems = qualityIds.Count == 0
+            ? new List<QualityReportItem>()
+            : await dbContext.QualityReportItems.AsNoTracking()
+                .Where(x => qualityIds.Contains(x.QualityReportId) && metricCodes.Contains(x.MetricCode))
                 .ToListAsync();
-        var instanceById = instances.ToDictionary(x => x.Id, x => x.OwnerId);
-        var instanceIds = instances.Select(x => x.Id).ToList();
-        var values = instanceIds.Count == 0
-            ? new List<ExportFieldValue>()
-            : await dbContext.FormFieldValues.AsNoTracking()
-                .Where(x => instanceIds.Contains(x.FormInstanceId)
-                            && fieldNames.Contains(x.FieldName)
-                            && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
-                .Select(x => new ExportFieldValue(x.FormInstanceId, x.FieldName, x.FieldText, x.FieldValue))
-                .ToListAsync();
-
-        var valuesByQuality = values
-            .Where(x => instanceById.ContainsKey(x.FormInstanceId))
-            .GroupBy(x => instanceById[x.FormInstanceId])
+        var valuesByQuality = qualityItems
+            .GroupBy(x => x.QualityReportId)
             .ToDictionary(
                 x => x.Key,
-                x => x.GroupBy(item => item.FieldName).ToDictionary(
+                x => x.GroupBy(item => item.MetricCode).ToDictionary(
                     item => item.Key,
-                    item => string.Join("；", item.Select(value => GetFieldValueText(value.FieldName, value.FieldText, value.FieldValue))
-                        .Where(value => !string.IsNullOrWhiteSpace(value))
-                        .Distinct())));
+                    item => item.OrderByDescending(row => row.UpdatedAt ?? row.CreatedAt).First().CaseCount));
 
         var headers = new List<string> { "报表", "中心", "疾病类型", "质控月份", "质控员", "状态", "创建时间", "更新时间" };
-        headers.AddRange(fieldNames);
+        headers.AddRange(RegistryFixedCatalog.QualityMetrics.Select(x => x.Name));
 
         var rows = data.Select(item =>
         {
@@ -427,15 +376,15 @@ try
             var row = new List<string?>
             {
                 item.Name,
-                GetName(item.HospitalId, hospitalNames),
-                item.TemplateId != null && templateNames.TryGetValue(item.TemplateId, out var templateName) ? templateName : item.TemplateId,
+                item.HospitalName ?? GetName(item.HospitalId, hospitalNames),
+                item.TemplateName ?? RegistryFixedCatalog.GetDiseaseName(item.TemplateId),
                 item.QualityDate.ToString("yyyy-MM"),
-                GetName(item.QualityUserId, userNames),
+                item.QualityUserName ?? GetName(item.QualityUserId, userNames),
                 GetQualityStatusText(item.Status),
                 item.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
                 item.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""
             };
-            row.AddRange(fieldNames.Select(field => fieldValues != null && fieldValues.TryGetValue(field, out var value) ? value : ""));
+            row.AddRange(RegistryFixedCatalog.QualityMetrics.Select(metric => fieldValues != null && fieldValues.TryGetValue(metric.Code, out var value) ? value?.ToString(CultureInfo.InvariantCulture) : ""));
             return (IReadOnlyList<string?>)row;
         }).ToList();
 
@@ -461,32 +410,6 @@ try
             : Results.File(result.Content, "application/pdf", result.FileName);
     }).RequireAuthorization();
 
-    app.MapGet("/exports/meetings.xlsx", async Task<IResult> (IDbContextFactory<RegistryDbContext> dbContextFactory, HttpContext httpContext) =>
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        if (!await HasPermissionAsync(httpContext, dbContext, PermissionConstants.QualityManage))
-        {
-            return Results.Forbid();
-        }
-
-        var data = await dbContext.ReviewMeetings.AsNoTracking()
-            .OrderByDescending(x => x.MeetingTime)
-            .ToListAsync();
-        var rows = data.Select(x => (IReadOnlyList<string?>)
-            [
-                x.Title,
-                x.MeetingTime.ToString("yyyy-MM-dd HH:mm"),
-                x.EndTime.HasValue ? x.EndTime.Value.ToString("yyyy-MM-dd HH:mm") : "",
-                x.Place,
-                x.GroupInfo,
-                x.Status.ToString(CultureInfo.InvariantCulture),
-                x.CreatedAt.ToString("yyyy-MM-dd HH:mm")
-            ])
-            .ToList();
-        var bytes = SimpleXlsx.Build("会议", ["标题", "开始时间", "结束时间", "地点", "分组", "状态", "创建时间"], rows);
-        return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"会议_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
-    }).RequireAuthorization();
-
     app.MapGet("/exports/appraise/{meetingId:guid}/{caseId:guid}.pdf", async Task<IResult> (
         Guid meetingId,
         Guid caseId,
@@ -506,71 +429,6 @@ try
             : Results.File(result.Content, "application/pdf", result.FileName);
     }).RequireAuthorization();
 
-    app.MapGet("/exports/ecmo.xlsx", async Task<IResult> (IDbContextFactory<RegistryDbContext> dbContextFactory, HttpContext httpContext) =>
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        if (!await HasPermissionAsync(httpContext, dbContext, PermissionConstants.DataStatistics, PermissionConstants.QualityManage))
-        {
-            return Results.Forbid();
-        }
-
-        var cases = await dbContext.Cases.AsNoTracking()
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
-        var caseIds = cases.Select(x => x.Id).ToList();
-        var instances = caseIds.Count == 0
-            ? new List<RegistryFormInstance>()
-            : await dbContext.FormInstances.AsNoTracking()
-                .Where(x => x.OwnerType == "case" && caseIds.Contains(x.OwnerId))
-                .ToListAsync();
-        var instanceIds = instances.Select(x => x.Id).ToList();
-        var values = instanceIds.Count == 0
-            ? new List<RegistryFormFieldValue>()
-            : await dbContext.FormFieldValues.AsNoTracking()
-                .Where(x => instanceIds.Contains(x.FormInstanceId) && ((x.FieldText != null && x.FieldText != "") || (x.FieldValue != null && x.FieldValue != "")))
-                .ToListAsync();
-
-        var topFields = values
-            .GroupBy(x => x.FieldName)
-            .OrderByDescending(x => x.Count())
-            .ThenBy(x => x.Key)
-            .Take(60)
-            .Select(x => x.Key)
-            .ToList();
-        var instanceById = instances.ToDictionary(x => x.Id, x => x.OwnerId);
-        var valuesByCase = values
-            .Where(x => instanceById.ContainsKey(x.FormInstanceId) && topFields.Contains(x.FieldName))
-            .GroupBy(x => instanceById[x.FormInstanceId])
-            .ToDictionary(
-                x => x.Key,
-                x => x.GroupBy(v => v.FieldName).ToDictionary(v => v.Key, v => string.Join("；", v.Select(value => GetValueText(value)).Where(t => !string.IsNullOrWhiteSpace(t)))));
-
-        var headers = new List<string> { "患者", "性别", "年龄", "病案号", "身份证号", "医院", "科室", "入院时间", "手术时间", "状态" };
-        headers.AddRange(topFields);
-        var rows = cases.Select(item =>
-        {
-            valuesByCase.TryGetValue(item.Id, out var fieldValues);
-            var row = new List<string?>
-            {
-                item.PatientName,
-                item.PatientSex,
-                item.PatientAge,
-                item.PatientNumber,
-                item.IdNumber,
-                item.HospitalId,
-                item.DepartmentId,
-                item.AdmissionTime?.ToString("yyyy-MM-dd") ?? "",
-                item.OperationTime?.ToString("yyyy-MM-dd") ?? "",
-                item.Status.ToString(CultureInfo.InvariantCulture)
-            };
-            row.AddRange(topFields.Select(field => fieldValues != null && fieldValues.TryGetValue(field, out var value) ? value : ""));
-            return (IReadOnlyList<string?>)row;
-        }).ToList();
-
-        var bytes = SimpleXlsx.Build("专项数据", headers, rows);
-        return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"专项数据_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
-    }).RequireAuthorization();
-
     app.MapGet("/imports/case-template.xlsx", async Task<IResult> (IDbContextFactory<RegistryDbContext> dbContextFactory, HttpContext httpContext) =>
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -579,28 +437,50 @@ try
             return Results.Forbid();
         }
 
-        var diseases = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case")
-            .OrderBy(x => x.TemplateName)
-            .Select(x => new { x.SourceFollowTemplateId, x.TemplateName })
-            .ToListAsync();
-        var rows = diseases.Select(x => (IReadOnlyList<string?>)new List<string?>
+        var headers = new[]
         {
-            "",
-            "",
-            "",
-            "",
-            "",
-            x.SourceFollowTemplateId,
-            x.TemplateName,
-            "",
-            "",
-            "",
-            "",
-            "",
-            ""
+            "患者姓名",
+            "性别",
+            "年龄",
+            "病案号",
+            "身份证号",
+            "疾病类型ID",
+            "疾病类型名称",
+            "医院ID",
+            "科室ID",
+            "住院科室",
+            "经办人ID",
+            "入院时间",
+            "出院时间",
+            "手术时间",
+            "住院天数",
+            "是否急诊介入",
+            "冠心病介入",
+            "导管消融",
+            "结构性心脏病介入",
+            "离院方式",
+            "情况/原因说明",
+            "补充说明",
+            "死亡时间",
+            "病例简介",
+            "出院诊断",
+            "其他检查",
+            "造影结果",
+            "介入过程",
+            "抢救过程",
+            "并发症讨论",
+            "发生原因",
+            "死亡原因",
+            "经验教训",
+            "改进措施"
+        };
+        var rows = RegistryFixedCatalog.Diseases.Select(x =>
+        {
+            var row = headers.Select(_ => (string?)"").ToList();
+            row[5] = x.Value;
+            row[6] = x.Text;
+            return (IReadOnlyList<string?>)row;
         }).ToList();
-        var headers = new[] { "患者姓名", "性别", "年龄", "病案号", "身份证号", "疾病类型ID", "疾病类型名称", "医院ID", "科室ID", "经办人ID", "入院时间", "出院时间", "手术时间" };
         var bytes = SimpleXlsx.Build("病例导入", headers, rows);
         return Results.File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "病例导入模板.xlsx");
     }).RequireAuthorization();
@@ -891,12 +771,6 @@ static bool VerifyPassword(PasswordHasher passwordHasher, string passwordHash, s
     }
 }
 
-static string GetValueText(RegistryFormFieldValue value)
-    => GetFieldValueText(value.FieldName, value.FieldText, value.FieldValue);
-
-static string GetFieldValueText(string fieldName, string? fieldText, string? fieldValue)
-    => FormValueDisplayMapper.GetDisplayText(fieldName, fieldText, fieldValue);
-
 static string GetCaseStatusText(int status)
     => status switch
     {
@@ -929,9 +803,3 @@ internal sealed record McrRoleItem(Guid Id, string Name, string? Describe);
 internal sealed record McrRoleListResponse(bool Success, string? Message, List<McrRoleItem> Roles);
 
 internal sealed record McrAuthResponse(bool Success, string? Message);
-
-internal sealed record ExportFieldHeader(string Name, int Sort);
-
-internal sealed record ExportFormInstance(Guid Id, Guid OwnerId);
-
-internal sealed record ExportFieldValue(Guid FormInstanceId, string FieldName, string? FieldText, string? FieldValue);

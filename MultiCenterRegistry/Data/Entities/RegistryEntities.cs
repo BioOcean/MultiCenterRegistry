@@ -6,21 +6,43 @@ public sealed class RegistryCase
     public string OldCaseId { get; set; } = "";
     public string PatientName { get; set; } = "";
     public string? PatientSex { get; set; }
+    public string? PatientSexText { get; set; }
     public string? PatientAge { get; set; }
     public string? IdNumber { get; set; }
     public string? PatientNumber { get; set; }
     public string? DiseaseId { get; set; }
+    public string? DiseaseName { get; set; }
     public string? HospitalId { get; set; }
     public string? HospitalName { get; set; }
     public string? DepartmentId { get; set; }
+    public string? DepartmentName { get; set; }
     public string? OperatorId { get; set; }
     public string? OperatorName { get; set; }
-    public string? PatientSexText { get; set; }
-    public string? SurgeryTypeValue { get; set; }
-    public string? SurgeryTypeText { get; set; }
     public DateTime? AdmissionTime { get; set; }
     public DateTime? DischargeTime { get; set; }
     public DateTime? OperationTime { get; set; }
+    public int? HospitalStayDays { get; set; }
+    public string? SurgeryTypeValue { get; set; }
+    public string? SurgeryTypeText { get; set; }
+    public string? CoronaryIntervention { get; set; }
+    public string? AblationIntervention { get; set; }
+    public string? StructuralIntervention { get; set; }
+    public string? IsEmergencyIntervention { get; set; }
+    public string? DischargeMode { get; set; }
+    public string? SituationReason { get; set; }
+    public string? SituationSupplement { get; set; }
+    public DateTime? DeathTime { get; set; }
+    public string? CaseSummary { get; set; }
+    public string? DischargeDiagnosis { get; set; }
+    public string? OtherExam { get; set; }
+    public string? AngiographyResult { get; set; }
+    public string? InterventionProcess { get; set; }
+    public string? RescueProcess { get; set; }
+    public string? ComplicationDiscussion { get; set; }
+    public string? OccurrenceReason { get; set; }
+    public string? DeathReason { get; set; }
+    public string? LessonsLearned { get; set; }
+    public string? ImprovementMeasures { get; set; }
     public int Status { get; set; }
     public int SubStatus { get; set; }
     public int Sort { get; set; }
@@ -30,21 +52,6 @@ public sealed class RegistryCase
     public string? UpdatedBy { get; set; }
 }
 
-public sealed class CaseFormData
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid CaseId { get; set; }
-    public string FormCode { get; set; } = "";
-    public string SectionCode { get; set; } = "";
-    public string FieldCode { get; set; } = "";
-    public string FieldName { get; set; } = "";
-    public string? FieldValue { get; set; }
-    public string? FieldText { get; set; }
-    public int Sort { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public string? CreatedBy { get; set; }
-}
-
 public sealed class QualityReport
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -52,10 +59,29 @@ public sealed class QualityReport
     public string Name { get; set; } = "";
     public DateTime QualityDate { get; set; }
     public string? TemplateId { get; set; }
+    public string? TemplateName { get; set; }
     public string? HospitalId { get; set; }
+    public string? HospitalName { get; set; }
     public int Status { get; set; }
     public string? QualityUserId { get; set; }
+    public string? QualityUserName { get; set; }
+    public DateTime? SubmittedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? CreatedBy { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+public sealed class QualityReportItem
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid QualityReportId { get; set; }
+    public string MetricCode { get; set; } = "";
+    public string MetricName { get; set; } = "";
+    public string? CategoryName { get; set; }
+    public int? CaseCount { get; set; }
+    public int Sort { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string? CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
@@ -102,6 +128,19 @@ public sealed class CaseAppraise
     public Guid CaseId { get; set; }
     public string ExpertId { get; set; } = "";
     public int Status { get; set; }
+    public string? Indication { get; set; }
+    public string? Operation { get; set; }
+    public string? DeviceComplete { get; set; }
+    public string? SurgeryLevelImplemented { get; set; }
+    public string? HasManagementProblem { get; set; }
+    public string? ManagementProblemDescription { get; set; }
+    public string? RescueTimely { get; set; }
+    public string? RescueMeasureProper { get; set; }
+    public string? RescueDeviceComplete { get; set; }
+    public string? DeathReason { get; set; }
+    public string? OtherDeathReason { get; set; }
+    public string? NeedImprovement { get; set; }
+    public string? ImprovementContent { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
@@ -204,92 +243,6 @@ public sealed class MigrationMap
     public string TargetTable { get; set; } = "";
     public Guid TargetId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-public sealed class RegistryFormTemplate
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public string SourceCustomFormId { get; set; } = "";
-    public string FormName { get; set; } = "";
-    public string BusinessType { get; set; } = "";
-    public int FieldCount { get; set; }
-    public long AnswerCount { get; set; }
-    public long CardCount { get; set; }
-    public bool IsActive { get; set; } = true;
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? UpdatedAt { get; set; }
-}
-
-public sealed class RegistryFormTemplateMap
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid FormTemplateId { get; set; }
-    public string BusinessType { get; set; } = "";
-    public string SourceFollowTemplateId { get; set; } = "";
-    public string SourceCustomFormId { get; set; } = "";
-    public string TemplateName { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-public sealed class RegistryFormFieldDefinition
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid FormTemplateId { get; set; }
-    public string StorageKey { get; set; } = "";
-    public string SourceSubjectId { get; set; } = "";
-    public string? SourceParentSubjectId { get; set; }
-    public string? SourceTopSubjectId { get; set; }
-    public string? SourceSubjectListId { get; set; }
-    public string? SourceSubjectConfigId { get; set; }
-    public string FieldCode { get; set; } = "";
-    public string FieldName { get; set; } = "";
-    public int? ControlType { get; set; }
-    public bool? IsRequired { get; set; }
-    public string? DefaultOptions { get; set; }
-    public string? FixedValue { get; set; }
-    public string? Format { get; set; }
-    public int Sort { get; set; }
-    public int Level { get; set; }
-    public int Status { get; set; }
-    public long AnswerCount { get; set; }
-    public long NonEmptyAnswerCount { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-public sealed class RegistryFormInstance
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public string OwnerType { get; set; } = "";
-    public Guid OwnerId { get; set; }
-    public Guid FormTemplateId { get; set; }
-    public Guid? FormTemplateMapId { get; set; }
-    public string? SourceCardId { get; set; }
-    public string? SourceCustomFormId { get; set; }
-    public string? SourceFollowTemplateId { get; set; }
-    public int Status { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-    public string? UpdatedBy { get; set; }
-}
-
-public sealed class RegistryFormFieldValue
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid FormInstanceId { get; set; }
-    public Guid? FormFieldDefinitionId { get; set; }
-    public string StorageKey { get; set; } = "";
-    public string? SourceAnswerId { get; set; }
-    public string? SourceSubjectId { get; set; }
-    public string FieldCode { get; set; } = "";
-    public string FieldName { get; set; } = "";
-    public string? FieldValue { get; set; }
-    public string? FieldText { get; set; }
-    public int Sort { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-    public string? UpdatedBy { get; set; }
 }
 
 public sealed class SystemUser

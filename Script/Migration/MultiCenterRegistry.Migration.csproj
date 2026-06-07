@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Bio.Core" Version="0.3.526" />
+    <PackageReference Include="Bio.Core" Version="0.3.602.2" />
   </ItemGroup>
 
 </Project>

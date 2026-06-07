@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using MultiCenterRegistry.Constants;
 using MultiCenterRegistry.Data;
 using MultiCenterRegistry.Data.Entities;
 using QuestPDF.Fluent;
@@ -18,18 +19,17 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             return null;
         }
 
-        var templateName = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "quality" && x.SourceFollowTemplateId == quality.TemplateId)
-            .OrderBy(x => x.TemplateName)
-            .Select(x => x.TemplateName)
-            .FirstOrDefaultAsync();
-        var hospitalName = await LoadHospitalNameAsync(dbContext, quality.HospitalId);
-        var userName = await LoadUserNameAsync(dbContext, quality.QualityUserId);
+        var hospitalName = quality.HospitalName ?? await LoadHospitalNameAsync(dbContext, quality.HospitalId);
+        var userName = quality.QualityUserName ?? await LoadUserNameAsync(dbContext, quality.QualityUserId);
         var rejects = await dbContext.QualityRejects.AsNoTracking()
             .Where(x => x.QualityReportId == qualityId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync();
-        var forms = await LoadFormsAsync(dbContext, "quality", [qualityId]);
+        var items = await dbContext.QualityReportItems.AsNoTracking()
+            .Where(x => x.QualityReportId == qualityId)
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.MetricName)
+            .ToListAsync();
 
         var bytes = BuildPdf(quality.Name, $"质控月份：{quality.QualityDate:yyyy-MM}", column =>
         {
@@ -38,10 +38,11 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             [
                 new("报表名称", quality.Name),
                 new("质控月份", quality.QualityDate.ToString("yyyy-MM")),
-                new("疾病类型", templateName ?? quality.TemplateId),
+                new("疾病类型", quality.TemplateName ?? RegistryFixedCatalog.GetDiseaseName(quality.TemplateId)),
                 new("医院", hospitalName ?? quality.HospitalId),
                 new("质控员", userName ?? quality.QualityUserId),
                 new("状态", GetQualityStatusText(quality.Status)),
+                new("提交时间", FormatDateTime(quality.SubmittedAt)),
                 new("创建时间", FormatDateTime(quality.CreatedAt)),
                 new("更新时间", FormatDateTime(quality.UpdatedAt))
             ]));
@@ -56,8 +57,9 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                 column.Item().Element(container => ComposeRejects(container, rejects));
             }
 
-            AddSectionTitle(column, "质控表单");
-            ComposeForms(column, forms);
+            AddSectionTitle(column, "质控指标");
+            column.Item().Element(container => ComposeFields(container, items.Select(x =>
+                new PdfFieldItem(x.MetricName, x.CaseCount?.ToString() ?? "-", 2, x.Sort)).ToList()));
         });
 
         return new RegistryPdfFileResult(BuildFileName($"质控_{quality.Name}_{DateTime.Now:yyyyMMddHHmmss}.pdf"), bytes);
@@ -73,28 +75,14 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             return null;
         }
 
-        var hospitalName = await LoadHospitalNameAsync(dbContext, registryCase.HospitalId);
-        var departmentName = await LoadDepartmentNameAsync(dbContext, registryCase.DepartmentId);
-        var diseaseName = await dbContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "case" && x.SourceFollowTemplateId == registryCase.DiseaseId)
-            .OrderBy(x => x.TemplateName)
-            .Select(x => x.TemplateName)
-            .FirstOrDefaultAsync();
-
+        var hospitalName = registryCase.HospitalName ?? await LoadHospitalNameAsync(dbContext, registryCase.HospitalId);
+        var departmentName = registryCase.DepartmentName ?? await LoadDepartmentNameAsync(dbContext, registryCase.DepartmentId);
         var appraises = await dbContext.CaseAppraises.AsNoTracking()
             .Where(x => x.MeetingId == meetingId && x.CaseId == caseId)
             .OrderBy(x => x.Status)
             .ThenBy(x => x.CreatedAt)
             .ToListAsync();
-        var appraiseIds = appraises.Select(x => x.Id).ToList();
         var userNames = await LoadUserNamesAsync(dbContext, appraises.Select(x => x.ExpertId));
-        var caseForms = await LoadFormsAsync(dbContext, "case", [caseId]);
-        var appraiseForms = appraiseIds.Count == 0
-            ? new List<PdfFormBlock>()
-            : await LoadFormsAsync(dbContext, "appraise", appraiseIds);
-        var appraiseFormsByOwner = appraiseForms
-            .GroupBy(x => x.OwnerId)
-            .ToDictionary(x => x.Key, x => x.ToList());
         var summaries = await dbContext.CaseSummaries.AsNoTracking()
             .Where(x => x.MeetingId == meetingId && x.CaseId == caseId)
             .OrderByDescending(x => x.CreatedAt)
@@ -103,7 +91,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             .Where(x => x.MeetingId == meetingId && x.CaseId == caseId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync();
-        var statistics = BuildStatistics(appraiseForms);
+        var statistics = BuildStatistics(appraises);
 
         var bytes = BuildPdf(registryCase.PatientName, meeting.Title, column =>
         {
@@ -115,17 +103,17 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                 new("结束时间", FormatDateTime(meeting.EndTime)),
                 new("地点", meeting.Place),
                 new("分组", meeting.GroupInfo),
-                new("会议状态", meeting.Status.ToString())
+                new("会议状态", GetMeetingStatusText(meeting.Status))
             ]));
 
             AddSectionTitle(column, "病例信息");
             column.Item().Element(container => ComposeKeyValues(container,
             [
                 new("姓名", registryCase.PatientName),
-                new("性别", registryCase.PatientSex),
+                new("性别", registryCase.PatientSexText ?? RegistryFixedCatalog.GetSexName(registryCase.PatientSex)),
                 new("年龄", registryCase.PatientAge),
                 new("病案号", registryCase.PatientNumber),
-                new("疾病类型", diseaseName ?? registryCase.DiseaseId),
+                new("疾病类型", registryCase.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(registryCase.DiseaseId ?? registryCase.SurgeryTypeValue)),
                 new("医院", hospitalName ?? registryCase.HospitalId),
                 new("科室", departmentName ?? registryCase.DepartmentId),
                 new("入院时间", FormatDate(registryCase.AdmissionTime)),
@@ -135,7 +123,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             ]));
 
             AddSectionTitle(column, "病例对照");
-            ComposeForms(column, caseForms);
+            ComposeForms(column, BuildCaseForms(registryCase, hospitalName, departmentName));
 
             AddSectionTitle(column, "评审汇总");
             ComposeSummaries(column, summaries);
@@ -156,14 +144,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                         .FontSize(11)
                         .SemiBold()
                         .FontColor("#0B6F5D");
-                    if (appraiseFormsByOwner.TryGetValue(appraise.Id, out var forms))
-                    {
-                        ComposeForms(column, forms);
-                    }
-                    else
-                    {
-                        AddEmptyLine(column, "该专家暂无评审表单数据");
-                    }
+                    column.Item().Element(container => ComposeFields(container, BuildAppraiseFields(appraise)));
                 }
             }
 
@@ -193,6 +174,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                     {
                         header.Item().PaddingTop(3).Text(subtitle).FontSize(10).FontColor(Colors.Grey.Darken1);
                     }
+
                     header.Item().PaddingTop(8).LineHorizontal(1).LineColor("#D5E4DE");
                 });
                 page.Content().PaddingTop(12).Column(column =>
@@ -212,91 +194,100 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
         }).GeneratePdf();
     }
 
-    private static async Task<List<PdfFormBlock>> LoadFormsAsync(RegistryDbContext dbContext, string ownerType, IReadOnlyCollection<Guid> ownerIds)
+    private static List<PdfFormBlock> BuildCaseForms(RegistryCase item, string? hospitalName, string? departmentName)
     {
-        if (ownerIds.Count == 0)
+        var basicFields = new List<PdfFieldItem>
         {
-            return [];
+            new("病案号", item.PatientNumber, 2, 10),
+            new("患者姓名", item.PatientName, 2, 20),
+            new("性别", item.PatientSexText ?? RegistryFixedCatalog.GetSexName(item.PatientSex), 2, 30),
+            new("年龄", item.PatientAge, 2, 40),
+            new("身份证号码", item.IdNumber, 2, 50),
+            new("住院科室", departmentName ?? item.DepartmentName ?? item.DepartmentId, 2, 60),
+            new("入院时间", FormatDate(item.AdmissionTime), 2, 70),
+            new("出院时间", FormatDate(item.DischargeTime), 2, 80),
+            new("住院天数", item.HospitalStayDays?.ToString() ?? "-", 2, 90),
+            new("手术类型", item.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(item.DiseaseId ?? item.SurgeryTypeValue), 2, 100),
+            new("术者", item.OperatorName ?? item.OperatorId, 2, 110),
+            new("是否急诊介入", RegistryFixedCatalog.GetYesNoName(item.IsEmergencyIntervention), 2, 120),
+            new("死亡时间", FormatDate(item.DeathTime), 2, 130),
+            new("情况说明/原因说明", RegistryFixedCatalog.GetSituationReasonName(item.SituationReason), 2, 140),
+            new("补充说明", item.SituationSupplement, 2, 150),
+            new("离院方式", item.DischargeMode, 2, 160)
+        };
+
+        if (BuildDiseaseSpecificField(item) is { } diseaseSpecificField)
+        {
+            basicFields.Add(diseaseSpecificField);
         }
 
-        var instances = await dbContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == ownerType && ownerIds.Contains(x.OwnerId))
-            .OrderBy(x => x.CreatedAt)
-            .ToListAsync();
-        var instanceIds = instances.Select(x => x.Id).ToList();
-        if (instanceIds.Count == 0)
-        {
-            return [];
-        }
-
-        var templateIds = instances.Select(x => x.FormTemplateId).Distinct().ToList();
-        var templates = await dbContext.FormTemplates.AsNoTracking()
-            .Where(x => templateIds.Contains(x.Id))
-            .ToDictionaryAsync(x => x.Id);
-        var values = await dbContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .OrderBy(x => x.Sort)
-            .ThenBy(x => x.StorageKey)
-            .ToListAsync();
-        var definitionIds = values
-            .Where(x => x.FormFieldDefinitionId.HasValue)
-            .Select(x => x.FormFieldDefinitionId!.Value)
-            .Distinct()
-            .ToList();
-        var definitions = definitionIds.Count == 0
-            ? new Dictionary<Guid, RegistryFormFieldDefinition>()
-            : await dbContext.FormFieldDefinitions.AsNoTracking()
-                .Where(x => definitionIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id);
-        var valueIds = values.Select(x => x.Id).ToList();
-        var files = valueIds.Count == 0
-            ? new List<RegistryFile>()
-            : await dbContext.Files.AsNoTracking()
-                .Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId))
-                .OrderBy(x => x.CreatedAt)
-                .ThenBy(x => x.FileName)
-                .ToListAsync();
-        var filesByValue = files
-            .GroupBy(x => x.OwnerId)
-            .ToDictionary(x => x.Key, x => x.ToList());
-
-        return instances.Select(instance =>
-        {
-            var fields = values
-                .Where(x => x.FormInstanceId == instance.Id)
-                .Select(value => CreateField(value, definitions, filesByValue))
-                .ToList();
-            var name = templates.TryGetValue(instance.FormTemplateId, out var template) ? template.FormName : "表单";
-            return new PdfFormBlock(instance.OwnerId, name, instance.CreatedAt, fields);
-        }).ToList();
+        return
+        [
+            new("患者基本信息", 10, basicFields),
+            new("病历摘要", 20, [new("摘要内容", item.CaseSummary, 2, 10)]),
+            new("出院诊断", 30, [new("出院诊断", item.DischargeDiagnosis, 2, 10)]),
+            new("相关实验室检查", 40, [new("化验单图片上传", "暂无附件", 2, 10)]),
+            new("主要辅助检查", 50,
+            [
+                new("心电图图片上传", "暂无附件", 2, 10),
+                new("心脏彩超", "暂无附件", 2, 20),
+                new("其他检查", item.OtherExam, 2, 30)
+            ]),
+            new("介入诊疗情况", 60,
+            [
+                new("造影检查结果", item.AngiographyResult, 2, 10),
+                new("介入经过", item.InterventionProcess, 2, 20)
+            ]),
+            new("并发症救治情况", 70, [new("救治经过", item.RescueProcess, 2, 10)]),
+            new("并发症讨论结论", 80,
+            [
+                new("是否组织医院或科室并发症讨论", RegistryFixedCatalog.GetYesNoName(item.ComplicationDiscussion), 2, 10),
+                new("发生原因", item.OccurrenceReason, 2, 20),
+                new("死亡原因", item.DeathReason, 2, 30),
+                new("经验教训", item.LessonsLearned, 2, 40),
+                new("改进措施", item.ImprovementMeasures, 2, 50)
+            ])
+        ];
     }
 
-    private static PdfFieldItem CreateField(
-        RegistryFormFieldValue value,
-        IReadOnlyDictionary<Guid, RegistryFormFieldDefinition> definitions,
-        IReadOnlyDictionary<Guid, List<RegistryFile>> filesByValue)
+    private static PdfFieldItem? BuildDiseaseSpecificField(RegistryCase item)
     {
-        RegistryFormFieldDefinition? definition = null;
-        if (value.FormFieldDefinitionId.HasValue)
+        var diseaseId = item.DiseaseId ?? item.SurgeryTypeValue;
+        if (IsSameValue(diseaseId, "6237dd62-15b9-4676-972d-bf32476b3546"))
         {
-            definitions.TryGetValue(value.FormFieldDefinitionId.Value, out definition);
+            return new("冠心病介入", RegistryFixedCatalog.GetText(RegistryFixedCatalog.CoronaryOptions, item.CoronaryIntervention), 2, 170);
         }
 
-        filesByValue.TryGetValue(value.Id, out var files);
-        var fileNames = files?.Select(x => x.FileName).Where(x => !string.IsNullOrWhiteSpace(x)).ToList() ?? new List<string>();
-        var displayValue = FormValueDisplayMapper.GetDisplayText(value.FieldName, value.FieldText, value.FieldValue);
-        if (fileNames.Count > 0)
+        if (IsSameValue(diseaseId, "ae92e4fa-5e02-4d4c-a773-3dc79c4935bc"))
         {
-            var fileText = $"附件：{string.Join("；", fileNames)}";
-            displayValue = string.IsNullOrWhiteSpace(displayValue) ? fileText : $"{displayValue}\n{fileText}";
+            return new("导管消融", item.AblationIntervention, 2, 170);
         }
 
-        return new PdfFieldItem(
-            value.FieldName,
-            ShowValue(displayValue),
-            definition?.Level ?? 2,
-            value.Sort);
+        if (IsSameValue(diseaseId, "c1174c60-2ef2-45f6-85dd-5269b567f996"))
+        {
+            return new("结构性心脏病介入", item.StructuralIntervention, 2, 170);
+        }
+
+        return null;
     }
+
+    private static List<PdfFieldItem> BuildAppraiseFields(CaseAppraise appraise)
+        =>
+        [
+            new("介入适应症", DisplayOption(IndicationOptions, appraise.Indication), 2, 10),
+            new("介入操作", DisplayOption(OperationOptions, appraise.Operation), 2, 20),
+            new("设备器械配套是否齐全", DisplayOption(CompleteOptions, appraise.DeviceComplete), 2, 30),
+            new("介入分级手术管理是否落实到位", RegistryFixedCatalog.GetYesNoName(appraise.SurgeryLevelImplemented), 2, 40),
+            new("是否存在管理问题", RegistryFixedCatalog.GetYesNoName(appraise.HasManagementProblem), 2, 50),
+            new("其他管理问题描述", appraise.ManagementProblemDescription, 2, 60),
+            new("救治是否及时", RegistryFixedCatalog.GetYesNoName(appraise.RescueTimely), 2, 70),
+            new("救治措施是否得当", RegistryFixedCatalog.GetYesNoName(appraise.RescueMeasureProper), 2, 80),
+            new("救治药品设备是否齐全", DisplayOption(CompleteOptions, appraise.RescueDeviceComplete), 2, 90),
+            new("死亡原因", DisplayOption(DeathReasonOptions, appraise.DeathReason), 2, 100),
+            new("其他死亡原因", appraise.OtherDeathReason, 2, 110),
+            new("是否需要提交进一步改进措施", RegistryFixedCatalog.GetYesNoName(appraise.NeedImprovement), 2, 120),
+            new("改进措施内容", appraise.ImprovementContent, 2, 130)
+        ];
 
     private static void AddSectionTitle(ColumnDescriptor column, string title)
     {
@@ -321,7 +312,7 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
 
         foreach (var form in forms)
         {
-            column.Item().PaddingTop(8).Text($"{form.Name}（创建时间 {FormatDateTime(form.CreatedAt)}）")
+            column.Item().PaddingTop(8).Text(form.Name)
                 .FontSize(11)
                 .SemiBold()
                 .FontColor("#173B33");
@@ -365,14 +356,8 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
 
             foreach (var field in fields.OrderBy(x => x.Sort))
             {
-                if (field.IsSection)
-                {
-                    table.Cell().ColumnSpan(2).Element(SectionCell).Text(field.FieldName).SemiBold();
-                    continue;
-                }
-
                 table.Cell().Element(LabelCell).Text(field.FieldName);
-                table.Cell().Element(ValueCell).Text(field.DisplayValue);
+                table.Cell().Element(ValueCell).Text(ShowValue(field.DisplayValue));
             }
         });
     }
@@ -477,29 +462,33 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
         });
     }
 
-    private static List<PdfStatistic> BuildStatistics(IEnumerable<PdfFormBlock> forms)
-        => forms
-            .SelectMany(x => x.Fields)
-            .Where(x => !x.IsSection && !string.IsNullOrWhiteSpace(x.DisplayValue) && x.DisplayValue != "-")
+    private static List<PdfStatistic> BuildStatistics(IReadOnlyList<CaseAppraise> appraises)
+    {
+        var rows = new List<(string FieldName, string Value)>();
+        rows.AddRange(appraises.Select(x => ("介入适应症", DisplayOption(IndicationOptions, x.Indication))));
+        rows.AddRange(appraises.Select(x => ("介入操作", DisplayOption(OperationOptions, x.Operation))));
+        rows.AddRange(appraises.Select(x => ("设备器械配套是否齐全", DisplayOption(CompleteOptions, x.DeviceComplete))));
+        rows.AddRange(appraises.Select(x => ("介入分级手术管理是否落实到位", RegistryFixedCatalog.GetYesNoName(x.SurgeryLevelImplemented))));
+        rows.AddRange(appraises.Select(x => ("是否存在其他管理问题", RegistryFixedCatalog.GetYesNoName(x.HasManagementProblem))));
+        rows.AddRange(appraises.Select(x => ("救治是否及时", RegistryFixedCatalog.GetYesNoName(x.RescueTimely))));
+        rows.AddRange(appraises.Select(x => ("救治措施是否得当", RegistryFixedCatalog.GetYesNoName(x.RescueMeasureProper))));
+        rows.AddRange(appraises.Select(x => ("救治药品设备是否齐全", DisplayOption(CompleteOptions, x.RescueDeviceComplete))));
+        rows.AddRange(appraises.Select(x => ("死亡原因", DisplayOption(DeathReasonOptions, x.DeathReason))));
+        rows.AddRange(appraises.Select(x => ("是否需要提交进一步改进措施", RegistryFixedCatalog.GetYesNoName(x.NeedImprovement))));
+
+        return rows
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value))
             .GroupBy(x => x.FieldName)
-            .Select(group => new
-            {
-                FieldName = group.Key,
-                Sort = group.Min(x => x.Sort),
-                Options = group
-                    .GroupBy(x => x.DisplayValue.Trim())
+            .Select(group => new PdfStatistic(
+                group.Key,
+                group.GroupBy(x => x.Value)
                     .Select(x => new PdfStatisticOption(x.Key, x.Count()))
                     .OrderByDescending(x => x.Count)
                     .ThenBy(x => x.Text)
-                    .Take(8)
-                    .ToList()
-            })
+                    .ToList()))
             .Where(x => x.Options.Count > 0)
-            .OrderBy(x => x.Sort)
-            .ThenBy(x => x.FieldName)
-            .Take(80)
-            .Select(x => new PdfStatistic(x.FieldName, x.Options))
             .ToList();
+    }
 
     private static async Task<string?> LoadHospitalNameAsync(RegistryDbContext dbContext, string? id)
     {
@@ -558,20 +547,33 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
     private static string GetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
         => Guid.TryParse(id, out var guid) && users.TryGetValue(guid, out var name) ? name : ShowValue(id);
 
+    private static string DisplayOption(IReadOnlyList<FixedOption> options, string? value)
+        => RegistryFixedCatalog.GetText(options, value);
+
+    private static bool IsSameValue(string? left, string? right)
+        => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+
     private static IContainer LabelCell(IContainer container)
         => container.Border(1).BorderColor("#DDE8E3").Background("#F5F9F7").Padding(5);
 
     private static IContainer ValueCell(IContainer container)
         => container.Border(1).BorderColor("#DDE8E3").Padding(5);
 
-    private static IContainer SectionCell(IContainer container)
-        => container.Border(1).BorderColor("#DDE8E3").Background("#EAF4F0").Padding(6);
-
     private static string FormatDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "-";
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
 
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string GetMeetingStatusText(int status)
+        => status switch
+        {
+            0 => "未开始",
+            1 => "已开始",
+            2 => "已发布",
+            3 => "已结束",
+            _ => $"状态 {status}"
+        };
 
     private static string GetQualityStatusText(int status)
         => status switch
@@ -614,14 +616,41 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
         return new string(chars);
     }
 
+    private static readonly IReadOnlyList<FixedOption> IndicationOptions =
+    [
+        new("1", "合理"),
+        new("2", "欠合理"),
+        new("3", "不合理")
+    ];
+
+    private static readonly IReadOnlyList<FixedOption> OperationOptions =
+    [
+        new("1", "规范"),
+        new("2", "欠规范"),
+        new("3", "不规范"),
+        new("4", "极不规范")
+    ];
+
+    private static readonly IReadOnlyList<FixedOption> CompleteOptions =
+    [
+        new("1", "齐全"),
+        new("2", "不齐全")
+    ];
+
+    private static readonly IReadOnlyList<FixedOption> DeathReasonOptions =
+    [
+        new("1", "疾病相关"),
+        new("2", "药物相关"),
+        new("3", "操作相关"),
+        new("4", "器械相关"),
+        new("5", "其他")
+    ];
+
     private sealed record PdfKeyValue(string Label, string? Value);
 
-    private sealed record PdfFormBlock(Guid OwnerId, string Name, DateTime CreatedAt, List<PdfFieldItem> Fields);
+    private sealed record PdfFormBlock(string Name, int Sort, List<PdfFieldItem> Fields);
 
-    private sealed record PdfFieldItem(string FieldName, string DisplayValue, int Level, int Sort)
-    {
-        public bool IsSection => Level <= 1;
-    }
+    private sealed record PdfFieldItem(string FieldName, string? DisplayValue, int Level, int Sort);
 
     private sealed record PdfStatistic(string FieldName, List<PdfStatisticOption> Options);
 

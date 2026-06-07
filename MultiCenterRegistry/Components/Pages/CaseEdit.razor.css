@@ -11,22 +11,27 @@
 
 .case-create-form {
     display: grid;
-    gap: 16px;
+    gap: 18px;
 }
 
 .case-create-section {
     display: grid;
-    gap: 16px;
+    gap: 12px;
     padding: 0;
     border: 0;
     background: transparent;
 }
 
 .case-create-section-title {
+    display: flex;
+    align-items: center;
+    min-height: 26px;
+    padding-bottom: 6px;
     color: var(--mcr-text);
     font-size: 15px;
     font-weight: 800;
     line-height: 22px;
+    border-bottom: 1px solid var(--mcr-border);
 }
 
 .case-create-grid {
@@ -59,7 +64,8 @@
     font-weight: 800;
     line-height: 18px;
     text-align: right;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .case-required {
@@ -106,6 +112,19 @@
 .case-choice-tag:focus-visible {
     outline: 2px solid rgba(37, 99, 235, .24);
     outline-offset: 2px;
+}
+
+.case-file-empty {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 9px 12px;
+    border: 1px dashed var(--mcr-border);
+    border-radius: 7px;
+    color: var(--mcr-muted);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 20px;
 }
 
 .case-create-form ::deep .mud-input-control {

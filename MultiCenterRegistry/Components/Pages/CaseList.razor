@@ -376,8 +376,6 @@
 
 @code {
     private const int PageSize = 10;
-    private static readonly string[] SurgeonFieldNames = ["术者"];
-
     private readonly List<CaseListItem> _cases = [];
     private readonly StatusTab[] _statusTabs =
     [
@@ -438,6 +436,11 @@
     private bool IsCurrentPageSelected => _isBatchOperatorMode && _cases.Any(CanSelectForOperator) && _cases.Where(CanSelectForOperator).All(x => IsCaseSelected(x.Id));
 
     private bool IsQualityCenterMode => HasPermission(PermissionConstants.QualityManage);
+
+    private bool IsHospitalQualityRole
+        => HasPermission(PermissionConstants.CaseApprove)
+           && !HasPermission(PermissionConstants.QualityManage)
+           && !HasPermission(PermissionConstants.CaseSubmit);
 
     private IReadOnlyList<StatusTab> CurrentStatusTabs => IsQualityCenterMode ? _qualityCenterTabs : _statusTabs;
 
@@ -601,20 +604,9 @@
                 .ToListAsync());
         }
 
-        var surgeryValues = await visibleQuery
-            .Where(x => (x.SurgeryTypeValue != null && x.SurgeryTypeValue != "") || (x.SurgeryTypeText != null && x.SurgeryTypeText != ""))
-            .Select(x => new { x.SurgeryTypeValue, x.SurgeryTypeText })
-            .Distinct()
-            .ToListAsync();
-
         _surgeryTypeOptions.Clear();
-        _surgeryTypeOptions.AddRange(surgeryValues
-            .Select(x => new CaseFilterOption(
-                GetRawFieldValue(x.SurgeryTypeText, x.SurgeryTypeValue),
-                NormalizeFieldValue("手术类别", x.SurgeryTypeText, x.SurgeryTypeValue)))
-            .Where(x => !string.IsNullOrWhiteSpace(x.Value) || !string.IsNullOrWhiteSpace(x.Text))
-            .GroupBy(x => x.Text, StringComparer.OrdinalIgnoreCase)
-            .Select(x => x.First())
+        _surgeryTypeOptions.AddRange(RegistryFixedCatalog.Diseases
+            .Select(x => new CaseFilterOption(x.Value, x.Text))
             .OrderBy(x => x.Text));
 
         var surgeonValues = await visibleQuery
@@ -622,10 +614,23 @@
             .Select(x => new { x.OperatorId, x.OperatorName })
             .Distinct()
             .ToListAsync();
+        var surgeonIds = surgeonValues
+            .Select(x => TryParseGuid(x.OperatorId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var surgeonNames = surgeonIds.Count == 0
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => surgeonIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id.ToString(), x => x.DisplayName == "" ? x.Account : x.DisplayName);
 
         _surgeonOptions.Clear();
         _surgeonOptions.AddRange(surgeonValues
-            .Select(x => new CaseFilterOption(x.OperatorId ?? "", ShowValue(string.IsNullOrWhiteSpace(x.OperatorName) ? x.OperatorId : x.OperatorName)))
+            .Select(x => new CaseFilterOption(
+                x.OperatorId ?? "",
+                ResolveSurgeonFilterText(x.OperatorId, x.OperatorName, surgeonNames)))
             .Where(x => !string.IsNullOrWhiteSpace(x.Value))
             .GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
             .Select(x => x.First())
@@ -688,6 +693,7 @@
                 .Skip(_pageIndex * PageSize)
                 .Take(PageSize)
                 .ToListAsync();
+            var displayMaps = await LoadCaseDisplayMapsAsync(records);
 
             _cases.Clear();
             _cases.AddRange(records.Select(x =>
@@ -695,22 +701,115 @@
                     x.Id,
                     x.PatientName,
                     x.PatientSex,
-                    x.PatientSexText,
+                    ResolveSexText(x),
                     x.PatientNumber,
-                    x.HospitalName ?? x.HospitalId,
+                    ResolveHospitalName(x, displayMaps.Hospitals),
                     x.DischargeTime,
-                    x.OperatorName ?? x.OperatorId,
-                    x.SurgeryTypeText,
+                    ResolveOperatorName(x, displayMaps.Users),
+                    ResolveSurgeryTypeText(x),
                     x.Status,
                     x.SubStatus,
                     x.Sort,
-                    x.CreatedAt)));
+                    x.CreatedAt,
+                    x.CreatedBy)));
         }
         finally
         {
             _isLoading = false;
         }
     }
+
+    private async Task<CaseDisplayMaps> LoadCaseDisplayMapsAsync(IReadOnlyCollection<RegistryCase> records)
+    {
+        if (_registryContext == null || records.Count == 0)
+        {
+            return new CaseDisplayMaps(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        var hospitalIds = records
+            .Where(x => string.IsNullOrWhiteSpace(x.HospitalName))
+            .Select(x => TryParseGuid(x.HospitalId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var userIds = records
+            .Where(x => string.IsNullOrWhiteSpace(x.OperatorName))
+            .Select(x => TryParseGuid(x.OperatorId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+
+        var hospitals = hospitalIds.Count == 0
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : await _registryContext.SystemHospitals.AsNoTracking()
+                .Where(x => hospitalIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id.ToString(), x => x.Name);
+        var users = userIds.Count == 0
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => userIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id.ToString(), x => x.DisplayName == "" ? x.Account : x.DisplayName);
+
+        return new CaseDisplayMaps(hospitals, users);
+    }
+
+    private static string? ResolveHospitalName(RegistryCase item, IReadOnlyDictionary<string, string> hospitals)
+        => !string.IsNullOrWhiteSpace(item.HospitalName) && !IsGuidText(item.HospitalName)
+            ? item.HospitalName
+            : TryGetMapText(hospitals, item.HospitalId) ?? TryGetMapText(hospitals, item.HospitalName);
+
+    private static string? ResolveOperatorName(RegistryCase item, IReadOnlyDictionary<string, string> users)
+        => !string.IsNullOrWhiteSpace(item.OperatorName) && !IsGuidText(item.OperatorName)
+            ? item.OperatorName
+            : TryGetMapText(users, item.OperatorId) ?? TryGetMapText(users, item.OperatorName);
+
+    private static string? ResolveSurgeryTypeText(RegistryCase item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.SurgeryTypeText) && !IsGuidText(item.SurgeryTypeText))
+        {
+            return item.SurgeryTypeText;
+        }
+
+        var value = GetRawFieldValue(item.DiseaseId, item.SurgeryTypeValue);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            value = item.SurgeryTypeText;
+        }
+
+        var text = RegistryFixedCatalog.GetDiseaseName(value);
+        return string.IsNullOrWhiteSpace(text) ? value : text;
+    }
+
+    private static string? ResolveSexText(RegistryCase item)
+        => RegistryFixedCatalog.GetSexName(item.PatientSexText ?? item.PatientSex);
+
+    private static string ResolveSurgeonFilterText(string? operatorId, string? operatorName, IReadOnlyDictionary<string, string> users)
+    {
+        if (!string.IsNullOrWhiteSpace(operatorName) && !IsGuidText(operatorName))
+        {
+            return operatorName.Trim();
+        }
+
+        var mappedName = TryGetMapText(users, operatorId) ?? TryGetMapText(users, operatorName);
+        return string.IsNullOrWhiteSpace(mappedName) ? "未知术者" : mappedName;
+    }
+
+    private static string? TryGetMapText(IReadOnlyDictionary<string, string> map, string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        return map.TryGetValue(id, out var text) ? text : null;
+    }
+
+    private static bool IsGuidText(string? value)
+        => Guid.TryParse(value, out _);
 
     private RenderFragment SortHeader(string column, string title) => builder =>
     {
@@ -951,7 +1050,6 @@
                 return;
             }
 
-            var changedCaseIds = cases.Select(x => x.Id).ToList();
             foreach (var item in cases)
             {
                 item.OperatorId = _targetOperatorId;
@@ -960,25 +1058,7 @@
                 item.UpdatedBy = CurrentUserId;
             }
 
-            var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-                .Where(x => x.OwnerType == "case" && changedCaseIds.Contains(x.OwnerId))
-                .Select(x => x.Id)
-                .ToListAsync();
-            if (instanceIds.Count > 0)
-            {
-                var operatorValues = await _registryContext.FormFieldValues
-                    .Where(x => instanceIds.Contains(x.FormInstanceId) && SurgeonFieldNames.Contains(x.FieldName))
-                    .ToListAsync();
-                foreach (var value in operatorValues)
-                {
-                    value.FieldValue = _targetOperatorId;
-                    value.FieldText = operatorName;
-                    value.UpdatedAt = now;
-                    value.UpdatedBy = CurrentUserId;
-                }
-            }
-
-            _registryContext.OperationLogs.Add(CreateOperationLog("病例", "批量替换术者", "case", Guid.Empty, $"{operatorName}:{changedCaseIds.Count}"));
+            _registryContext.OperationLogs.Add(CreateOperationLog("病例", "批量替换术者", "case", Guid.Empty, $"{operatorName}:{cases.Count}"));
             await _registryContext.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -1125,7 +1205,9 @@
     }
 
     private bool CanDeleteCase(CaseListItem item)
-        => HasPermission(PermissionConstants.CaseDelete) && item.Status != 2;
+        => HasPermission(PermissionConstants.CaseDelete)
+           && item.Status != 2
+           && (!IsHospitalQualityRole || string.Equals(item.CreatedBy, CurrentUserId, StringComparison.OrdinalIgnoreCase));
 
     private bool CanViewCaseAppraise(CaseListItem item)
         => HasPermission(PermissionConstants.AppraiseView) && item.SubStatus == 2;
@@ -1237,7 +1319,13 @@
         var surgeryTypeValues = GetSelectedFilterValues(_surgeryTypeValues);
         if (surgeryTypeValues.Count > 0)
         {
-            query = query.Where(x => (x.SurgeryTypeValue != null && surgeryTypeValues.Contains(x.SurgeryTypeValue))
+            var surgeryTypeTexts = surgeryTypeValues
+                .Select(RegistryFixedCatalog.GetDiseaseName)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+            query = query.Where(x => (x.DiseaseId != null && surgeryTypeValues.Contains(x.DiseaseId))
+                                     || (x.SurgeryTypeValue != null && surgeryTypeValues.Contains(x.SurgeryTypeValue))
+                                     || (x.SurgeryTypeText != null && surgeryTypeTexts.Contains(x.SurgeryTypeText))
                                      || (x.SurgeryTypeText != null && surgeryTypeValues.Contains(x.SurgeryTypeText)));
         }
 
@@ -1309,7 +1397,17 @@
             return;
         }
 
-        if (!await ConfirmAsync($"确认删除病例“{patientName}”？病例表单、附件记录、意见、评审、汇总和投票都会删除。"))
+        var createdBy = await _registryContext.Cases.AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => x.CreatedBy)
+            .FirstOrDefaultAsync();
+        if (IsHospitalQualityRole && !string.Equals(createdBy, CurrentUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            inj_snackbar.Add("医院质控员只能删除自己创建的病例", Severity.Warning);
+            return;
+        }
+
+        if (!await ConfirmAsync($"确认删除病例“{patientName}”？病例附件、意见、评审、汇总和投票都会删除。"))
         {
             return;
         }
@@ -1332,13 +1430,11 @@
             .Select(x => x.Id)
             .ToListAsync();
 
-        await DeleteFormInstancesAsync("appraise", appraiseIds);
-        await DeleteFormInstancesAsync("case", [id]);
         await _registryContext.CaseVotes.Where(x => x.CaseId == id).ExecuteDeleteAsync();
         await _registryContext.CaseSummaries.Where(x => x.CaseId == id).ExecuteDeleteAsync();
         await _registryContext.CaseAppraises.Where(x => x.CaseId == id).ExecuteDeleteAsync();
         await _registryContext.CaseAdvices.Where(x => x.CaseId == id).ExecuteDeleteAsync();
-        await _registryContext.CaseFormData.Where(x => x.CaseId == id).ExecuteDeleteAsync();
+        await _registryContext.Files.Where(x => x.OwnerType == "case" && x.OwnerId == id).ExecuteDeleteAsync();
 
         var targetIds = new List<Guid> { id };
         targetIds.AddRange(appraiseIds);
@@ -1354,35 +1450,6 @@
 
         inj_snackbar.Add("病例已删除", Severity.Success);
         await LoadCasesAsync();
-    }
-
-    private async Task DeleteFormInstancesAsync(string ownerType, List<Guid> ownerIds)
-    {
-        if (_registryContext == null || ownerIds.Count == 0)
-        {
-            return;
-        }
-
-        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == ownerType && ownerIds.Contains(x.OwnerId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (instanceIds.Count == 0)
-        {
-            return;
-        }
-
-        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (valueIds.Count > 0)
-        {
-            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
-            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
-        }
-
-        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
     }
 
     private async Task ImportCasesAsync(InputFileChangeEventArgs args)
@@ -1419,19 +1486,6 @@
             var imported = 0;
             var skipped = 0;
             await using var transaction = await _registryContext.Database.BeginTransactionAsync();
-            var caseTemplateMaps = await _registryContext.FormTemplateMaps.AsNoTracking()
-                .Where(x => x.BusinessType == "case")
-                .ToListAsync();
-            var templateMapByDisease = caseTemplateMaps
-                .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-            var templateIds = caseTemplateMaps.Select(x => x.FormTemplateId).Distinct().ToList();
-            var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
-                .Where(x => templateIds.Contains(x.FormTemplateId))
-                .OrderBy(x => x.Sort)
-                .ThenBy(x => x.StorageKey)
-                .ToListAsync();
-            var definitionsByTemplate = definitions.GroupBy(x => x.FormTemplateId).ToDictionary(x => x.Key, x => x.ToList());
             var hospitalNames = (await _registryContext.SystemHospitals.AsNoTracking()
                     .Select(x => new { Id = x.Id.ToString(), x.Name })
                     .ToListAsync())
@@ -1447,7 +1501,20 @@
             {
                 var patientName = GetCell(row, "患者姓名");
                 var diseaseId = GetCell(row, "疾病类型ID");
-                if (string.IsNullOrWhiteSpace(patientName) || string.IsNullOrWhiteSpace(diseaseId) || !templateMapByDisease.TryGetValue(diseaseId, out var templateMap))
+                if (string.IsNullOrWhiteSpace(diseaseId))
+                {
+                    diseaseId = GetCell(row, "手术类别ID");
+                }
+
+                if (string.IsNullOrWhiteSpace(diseaseId))
+                {
+                    var diseaseName = GetCell(row, "手术类别");
+                    diseaseId = RegistryFixedCatalog.Diseases.FirstOrDefault(x => x.Text.Equals(diseaseName, StringComparison.OrdinalIgnoreCase))?.Value ?? "";
+                }
+
+                if (string.IsNullOrWhiteSpace(patientName)
+                    || string.IsNullOrWhiteSpace(diseaseId)
+                    || !RegistryFixedCatalog.Diseases.Any(x => x.Value.Equals(diseaseId, StringComparison.OrdinalIgnoreCase)))
                 {
                     skipped++;
                     continue;
@@ -1462,7 +1529,8 @@
 
                 if (!TryParseDate(GetCell(row, "入院时间"), out var admissionTime)
                     || !TryParseDate(GetCell(row, "出院时间"), out var dischargeTime)
-                    || !TryParseDate(GetCell(row, "手术时间"), out var operationTime))
+                    || !TryParseDate(GetCell(row, "手术时间"), out var operationTime)
+                    || !TryParseDate(GetCell(row, "死亡时间"), out var deathTime))
                 {
                     skipped++;
                     continue;
@@ -1473,25 +1541,53 @@
                 var patientSex = EmptyToNull(GetCell(row, "性别"));
                 var hospitalId = EmptyToNull(GetCell(row, "医院ID"));
                 var operatorId = EmptyToNull(GetCell(row, "经办人ID"));
-                var surgeryType = EmptyToNull(GetCell(row, "手术类别"));
+                var surgeryType = diseaseId;
+                var hospitalStayDays = TryParseInt(GetCell(row, "住院天数"));
+                if (!hospitalStayDays.HasValue && admissionTime.HasValue && dischargeTime.HasValue)
+                {
+                    hospitalStayDays = Math.Max(0, (int)(dischargeTime.Value.Date - admissionTime.Value.Date).TotalDays);
+                }
+
                 _registryContext.Cases.Add(new RegistryCase
                 {
                     Id = caseId,
                     OldCaseId = caseId.ToString(),
                     PatientName = patientName,
                     PatientSex = patientSex,
-                    PatientSexText = NormalizeFieldValue("性别", patientSex, patientSex),
+                    PatientSexText = RegistryFixedCatalog.GetSexName(patientSex),
                     PatientAge = EmptyToNull(GetCell(row, "年龄")),
                     PatientNumber = EmptyToNull(patientNumber),
                     IdNumber = EmptyToNull(GetCell(row, "身份证号")),
                     DiseaseId = diseaseId,
+                    DiseaseName = RegistryFixedCatalog.GetDiseaseName(diseaseId),
                     HospitalId = hospitalId,
                     HospitalName = hospitalId != null && hospitalNames.TryGetValue(hospitalId, out var hospitalName) ? hospitalName : null,
                     DepartmentId = EmptyToNull(GetCell(row, "科室ID")),
+                    DepartmentName = EmptyToNull(GetCell(row, "住院科室")),
                     OperatorId = operatorId,
                     OperatorName = operatorId != null && userNames.TryGetValue(operatorId, out var operatorName) ? operatorName : null,
                     SurgeryTypeValue = surgeryType,
-                    SurgeryTypeText = NormalizeFieldValue("手术类别", surgeryType, surgeryType),
+                    SurgeryTypeText = RegistryFixedCatalog.GetDiseaseName(diseaseId),
+                    CoronaryIntervention = EmptyToNull(GetCell(row, "冠心病介入")),
+                    AblationIntervention = EmptyToNull(GetCell(row, "导管消融")),
+                    StructuralIntervention = EmptyToNull(GetCell(row, "结构性心脏病介入")),
+                    IsEmergencyIntervention = EmptyToNull(GetCell(row, "是否急诊介入")),
+                    DischargeMode = EmptyToNull(GetCell(row, "离院方式")),
+                    SituationReason = EmptyToNull(GetCell(row, "情况/原因说明")),
+                    SituationSupplement = EmptyToNull(GetCell(row, "补充说明")),
+                    DeathTime = deathTime,
+                    HospitalStayDays = hospitalStayDays,
+                    CaseSummary = EmptyToNull(GetCell(row, "病例简介")),
+                    DischargeDiagnosis = EmptyToNull(GetCell(row, "出院诊断")),
+                    OtherExam = EmptyToNull(GetCell(row, "其他检查")),
+                    AngiographyResult = EmptyToNull(GetCell(row, "造影结果")),
+                    InterventionProcess = EmptyToNull(GetCell(row, "介入过程")),
+                    RescueProcess = EmptyToNull(GetCell(row, "抢救过程")),
+                    ComplicationDiscussion = EmptyToNull(GetCell(row, "并发症讨论")),
+                    OccurrenceReason = EmptyToNull(GetCell(row, "发生原因")),
+                    DeathReason = EmptyToNull(GetCell(row, "死亡原因")),
+                    LessonsLearned = EmptyToNull(GetCell(row, "经验教训")),
+                    ImprovementMeasures = EmptyToNull(GetCell(row, "改进措施")),
                     AdmissionTime = admissionTime,
                     DischargeTime = dischargeTime,
                     OperationTime = operationTime,
@@ -1502,7 +1598,6 @@
                     CreatedBy = CurrentUserId
                 });
 
-                AddCaseForms(caseId, [templateMap], definitionsByTemplate, now);
                 _registryContext.OperationLogs.Add(CreateOperationLog("病例", "导入", "case", caseId, file.Name));
                 imported++;
             }
@@ -1519,66 +1614,13 @@
         }
     }
 
-    private void AddCaseForms(
-        Guid caseId,
-        IEnumerable<RegistryFormTemplateMap> maps,
-        IReadOnlyDictionary<Guid, List<RegistryFormFieldDefinition>> definitionsByTemplate,
-        DateTime now)
-    {
-        if (_registryContext == null)
-        {
-            return;
-        }
-
-        foreach (var map in maps)
-        {
-            var instance = new RegistryFormInstance
-            {
-                OwnerType = "case",
-                OwnerId = caseId,
-                FormTemplateId = map.FormTemplateId,
-                FormTemplateMapId = map.Id,
-                SourceCustomFormId = map.SourceCustomFormId,
-                SourceFollowTemplateId = map.SourceFollowTemplateId,
-                Status = 0,
-                CreatedAt = now,
-                CreatedBy = CurrentUserId
-            };
-            _registryContext.FormInstances.Add(instance);
-
-            if (!definitionsByTemplate.TryGetValue(map.FormTemplateId, out var fields))
-            {
-                continue;
-            }
-
-            foreach (var field in fields)
-            {
-                _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
-                {
-                    FormInstanceId = instance.Id,
-                    FormFieldDefinitionId = field.Id,
-                    StorageKey = field.StorageKey,
-                    SourceSubjectId = field.SourceSubjectId,
-                    FieldCode = field.FieldCode,
-                    FieldName = field.FieldName,
-                    Sort = field.Sort,
-                    CreatedAt = now,
-                    CreatedBy = CurrentUserId
-                });
-            }
-        }
-    }
-
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
     private static string ShowSex(string? value)
-        => ShowValue(FormValueDisplayMapper.Normalize("性别", value));
+        => ShowValue(RegistryFixedCatalog.GetSexName(value));
 
     private static string ShowDischargeTime(CaseListItem item)
         => FormatDate(item.DischargeTime);
-
-    private static string NormalizeFieldValue(string fieldName, string? fieldText, string? fieldValue)
-        => FormValueDisplayMapper.GetDisplayText(fieldName, fieldText, fieldValue);
 
     private static string GetRawFieldValue(string? fieldText, string? fieldValue)
         => string.IsNullOrWhiteSpace(fieldText) ? fieldValue?.Trim() ?? "" : fieldText.Trim();
@@ -1592,6 +1634,9 @@
         => row.TryGetValue(name, out var value) ? value.Trim() : "";
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static int? TryParseInt(string value)
+        => int.TryParse(value, out var result) ? result : null;
 
     private static bool TryParseDate(string value, out DateTime? result)
     {
@@ -1649,9 +1694,11 @@
         int Status,
         int SubStatus,
         int Sort,
-        DateTime CreatedAt);
+        DateTime CreatedAt,
+        string? CreatedBy);
 
     private sealed record StatusTab(string Value, string Text);
     private sealed record CaseFilterOption(string Value, string Text);
     private sealed record HospitalFilterOption(string Id, string Name);
+    private sealed record CaseDisplayMaps(IReadOnlyDictionary<string, string> Hospitals, IReadOnlyDictionary<string, string> Users);
 }

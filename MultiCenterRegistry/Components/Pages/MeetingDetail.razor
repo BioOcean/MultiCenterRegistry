@@ -375,40 +375,10 @@
             return;
         }
 
-        var appraiseTemplateMaps = await _registryContext.FormTemplateMaps.AsNoTracking()
-            .Where(x => x.BusinessType == "appraise")
-            .ToListAsync();
-        var templateMapByDisease = appraiseTemplateMaps
-            .Where(x => !string.IsNullOrWhiteSpace(x.SourceFollowTemplateId))
-            .GroupBy(x => x.SourceFollowTemplateId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-        var targetCasesWithTemplate = targetCases
-            .Where(x => !string.IsNullOrWhiteSpace(x.DiseaseId) && templateMapByDisease.ContainsKey(x.DiseaseId))
-            .ToList();
-        if (targetCasesWithTemplate.Count == 0)
-        {
-            inj_snackbar.Add("匹配到的病例没有可用评审模板", Severity.Warning);
-            return;
-        }
-
-        var templateIds = targetCasesWithTemplate
-            .Select(x => templateMapByDisease[x.DiseaseId!].FormTemplateId)
-            .Distinct()
-            .ToList();
-        var definitions = await _registryContext.FormFieldDefinitions.AsNoTracking()
-            .Where(x => templateIds.Contains(x.FormTemplateId))
-            .OrderBy(x => x.Sort)
-            .ThenBy(x => x.StorageKey)
-            .ToListAsync();
-        var definitionsByTemplate = definitions
-            .GroupBy(x => x.FormTemplateId)
-            .ToDictionary(x => x.Key, x => x.ToList());
-
         await using var transaction = await _registryContext.Database.BeginTransactionAsync();
         var now = DateTime.Now;
-        foreach (var item in targetCasesWithTemplate)
+        foreach (var item in targetCases)
         {
-            var templateMap = templateMapByDisease[item.DiseaseId!];
             foreach (var expert in experts)
             {
                 var appraise = new CaseAppraise
@@ -420,7 +390,6 @@
                     CreatedAt = now
                 };
                 _registryContext.CaseAppraises.Add(appraise);
-                AddAppraiseForm(appraise.Id, templateMap, definitionsByTemplate, now);
             }
 
             _registryContext.CaseSummaries.Add(new CaseSummary
@@ -434,12 +403,11 @@
             });
         }
 
-        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "添加病例", "meeting", MeetingId, string.Join(",", targetCasesWithTemplate.Select(x => x.Id))));
+        _registryContext.OperationLogs.Add(CreateOperationLog("会议", "添加病例", "meeting", MeetingId, string.Join(",", targetCases.Select(x => x.Id))));
         await _registryContext.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        var skippedCount = targetCases.Count - targetCasesWithTemplate.Count;
-        inj_snackbar.Add(skippedCount == 0 ? $"已添加 {targetCasesWithTemplate.Count} 个病例" : $"已添加 {targetCasesWithTemplate.Count} 个病例，{skippedCount} 个病例缺少评审模板未添加", Severity.Success);
+        inj_snackbar.Add($"已添加 {targetCases.Count} 个病例", Severity.Success);
         await LoadMeetingAsync();
     }
 
@@ -524,11 +492,6 @@
         }
 
         await using var transaction = await _registryContext.Database.BeginTransactionAsync();
-        var appraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
-            .Where(x => x.MeetingId == MeetingId && x.CaseId == caseId)
-            .Select(x => x.Id)
-            .ToListAsync();
-        await DeleteAppraiseFormsAsync(appraiseIds);
         await _registryContext.CaseVotes.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
         await _registryContext.CaseSummaries.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
         await _registryContext.CaseAppraises.Where(x => x.MeetingId == MeetingId && x.CaseId == caseId).ExecuteDeleteAsync();
@@ -548,11 +511,6 @@
         }
 
         await using var transaction = await _registryContext.Database.BeginTransactionAsync();
-        var appraiseIds = await _registryContext.CaseAppraises.AsNoTracking()
-            .Where(x => x.MeetingId == MeetingId)
-            .Select(x => x.Id)
-            .ToListAsync();
-        await DeleteAppraiseFormsAsync(appraiseIds);
         await _registryContext.CaseVotes.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
         await _registryContext.CaseSummaries.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
         await _registryContext.CaseAppraises.Where(x => x.MeetingId == MeetingId).ExecuteDeleteAsync();
@@ -564,82 +522,6 @@
 
         inj_snackbar.Add("会议已删除", Severity.Success);
         inj_navigationManager.NavigateTo(RouteConstants.MeetingList);
-    }
-
-    private async Task DeleteAppraiseFormsAsync(List<Guid> appraiseIds)
-    {
-        if (_registryContext == null || appraiseIds.Count == 0)
-        {
-            return;
-        }
-
-        var instanceIds = await _registryContext.FormInstances.AsNoTracking()
-            .Where(x => x.OwnerType == "appraise" && appraiseIds.Contains(x.OwnerId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (instanceIds.Count == 0)
-        {
-            return;
-        }
-
-        var valueIds = await _registryContext.FormFieldValues.AsNoTracking()
-            .Where(x => instanceIds.Contains(x.FormInstanceId))
-            .Select(x => x.Id)
-            .ToListAsync();
-        if (valueIds.Count > 0)
-        {
-            await _registryContext.Files.Where(x => x.OwnerType == "form_field_value" && valueIds.Contains(x.OwnerId)).ExecuteDeleteAsync();
-            await _registryContext.FormFieldValues.Where(x => valueIds.Contains(x.Id)).ExecuteDeleteAsync();
-        }
-
-        await _registryContext.FormInstances.Where(x => instanceIds.Contains(x.Id)).ExecuteDeleteAsync();
-    }
-
-    private void AddAppraiseForm(
-        Guid appraiseId,
-        RegistryFormTemplateMap templateMap,
-        IReadOnlyDictionary<Guid, List<RegistryFormFieldDefinition>> definitionsByTemplate,
-        DateTime now)
-    {
-        if (_registryContext == null)
-        {
-            return;
-        }
-
-        var instance = new RegistryFormInstance
-        {
-            OwnerType = "appraise",
-            OwnerId = appraiseId,
-            FormTemplateId = templateMap.FormTemplateId,
-            FormTemplateMapId = templateMap.Id,
-            SourceCustomFormId = templateMap.SourceCustomFormId,
-            SourceFollowTemplateId = templateMap.SourceFollowTemplateId,
-            Status = 0,
-            CreatedAt = now,
-            CreatedBy = CurrentUserId
-        };
-        _registryContext.FormInstances.Add(instance);
-
-        if (!definitionsByTemplate.TryGetValue(templateMap.FormTemplateId, out var definitions))
-        {
-            return;
-        }
-
-        foreach (var definition in definitions)
-        {
-            _registryContext.FormFieldValues.Add(new RegistryFormFieldValue
-            {
-                FormInstanceId = instance.Id,
-                FormFieldDefinitionId = definition.Id,
-                StorageKey = definition.StorageKey,
-                SourceSubjectId = definition.SourceSubjectId,
-                FieldCode = definition.FieldCode,
-                FieldName = definition.FieldName,
-                Sort = definition.Sort,
-                CreatedAt = now,
-                CreatedBy = CurrentUserId
-            });
-        }
     }
 
     private IEnumerable<SummaryItem> BuildSummaryItems()

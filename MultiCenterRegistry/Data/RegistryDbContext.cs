@@ -8,8 +8,8 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
     public const string SchemaName = "mcr";
 
     public DbSet<RegistryCase> Cases => Set<RegistryCase>();
-    public DbSet<CaseFormData> CaseFormData => Set<CaseFormData>();
     public DbSet<QualityReport> QualityReports => Set<QualityReport>();
+    public DbSet<QualityReportItem> QualityReportItems => Set<QualityReportItem>();
     public DbSet<QualityReject> QualityRejects => Set<QualityReject>();
     public DbSet<ReviewMeeting> ReviewMeetings => Set<ReviewMeeting>();
     public DbSet<MeetingExpert> MeetingExperts => Set<MeetingExpert>();
@@ -22,11 +22,6 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
     public DbSet<RegistryArticle> Articles => Set<RegistryArticle>();
     public DbSet<PortalConfig> PortalConfigs => Set<PortalConfig>();
     public DbSet<MigrationMap> MigrationMaps => Set<MigrationMap>();
-    public DbSet<RegistryFormTemplate> FormTemplates => Set<RegistryFormTemplate>();
-    public DbSet<RegistryFormTemplateMap> FormTemplateMaps => Set<RegistryFormTemplateMap>();
-    public DbSet<RegistryFormFieldDefinition> FormFieldDefinitions => Set<RegistryFormFieldDefinition>();
-    public DbSet<RegistryFormInstance> FormInstances => Set<RegistryFormInstance>();
-    public DbSet<RegistryFormFieldValue> FormFieldValues => Set<RegistryFormFieldValue>();
     public DbSet<SystemUser> SystemUsers => Set<SystemUser>();
     public DbSet<SystemRole> SystemRoles => Set<SystemRole>();
     public DbSet<SystemPermission> SystemPermissions => Set<SystemPermission>();
@@ -41,8 +36,8 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
         modelBuilder.HasDefaultSchema(SchemaName);
 
         modelBuilder.Entity<RegistryCase>().ToTable("case_record").HasKey(x => x.Id);
-        modelBuilder.Entity<CaseFormData>().ToTable("case_form_data").HasKey(x => x.Id);
         modelBuilder.Entity<QualityReport>().ToTable("quality_report").HasKey(x => x.Id);
+        modelBuilder.Entity<QualityReportItem>().ToTable("quality_report_item").HasKey(x => x.Id);
         modelBuilder.Entity<QualityReject>().ToTable("quality_reject").HasKey(x => x.Id);
         modelBuilder.Entity<ReviewMeeting>().ToTable("review_meeting").HasKey(x => x.Id);
         modelBuilder.Entity<MeetingExpert>().ToTable("meeting_expert").HasKey(x => x.Id);
@@ -55,11 +50,6 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
         modelBuilder.Entity<RegistryArticle>().ToTable("article").HasKey(x => x.Id);
         modelBuilder.Entity<PortalConfig>().ToTable("portal_config").HasKey(x => x.Code);
         modelBuilder.Entity<MigrationMap>().ToTable("migration_map").HasKey(x => x.Id);
-        modelBuilder.Entity<RegistryFormTemplate>().ToTable("form_template").HasKey(x => x.Id);
-        modelBuilder.Entity<RegistryFormTemplateMap>().ToTable("form_template_map").HasKey(x => x.Id);
-        modelBuilder.Entity<RegistryFormFieldDefinition>().ToTable("form_field_definition").HasKey(x => x.Id);
-        modelBuilder.Entity<RegistryFormInstance>().ToTable("form_instance").HasKey(x => x.Id);
-        modelBuilder.Entity<RegistryFormFieldValue>().ToTable("form_field_value").HasKey(x => x.Id);
         modelBuilder.Entity<SystemUser>().ToTable("sys_user", "system").HasKey(x => x.Id);
         modelBuilder.Entity<SystemRole>().ToTable("sys_role", "system").HasKey(x => x.Id);
         modelBuilder.Entity<SystemPermission>().ToTable("sys_permission", "system").HasKey(x => x.Id);
@@ -77,24 +67,19 @@ public sealed class RegistryDbContext(DbContextOptions<RegistryDbContext> option
         modelBuilder.Entity<RegistryCase>().HasIndex(x => x.PatientName);
         modelBuilder.Entity<RegistryCase>().HasIndex(x => x.OperatorId);
         modelBuilder.Entity<RegistryCase>().HasIndex(x => x.SurgeryTypeValue);
-        modelBuilder.Entity<RegistryCase>().HasIndex(x => x.SurgeryTypeText);
         modelBuilder.Entity<QualityReport>().HasIndex(x => x.OldQualityId).IsUnique();
+        modelBuilder.Entity<QualityReport>().HasIndex(x => new { x.QualityDate, x.HospitalId, x.TemplateId });
+        modelBuilder.Entity<QualityReportItem>().HasIndex(x => new { x.QualityReportId, x.Sort });
         modelBuilder.Entity<ReviewMeeting>().HasIndex(x => x.OldMeetingId).IsUnique();
         modelBuilder.Entity<MigrationMap>().HasIndex(x => new { x.SourceTable, x.SourceId }).IsUnique();
-        modelBuilder.Entity<RegistryFormTemplate>().HasIndex(x => x.SourceCustomFormId).IsUnique();
-        modelBuilder.Entity<RegistryFormTemplateMap>().HasIndex(x => new { x.BusinessType, x.SourceFollowTemplateId, x.SourceCustomFormId }).IsUnique();
-        modelBuilder.Entity<RegistryFormFieldDefinition>().HasIndex(x => new { x.FormTemplateId, x.StorageKey }).IsUnique();
-        modelBuilder.Entity<RegistryFormFieldDefinition>().HasIndex(x => x.SourceSubjectId);
-        modelBuilder.Entity<RegistryFormInstance>().HasIndex(x => new { x.OwnerType, x.OwnerId });
-        modelBuilder.Entity<RegistryFormInstance>().HasIndex(x => x.SourceCardId);
-        modelBuilder.Entity<RegistryFormFieldValue>().HasIndex(x => new { x.FormInstanceId, x.StorageKey });
-        modelBuilder.Entity<RegistryFormFieldValue>().HasIndex(x => x.SourceAnswerId).IsUnique().HasFilter("source_answer_id is not null");
-        modelBuilder.Entity<RegistryFormFieldValue>()
-            .HasOne<RegistryFormInstance>()
-            .WithMany()
-            .HasForeignKey(x => x.FormInstanceId);
         modelBuilder.Entity<RegistryArticle>().HasIndex(x => x.OldArticleId).IsUnique().HasFilter("old_article_id is not null");
         modelBuilder.Entity<RegistryArticle>().HasIndex(x => new { x.Type, x.Status, x.CreatedAt });
+        modelBuilder.Entity<MeetingExpert>().HasIndex(x => x.MeetingId);
+        modelBuilder.Entity<CaseAppraise>().HasIndex(x => new { x.MeetingId, x.CaseId });
+        modelBuilder.Entity<CaseSummary>().HasIndex(x => new { x.MeetingId, x.CaseId });
+        modelBuilder.Entity<CaseVote>().HasIndex(x => x.SummaryId);
+        modelBuilder.Entity<CaseAdvice>().HasIndex(x => new { x.CaseId, x.CreatedAt });
+        modelBuilder.Entity<RegistryFile>().HasIndex(x => new { x.OwnerType, x.OwnerId });
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

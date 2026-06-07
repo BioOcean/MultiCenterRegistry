@@ -47,10 +47,6 @@
                         <MudNavLink Href="@menu.Href" Icon="@menu.Icon" Match="NavLinkMatch.Prefix">
                             <span class="nav-link-content">
                                 <span>@menu.Title</span>
-                                @if (menu.Key == "followups" && _followupBadgeCount > 0)
-                                {
-                                    <span class="nav-badge">@ShowBadge(_followupBadgeCount)</span>
-                                }
                             </span>
                         </MudNavLink>
                     }
@@ -73,17 +69,10 @@
 </div>
 
 @code {
-    private static readonly string[] FollowupStartSubjectIds = ["BB3035F7-C1C8-4665-A4C3-FD5A2185D6B1"];
-    private static readonly string[] FollowupThirtySubjectIds = ["61F2CE95-83BA-4A53-B363-904650DB3522"];
-    private static readonly string[] FollowupOneYearSubjectIds = ["A04B3C29-D29E-4949-81CB-59B3C408CA29"];
-    private static readonly string[] FollowupStartFieldNames = ["ECMO开始时间", "手术时间", "介入时间"];
-    private static readonly string[] FollowupThirtyFieldNames = ["30天结果（自ECMO安装之日起）", "30天结果", "30天随访结果"];
-    private static readonly string[] FollowupOneYearFieldNames = ["一年结果（自ECMO安装之日起）", "一年结果", "1年结果", "一年随访结果"];
     private readonly List<FeatureItem> _menus = [];
     private readonly HashSet<string> _permissionCodes = new(StringComparer.OrdinalIgnoreCase);
     private ClaimsPrincipal? _currentUser;
     private string _systemName = "";
-    private int _followupBadgeCount;
     private readonly MudTheme _theme = new()
     {
         PaletteLight = new PaletteLight
@@ -109,7 +98,7 @@
         => ShouldShowSidebar(CurrentPath);
 
     private bool IsFixedContentPath
-        => IsAppraiseEditPath(CurrentPath);
+        => IsCaseEditPath(CurrentPath) || IsAppraiseEditPath(CurrentPath);
 
     private string MainContentClass
         => IsFixedContentPath ? "main-content fixed-content" : "main-content";
@@ -199,9 +188,6 @@
 
         var currentPath = new Uri(inj_navigationManager.Uri).AbsolutePath;
         _menus.AddRange(FeatureCatalog.GetMenus(currentPath, _permissionCodes));
-        _followupBadgeCount = _permissionCodes.Contains(PermissionConstants.CaseSubmit)
-            ? await CountFollowupRemindersAsync(dbContext)
-            : 0;
     }
 
     private async Task LoadSystemNameAsync(RegistryDbContext dbContext)
@@ -251,108 +237,6 @@
                && parts[4].Equals("appraise", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<int> CountFollowupRemindersAsync(RegistryDbContext dbContext)
-    {
-        var caseIds = new HashSet<Guid>();
-        if (await HasFollowupConfigAsync(dbContext, FollowupThirtySubjectIds, FollowupThirtyFieldNames))
-        {
-            foreach (var caseId in await QueryDueFollowupCaseIdsAsync(dbContext, 30, FollowupThirtySubjectIds, FollowupThirtyFieldNames))
-            {
-                caseIds.Add(caseId);
-            }
-        }
-
-        if (await HasFollowupConfigAsync(dbContext, FollowupOneYearSubjectIds, FollowupOneYearFieldNames))
-        {
-            foreach (var caseId in await QueryDueFollowupCaseIdsAsync(dbContext, 365, FollowupOneYearSubjectIds, FollowupOneYearFieldNames))
-            {
-                caseIds.Add(caseId);
-            }
-        }
-
-        return caseIds.Count;
-    }
-
-    private static async Task<bool> HasFollowupConfigAsync(RegistryDbContext dbContext, string[] sourceIds, string[] fieldNames)
-    {
-        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
-        return await dbContext.FormFieldDefinitions.AsNoTracking()
-            .AnyAsync(x =>
-                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
-                || fieldNames.Contains(x.FieldName));
-    }
-
-    private static async Task<List<Guid>> QueryDueFollowupCaseIdsAsync(RegistryDbContext dbContext, int days, string[] resultSubjectIds, string[] resultFieldNames)
-    {
-        var deadline = DateTime.Now.Date.AddDays(-days);
-        var resultValues = await QueryFollowupValuesAsync(dbContext, resultSubjectIds, resultFieldNames);
-        var startValues = await QueryFollowupValuesAsync(dbContext, FollowupStartSubjectIds, FollowupStartFieldNames);
-        var resultByCase = resultValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
-        var startByCase = startValues.GroupBy(x => x.CaseId).ToDictionary(x => x.Key, x => x.First());
-        var cases = await dbContext.Cases.AsNoTracking()
-            .Select(x => new { x.Id, x.OperationTime, x.AdmissionTime })
-            .ToListAsync();
-        var dueCaseIds = new List<Guid>();
-        foreach (var item in cases)
-        {
-            var startText = startByCase.TryGetValue(item.Id, out var startValue) ? startValue.Value : null;
-            var startTime = TryParseDate(startText) ?? item.OperationTime ?? item.AdmissionTime;
-            if (!startTime.HasValue || startTime.Value.Date > deadline)
-            {
-                continue;
-            }
-
-            resultByCase.TryGetValue(item.Id, out var result);
-            if (IsUnfilledFollowup(result?.Value, days))
-            {
-                dueCaseIds.Add(item.Id);
-            }
-        }
-
-        return dueCaseIds;
-    }
-
-    private static async Task<List<FollowupFieldValue>> QueryFollowupValuesAsync(RegistryDbContext dbContext, string[] sourceIds, string[] fieldNames)
-    {
-        var upperIds = sourceIds.Select(x => x.ToUpperInvariant()).ToList();
-        return await dbContext.FormInstances.AsNoTracking()
-            .Where(instance => instance.OwnerType == "case")
-            .Join(
-                dbContext.FormFieldValues.AsNoTracking(),
-                instance => instance.Id,
-                value => value.FormInstanceId,
-                (instance, value) => new
-                {
-                    CaseId = instance.OwnerId,
-                    value.SourceSubjectId,
-                    value.FieldName,
-                    value.FieldValue,
-                    value.FieldText
-                })
-            .Where(x =>
-                (x.SourceSubjectId != null && upperIds.Contains(x.SourceSubjectId.ToUpper()))
-                || fieldNames.Contains(x.FieldName))
-            .Select(x => new FollowupFieldValue(x.CaseId, x.FieldText == null || x.FieldText == "" ? x.FieldValue : x.FieldText))
-            .ToListAsync();
-    }
-
-    private static DateTime? TryParseDate(string? value)
-        => DateTime.TryParse(value, out var result) ? result : null;
-
-    private static bool IsUnfilledFollowup(string? value, int days)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return true;
-        }
-
-        return days == 30
-            ? value.Contains("未满30天", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase)
-            : value.Contains("未满1年", StringComparison.OrdinalIgnoreCase) || value.Contains("未满一年", StringComparison.OrdinalIgnoreCase) || value.Contains("未填", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string ShowBadge(int value) => value > 99 ? "99+" : value.ToString(CultureInfo.InvariantCulture);
-
     private string? GetCurrentUserId()
         => _currentUser?.FindFirst(ClaimTypes.NameIdentifier)?.Value
            ?? _currentUser?.FindFirst("userId")?.Value
@@ -392,6 +276,4 @@
         await inj_jsRuntime.InvokeVoidAsync("bioAuthLogout", inj_navigationManager.BaseUri);
         inj_navigationManager.NavigateTo(RouteConstants.Login, true);
     }
-
-    private sealed record FollowupFieldValue(Guid CaseId, string? Value);
 }

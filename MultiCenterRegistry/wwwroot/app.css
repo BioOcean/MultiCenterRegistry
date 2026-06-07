@@ -328,12 +328,13 @@ textarea {
     overflow: hidden;
 }
 
-.content-shell.fixed-content-shell > .appraise-page {
+.content-shell.fixed-content-shell > .appraise-page,
+.content-shell.fixed-content-shell > .case-detail-page {
     min-height: 0;
 }
 
 /* 功能页基础层：只处理业务页面内部，不影响系统 Header 和左侧菜单。 */
-:where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) {
+:where(.case-page, .meeting-page, .quality-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -345,6 +346,17 @@ textarea {
         linear-gradient(0deg, rgba(17, 113, 166, .02) 1px, transparent 1px),
         linear-gradient(135deg, rgba(231, 248, 255, .96) 0%, rgba(248, 253, 255, .98) 46%, rgba(238, 251, 247, .94) 100%);
     background-size: 42px 42px, 42px 42px, auto;
+}
+
+.modal-edit-content {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    background-image: none !important;
 }
 
 .page-header,
@@ -365,7 +377,7 @@ textarea {
 
 .page-header h1,
 .detail-header h1,
-:where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h1 {
+:where(.case-page, .meeting-page, .quality-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h1 {
     margin: 0;
     color: var(--mcr-text);
     font-size: 26px;
@@ -379,7 +391,7 @@ textarea {
     outline: none;
 }
 
-:where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h2 {
+:where(.case-page, .meeting-page, .quality-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h2 {
     margin: 0;
     color: var(--mcr-text);
     font-size: 17px;
@@ -388,7 +400,7 @@ textarea {
     letter-spacing: 0;
 }
 
-:where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h3 {
+:where(.case-page, .meeting-page, .quality-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) h3 {
     margin: 0;
     color: var(--mcr-text);
     font-size: 15px;
@@ -476,6 +488,60 @@ textarea {
     grid-template-columns: 180px 180px 180px 180px 386px 180px 180px max-content !important;
 }
 
+body .case-list-page .case-filter-panel {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: flex-end !important;
+    justify-content: flex-start !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}
+
+body .case-list-page .case-filter-panel > .mud-input-control,
+body .case-list-page .case-filter-panel > .mud-picker {
+    flex: 0 1 180px !important;
+    width: 180px !important;
+    min-width: 0 !important;
+    max-width: 180px !important;
+}
+
+body .case-list-page .case-date-range {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1fr) !important;
+    align-items: end !important;
+    gap: 8px !important;
+    flex: 1 1 386px !important;
+    width: min(386px, 100%) !important;
+    min-width: 0 !important;
+    max-width: 386px !important;
+}
+
+body .case-list-page .case-date-range .mud-picker,
+body .case-list-page .case-date-range .mud-input-control {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+}
+
+body .case-list-page .case-filter-actions {
+    display: flex !important;
+    flex: 0 1 auto !important;
+    flex-wrap: wrap !important;
+    align-items: flex-end !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    margin-left: auto !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+body .case-list-page .case-filter-actions .mud-button-root {
+    flex: 0 0 auto !important;
+}
+
 .case-export-panel {
     grid-template-columns: 180px 180px 220px max-content max-content !important;
 }
@@ -502,10 +568,6 @@ textarea {
 
 .quality-export-panel {
     grid-template-columns: 180px 180px 220px 180px max-content max-content !important;
-}
-
-.statistics-page .filter-panel {
-    grid-template-columns: 180px 180px max-content !important;
 }
 
 .case-date-range,
@@ -752,7 +814,6 @@ textarea {
 .case-table,
 .meeting-table,
 .quality-table,
-.followup-table,
 .admin-table {
     width: 100%;
     border-collapse: separate;
@@ -764,7 +825,6 @@ textarea {
 .case-table th,
 .meeting-table th,
 .quality-table th,
-.followup-table th,
 .admin-table th {
     height: 42px;
     padding: 10px 12px;
@@ -781,7 +841,6 @@ textarea {
 .case-table td,
 .meeting-table td,
 .quality-table td,
-.followup-table td,
 .admin-table td {
     min-height: 52px;
     padding: 10px 12px;
@@ -795,7 +854,6 @@ textarea {
 .case-table tbody tr:hover,
 .meeting-table tbody tr:hover,
 .quality-table tbody tr:hover,
-.followup-table tbody tr:hover,
 .admin-table tbody tr:hover {
     background: var(--mcr-surface-soft);
 }
@@ -803,7 +861,6 @@ textarea {
 .case-table tbody tr:last-child td,
 .meeting-table tbody tr:last-child td,
 .quality-table tbody tr:last-child td,
-.followup-table tbody tr:last-child td,
 .admin-table tbody tr:last-child td {
     border-bottom: 0;
 }
@@ -1159,6 +1216,519 @@ textarea {
     background: var(--mcr-surface-soft);
 }
 
+/* 固定题表单页：放在全局样式，避免 RenderFragment 动态元素拿不到 CSS isolation 作用域。 */
+body .case-detail-page {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    gap: 12px !important;
+    width: 100% !important;
+    height: calc(100dvh - var(--mcr-header-height)) !important;
+    max-height: calc(100dvh - var(--mcr-header-height)) !important;
+    min-height: 0 !important;
+    padding: 14px 16px 16px !important;
+    overflow: hidden !important;
+    background: var(--mcr-bg) !important;
+    background-image: none !important;
+}
+
+body .case-detail-page .case-detail-scroll {
+    display: grid !important;
+    align-content: start !important;
+    gap: 12px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding-right: 2px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-gutter: stable !important;
+}
+
+body .case-detail-page .form-layout {
+    display: grid !important;
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    align-items: start !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
+
+body .case-detail-page .form-nav,
+body .appraise-page .case-form-nav {
+    display: grid !important;
+    align-content: start !important;
+    gap: 6px !important;
+    min-height: 0 !important;
+    padding: 12px !important;
+    overflow: auto !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: var(--mcr-radius) !important;
+    background: var(--mcr-surface) !important;
+    box-shadow: var(--mcr-shadow-soft) !important;
+}
+
+body .case-detail-page .form-nav {
+    position: sticky !important;
+    top: 0 !important;
+    max-height: calc(100dvh - var(--mcr-header-height) - 112px) !important;
+}
+
+body .case-detail-page .form-nav-link,
+body .appraise-page .form-nav-link {
+    display: grid !important;
+    grid-template-columns: 3px minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-height: 40px !important;
+    padding: 7px 9px !important;
+    color: var(--mcr-text-soft) !important;
+    font: inherit !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+    cursor: pointer !important;
+    border: 1px solid transparent !important;
+    border-radius: 6px !important;
+    background: transparent !important;
+}
+
+body .case-detail-page .form-nav-link:hover,
+body .case-detail-page .form-nav-link:focus-visible,
+body .appraise-page .form-nav-link:hover,
+body .appraise-page .form-nav-link.active {
+    color: var(--mcr-primary) !important;
+    border-color: rgba(37, 99, 235, .18) !important;
+    background: var(--mcr-primary-soft) !important;
+    box-shadow: inset 3px 0 0 var(--mcr-primary) !important;
+}
+
+body .case-detail-page .form-nav-dot,
+body .appraise-page .form-nav-dot {
+    width: 3px !important;
+    height: 18px !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+}
+
+body .case-detail-page .form-content {
+    display: grid !important;
+    gap: 14px !important;
+    min-width: 0 !important;
+}
+
+body .case-detail-page .form-section,
+body .appraise-page .review-form-section,
+body .appraise-page .case-pdf-view,
+body .appraise-page .review-shell {
+    overflow: hidden !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: var(--mcr-radius) !important;
+    background: var(--mcr-surface) !important;
+    box-shadow: var(--mcr-shadow-soft) !important;
+}
+
+body .case-detail-page .section-header,
+body .appraise-page .review-section-header {
+    min-height: 44px !important;
+    color: var(--mcr-text) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--mcr-border) !important;
+    background: var(--mcr-surface) !important;
+}
+
+body .case-detail-page .section-marker {
+    width: 4px !important;
+    height: 20px !important;
+    border-radius: 999px !important;
+    background: var(--mcr-primary) !important;
+    box-shadow: none !important;
+}
+
+body .case-detail-page .section-fields,
+body .appraise-page .review-question-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1px !important;
+    padding: 0 !important;
+    background: var(--mcr-border-light) !important;
+}
+
+body .case-detail-page .question-row,
+body .appraise-page .review-question {
+    display: grid !important;
+    align-content: start !important;
+    gap: 8px !important;
+    min-height: 78px !important;
+    padding: 13px 14px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+}
+
+body .case-detail-page .question-row.full-row,
+body .appraise-page .review-question.full-row {
+    grid-column: 1 / -1 !important;
+}
+
+body .case-detail-page .question-row.filler {
+    min-height: 78px !important;
+    pointer-events: none !important;
+    background: #ffffff !important;
+}
+
+body .case-detail-page .question-title,
+body .appraise-page .review-question-title {
+    display: flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    min-height: 22px !important;
+    color: #0f4772 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    line-height: 22px !important;
+    background: transparent !important;
+}
+
+body .case-detail-page .question-state,
+body .case-detail-page .question-state svg {
+    flex: 0 0 auto !important;
+    color: var(--mcr-success) !important;
+}
+
+body .case-detail-page .form-input,
+body .case-detail-page .form-select,
+body .case-detail-page .form-textarea,
+body .appraise-page .review-input,
+body .appraise-page .review-textarea {
+    width: 100% !important;
+    color: var(--mcr-text) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border: 1px solid #cfd8e3 !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    outline: none !important;
+}
+
+body .case-detail-page .form-input,
+body .case-detail-page .form-select,
+body .appraise-page .review-input {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 11px !important;
+}
+
+body .case-detail-page .form-textarea,
+body .appraise-page .review-textarea {
+    min-height: 112px !important;
+    max-height: 800px !important;
+    height: auto;
+    box-sizing: border-box !important;
+    padding: 9px 11px !important;
+    line-height: 1.55 !important;
+    resize: vertical !important;
+    overflow-y: hidden !important;
+}
+
+body .case-detail-page .date-input {
+    color-scheme: light !important;
+}
+
+body .case-detail-page .form-input:disabled,
+body .case-detail-page .form-select:disabled,
+body .case-detail-page .form-textarea:disabled,
+body .appraise-page .review-input:disabled,
+body .appraise-page .review-textarea:disabled {
+    color: #64748b !important;
+    border-color: #d8e1ec !important;
+    background: #f4f7fb !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    opacity: 1 !important;
+}
+
+body .case-detail-page .question-row.is-disabled,
+body .appraise-page .review-form-list.is-disabled .review-question {
+    background: #fbfcfe !important;
+}
+
+body .case-detail-page .question-row.is-disabled .question-label,
+body .appraise-page .review-form-list.is-disabled .review-question-title {
+    color: #64748b !important;
+}
+
+body .case-detail-page .choice-tags.disabled .choice-tag,
+body .case-detail-page .choice-tag:disabled,
+body .appraise-page .review-choice-tags.disabled .review-choice-tag,
+body .appraise-page .review-choice-tag:disabled {
+    color: #94a3b8 !important;
+    border-color: #d8e1ec !important;
+    background: #f4f7fb !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    opacity: 1 !important;
+}
+
+body .case-detail-page .choice-tags.disabled .choice-tag.selected,
+body .case-detail-page .choice-tag.selected:disabled,
+body .appraise-page .review-choice-tags.disabled .review-choice-tag.selected,
+body .appraise-page .review-choice-tag.selected:disabled {
+    color: var(--mcr-primary) !important;
+    border-color: #a9ccd7 !important;
+    background: #e7f3f6 !important;
+}
+
+body .case-detail-page .choice-tags,
+body .appraise-page .review-choice-tags {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 40px !important;
+}
+
+body .case-detail-page .choice-tag,
+body .appraise-page .review-choice-tag {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 30px !important;
+    padding: 0 11px !important;
+    color: var(--mcr-text-soft) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: 4px !important;
+    background: var(--mcr-surface) !important;
+}
+
+body .case-detail-page .choice-tag.selected,
+body .appraise-page .review-choice-tag.selected {
+    color: #ffffff !important;
+    border-color: var(--mcr-primary) !important;
+    background: var(--mcr-primary) !important;
+}
+
+body .case-detail-page .choice-tag.disabled.selected {
+    color: var(--mcr-primary) !important;
+    border-color: var(--mcr-border-strong) !important;
+    background: var(--mcr-primary-soft) !important;
+}
+
+body .case-detail-page .file-field {
+    display: grid !important;
+    gap: 12px !important;
+    align-items: start !important;
+}
+
+body .case-detail-page .file-field.empty {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 40px !important;
+}
+
+body .case-detail-page .file-field.has-file {
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+}
+
+body .case-detail-page .file-preview {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 160px !important;
+    overflow: hidden !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+}
+
+body .case-detail-page .file-preview a,
+body .case-detail-page .file-preview img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+body .case-detail-page .file-preview img {
+    object-fit: cover !important;
+}
+
+body .case-detail-page .file-preview-file {
+    display: grid !important;
+    justify-items: center !important;
+    align-content: center !important;
+    gap: 8px !important;
+    padding: 12px !important;
+    color: var(--mcr-muted) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+}
+
+body .case-detail-page .file-meta {
+    display: grid !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+}
+
+body .case-detail-page .file-remark {
+    min-height: 160px !important;
+}
+
+body .case-detail-page .file-toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+}
+
+body .case-detail-page .file-upload-button {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    height: 30px !important;
+    min-width: 82px !important;
+    padding: 0 9px !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    border-radius: 6px !important;
+    background: var(--mcr-primary) !important;
+    overflow: hidden !important;
+}
+
+body .case-detail-page .file-upload-button.disabled {
+    color: var(--mcr-muted) !important;
+    cursor: not-allowed !important;
+    background: #e5e7eb !important;
+}
+
+body .case-detail-page .file-input {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    font-size: 0 !important;
+}
+
+body .case-detail-page .file-upload-button.disabled .file-input {
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
+
+body .case-detail-page .file-link {
+    min-width: 0 !important;
+    color: var(--mcr-primary) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    text-decoration: none !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+body .appraise-page {
+    display: grid !important;
+    grid-template-rows: 58px minmax(0, 1fr) !important;
+    width: 100% !important;
+    height: calc(100dvh - var(--mcr-header-height)) !important;
+    max-height: calc(100dvh - var(--mcr-header-height)) !important;
+    min-height: 0 !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: var(--mcr-bg) !important;
+    background-image: none !important;
+}
+
+body .appraise-page .appraise-workspace {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(430px, .82fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    gap: 12px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 14px 14px 16px !important;
+    overflow: hidden !important;
+}
+
+body .appraise-page .appraise-case-column,
+body .appraise-page .appraise-review-column,
+body .appraise-page .case-preview-panel {
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body .appraise-page .case-form-layout {
+    display: grid !important;
+    grid-template-columns: 168px minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    gap: 12px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body .appraise-page .case-pdf-view,
+body .appraise-page .review-content-panel {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-gutter: stable !important;
+}
+
+body .appraise-page .review-shell {
+    display: grid !important;
+    grid-template-columns: 50px minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
+
+body .case-edit-dialog .case-create-form {
+    display: grid !important;
+    gap: 18px !important;
+}
+
+body .case-edit-dialog .case-create-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 18px 28px !important;
+}
+
+body .case-edit-dialog .case-create-field {
+    display: grid !important;
+    grid-template-columns: 96px minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 8px !important;
+}
+
+body .case-edit-dialog .case-create-span-2 {
+    grid-column: 1 / -1 !important;
+}
+
+body .case-edit-dialog .case-create-label {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    min-height: 40px !important;
+    color: var(--mcr-primary) !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-align: right !important;
+}
+
 @media (max-width: 960px) {
     .app-bar-custom .mud-toolbar {
         padding-right: 12px;
@@ -1200,7 +1770,7 @@ textarea {
         margin-left: 0;
     }
 
-    :where(.case-page, .meeting-page, .quality-page, .followup-page, .statistics-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) {
+    :where(.case-page, .meeting-page, .quality-page, .admin-page, .admin-users-page, .edit-page, .detail-page, .appraise-page) {
         padding: 12px;
     }
 
