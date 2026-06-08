@@ -137,89 +137,112 @@
                                         <em>@FormatDateTime(selectedAppraise.UpdatedAt ?? selectedAppraise.CreatedAt)</em>
                                     </div>
 
-                                    <div class="@(selectedAppraise.CanEdit ? "review-form-list" : "review-form-list is-disabled")">
-                                        <section class="review-form-section">
-                                            <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(InterventionReviewSection))">
-                                                <span>介入信息</span>
-                                                <em>@(IsReviewSectionCollapsed(InterventionReviewSection) ? "展开" : "收起")</em>
-                                            </button>
-                                            @if (!IsReviewSectionCollapsed(InterventionReviewSection))
+                                    @if (selectedAppraise.Status == 1)
+                                    {
+                                        <div class="review-pdf-view">
+                                            @foreach (var pdfSection in BuildAppraisePdfSections(selectedAppraise))
                                             {
-                                                <div class="review-question-grid">
-                                                    @ReviewRow("介入适应症", ChoiceInput(selectedAppraise, IndicationOptions, selectedAppraise.Indication, value => selectedAppraise.Indication = value))
-                                                    @ReviewRow("介入操作", ChoiceInput(selectedAppraise, OperationOptions, selectedAppraise.Operation, value => selectedAppraise.Operation = value))
-                                                </div>
+                                                <section class="review-pdf-section">
+                                                    <h3>@pdfSection.Title</h3>
+                                                    <div class="review-pdf-grid">
+                                                        @foreach (var field in pdfSection.Fields)
+                                                        {
+                                                            <div class="@(field.FullRow ? "review-pdf-field full-row" : "review-pdf-field")">
+                                                                <span>@field.Name</span>
+                                                                <strong>@ShowValue(field.Value)</strong>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </section>
                                             }
-                                        </section>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="@(selectedAppraise.CanEdit ? "review-form-list" : "review-form-list is-disabled")">
+                                            <section class="review-form-section">
+                                                <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(InterventionReviewSection))">
+                                                    <span>介入信息</span>
+                                                    <em>@(IsReviewSectionCollapsed(InterventionReviewSection) ? "展开" : "收起")</em>
+                                                </button>
+                                                @if (!IsReviewSectionCollapsed(InterventionReviewSection))
+                                                {
+                                                    <div class="review-question-grid">
+                                                        @ReviewRow("介入适应症", ChoiceInput(selectedAppraise, IndicationOptions, selectedAppraise.Indication, value => selectedAppraise.Indication = value))
+                                                        @ReviewRow("介入操作", ChoiceInput(selectedAppraise, OperationOptions, selectedAppraise.Operation, value => selectedAppraise.Operation = value))
+                                                    </div>
+                                                }
+                                            </section>
 
-                                        <section class="review-form-section">
-                                            <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(ManageReviewSection))">
-                                                <span>医院管理</span>
-                                                <em>@(IsReviewSectionCollapsed(ManageReviewSection) ? "展开" : "收起")</em>
-                                            </button>
-                                            @if (!IsReviewSectionCollapsed(ManageReviewSection))
-                                            {
-                                                <div class="review-question-grid">
-                                                    @ReviewRow("设备器械配套是否齐全", ChoiceInput(selectedAppraise, CompleteOptions, selectedAppraise.DeviceComplete, value => selectedAppraise.DeviceComplete = value))
-                                                    @ReviewRow("介入分级手术管理是否落实到位", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.SurgeryLevelImplemented, value => selectedAppraise.SurgeryLevelImplemented = value))
-                                                    @ReviewRow("是否存在其他管理问题", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.HasManagementProblem, value => selectedAppraise.HasManagementProblem = value))
-                                                    @if (ShouldShowManagementProblemDescription(selectedAppraise))
-                                                    {
-                                                        @ReviewRow("其他管理问题描述", TextAreaInput(selectedAppraise, selectedAppraise.ManagementProblemDescription, value => selectedAppraise.ManagementProblemDescription = value), true)
-                                                    }
-                                                </div>
-                                            }
-                                        </section>
+                                            <section class="review-form-section">
+                                                <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(ManageReviewSection))">
+                                                    <span>医院管理</span>
+                                                    <em>@(IsReviewSectionCollapsed(ManageReviewSection) ? "展开" : "收起")</em>
+                                                </button>
+                                                @if (!IsReviewSectionCollapsed(ManageReviewSection))
+                                                {
+                                                    <div class="review-question-grid">
+                                                        @ReviewRow("设备器械配套是否齐全", ChoiceInput(selectedAppraise, CompleteOptions, selectedAppraise.DeviceComplete, value => selectedAppraise.DeviceComplete = value))
+                                                        @ReviewRow("介入分级手术管理是否落实到位", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.SurgeryLevelImplemented, value => selectedAppraise.SurgeryLevelImplemented = value))
+                                                        @ReviewRow("是否存在其他管理问题", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.HasManagementProblem, value => selectedAppraise.HasManagementProblem = value))
+                                                        @if (ShouldShowManagementProblemDescription(selectedAppraise))
+                                                        {
+                                                            @ReviewRow("其他管理问题描述", TextAreaInput(selectedAppraise, selectedAppraise.ManagementProblemDescription, value => selectedAppraise.ManagementProblemDescription = value), true)
+                                                        }
+                                                    </div>
+                                                }
+                                            </section>
 
-                                        <section class="review-form-section">
-                                            <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(RescueReviewSection))">
-                                                <span>并发症救治</span>
-                                                <em>@(IsReviewSectionCollapsed(RescueReviewSection) ? "展开" : "收起")</em>
-                                            </button>
-                                            @if (!IsReviewSectionCollapsed(RescueReviewSection))
-                                            {
-                                                <div class="review-question-grid">
-                                                    @ReviewRow("救治是否及时", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.RescueTimely, value => selectedAppraise.RescueTimely = value))
-                                                    @ReviewRow("救治措施是否得当", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.RescueMeasureProper, value => selectedAppraise.RescueMeasureProper = value))
-                                                    @ReviewRow("救治药品设备是否齐全", ChoiceInput(selectedAppraise, CompleteOptions, selectedAppraise.RescueDeviceComplete, value => selectedAppraise.RescueDeviceComplete = value))
-                                                </div>
-                                            }
-                                        </section>
+                                            <section class="review-form-section">
+                                                <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(RescueReviewSection))">
+                                                    <span>并发症救治</span>
+                                                    <em>@(IsReviewSectionCollapsed(RescueReviewSection) ? "展开" : "收起")</em>
+                                                </button>
+                                                @if (!IsReviewSectionCollapsed(RescueReviewSection))
+                                                {
+                                                    <div class="review-question-grid">
+                                                        @ReviewRow("救治是否及时", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.RescueTimely, value => selectedAppraise.RescueTimely = value))
+                                                        @ReviewRow("救治措施是否得当", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.RescueMeasureProper, value => selectedAppraise.RescueMeasureProper = value))
+                                                        @ReviewRow("救治药品设备是否齐全", ChoiceInput(selectedAppraise, CompleteOptions, selectedAppraise.RescueDeviceComplete, value => selectedAppraise.RescueDeviceComplete = value))
+                                                    </div>
+                                                }
+                                            </section>
 
-                                        <section class="review-form-section">
-                                            <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(DeathReviewSection))">
-                                                <span>死亡信息</span>
-                                                <em>@(IsReviewSectionCollapsed(DeathReviewSection) ? "展开" : "收起")</em>
-                                            </button>
-                                            @if (!IsReviewSectionCollapsed(DeathReviewSection))
-                                            {
-                                                <div class="review-question-grid">
-                                                    @ReviewRow("死亡原因", ChoiceInput(selectedAppraise, DeathReasonOptions, selectedAppraise.DeathReason, value => selectedAppraise.DeathReason = value))
-                                                    @if (ShouldShowOtherDeathReason(selectedAppraise))
-                                                    {
-                                                        @ReviewRow("其他死亡原因", TextInput(selectedAppraise, selectedAppraise.OtherDeathReason, value => selectedAppraise.OtherDeathReason = value))
-                                                    }
-                                                </div>
-                                            }
-                                        </section>
+                                            <section class="review-form-section">
+                                                <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(DeathReviewSection))">
+                                                    <span>死亡信息</span>
+                                                    <em>@(IsReviewSectionCollapsed(DeathReviewSection) ? "展开" : "收起")</em>
+                                                </button>
+                                                @if (!IsReviewSectionCollapsed(DeathReviewSection))
+                                                {
+                                                    <div class="review-question-grid">
+                                                        @ReviewRow("死亡原因", ChoiceInput(selectedAppraise, DeathReasonOptions, selectedAppraise.DeathReason, value => selectedAppraise.DeathReason = value))
+                                                        @if (ShouldShowOtherDeathReason(selectedAppraise))
+                                                        {
+                                                            @ReviewRow("其他死亡原因", TextInput(selectedAppraise, selectedAppraise.OtherDeathReason, value => selectedAppraise.OtherDeathReason = value))
+                                                        }
+                                                    </div>
+                                                }
+                                            </section>
 
-                                        <section class="review-form-section">
-                                            <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(ImproveReviewSection))">
-                                                <span>下一步改进措施</span>
-                                                <em>@(IsReviewSectionCollapsed(ImproveReviewSection) ? "展开" : "收起")</em>
-                                            </button>
-                                            @if (!IsReviewSectionCollapsed(ImproveReviewSection))
-                                            {
-                                                <div class="review-question-grid">
-                                                    @ReviewRow("是否需要提交进一步改进措施", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.NeedImprovement, value => selectedAppraise.NeedImprovement = value))
-                                                    @if (ShouldShowImprovementContent(selectedAppraise))
-                                                    {
-                                                        @ReviewRow("改进措施内容", TextAreaInput(selectedAppraise, selectedAppraise.ImprovementContent, value => selectedAppraise.ImprovementContent = value), true)
-                                                    }
-                                                </div>
-                                            }
-                                        </section>
-                                    </div>
+                                            <section class="review-form-section">
+                                                <button type="button" class="review-section-header" @onclick="@(() => ToggleReviewSection(ImproveReviewSection))">
+                                                    <span>下一步改进措施</span>
+                                                    <em>@(IsReviewSectionCollapsed(ImproveReviewSection) ? "展开" : "收起")</em>
+                                                </button>
+                                                @if (!IsReviewSectionCollapsed(ImproveReviewSection))
+                                                {
+                                                    <div class="review-question-grid">
+                                                        @ReviewRow("是否需要提交进一步改进措施", ChoiceInput(selectedAppraise, RegistryFixedCatalog.YesNoOptions, selectedAppraise.NeedImprovement, value => selectedAppraise.NeedImprovement = value))
+                                                        @if (ShouldShowImprovementContent(selectedAppraise))
+                                                        {
+                                                            @ReviewRow("改进措施内容", TextAreaInput(selectedAppraise, selectedAppraise.ImprovementContent, value => selectedAppraise.ImprovementContent = value), true)
+                                                        }
+                                                    </div>
+                                                }
+                                            </section>
+                                        </div>
+                                    }
 
                                     @if (selectedAppraise.CanEdit)
                                     {
@@ -249,13 +272,14 @@
                                         {
                                             <div class="summary-note">
                                                 <div class="note-head">
-                                                    <strong>@ShowValue(summary.ExpertName)</strong>
+                                                    <strong>组长汇总</strong>
                                                     <span>@GetSummaryStatusText(summary.Status)</span>
                                                 </div>
                                                 @if (CanEditSummary(summary))
                                                 {
                                                     <MudTextField T="string"
                                                                   @bind-Value="summary.Content"
+                                                                  Class="summary-textarea"
                                                                   Variant="Variant.Outlined"
                                                                   Margin="Margin.Dense"
                                                                   Lines="4" />
@@ -286,18 +310,28 @@
                                 }
                                 else
                                 {
-                                    <div class="stat-grid">
+                                    <div class="stat-table">
+                                        <div class="stat-table-head">
+                                            <span>项目</span>
+                                            <span>投票结果</span>
+                                        </div>
                                         @foreach (var item in _statistics)
                                         {
-                                            <div class="stat-card">
-                                                <div class="field-name">@item.FieldName</div>
+                                            <div class="stat-table-row">
+                                                <div class="stat-table-name">@item.FieldName</div>
+                                                <div class="stat-table-result">
                                                 @foreach (var option in item.Options)
                                                 {
-                                                    <div class="stat-row">
-                                                        <span>@option.Text</span>
-                                                        <em>@option.Count 人</em>
-                                                    </div>
+                                                    @if (option.Count.HasValue)
+                                                    {
+                                                        <span class="stat-option">@option.Text：@option.Count.Value 人</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="stat-text-line">@option.Text</span>
+                                                    }
                                                 }
+                                                </div>
                                             </div>
                                         }
                                     </div>
@@ -386,6 +420,8 @@
     private readonly List<FieldStatistic> _statistics = [];
     private string? _hospitalName;
     private string? _departmentName;
+    private string? _operatorName;
+    private string? _meetingLeaderId;
     private string _selectedCasePreviewSectionKey = CasePreviewAllKey;
     private string _activeReviewTab = ReviewTabAppraise;
     private Guid? _selectedAppraiseId;
@@ -414,6 +450,8 @@
             _statistics.Clear();
             _hospitalName = null;
             _departmentName = null;
+            _operatorName = null;
+            _meetingLeaderId = null;
             _isMeetingLeader = false;
             if (_meeting == null || _case == null)
             {
@@ -424,21 +462,42 @@
             await LoadLeaderStateAsync();
             BuildCasePreviewSections();
 
-            var appraises = await _registryContext.CaseAppraises.AsNoTracking()
+            var allAppraises = await _registryContext.CaseAppraises.AsNoTracking()
                 .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
                 .OrderBy(x => x.Status)
                 .ThenBy(x => x.CreatedAt)
                 .ToListAsync();
-            appraises = appraises
+            allAppraises = allAppraises
                 .OrderByDescending(x => IsCurrentUser(x.ExpertId))
                 .ThenBy(x => x.Status)
                 .ThenBy(x => x.CreatedAt)
                 .ToList();
+            var appraises = _isMeetingLeader
+                ? allAppraises
+                : allAppraises.Where(x => IsCurrentUser(x.ExpertId)).ToList();
 
             var summaries = await _registryContext.CaseSummaries.AsNoTracking()
                 .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
+            if (summaries.Count == 0 && _isMeetingLeader)
+            {
+                summaries.Add(CreateDraftSummary());
+            }
+
+            var summaryUserIds = summaries
+                .Select(x => x.CreatedBy)
+                .Append(_meetingLeaderId)
+                .Where(x => !string.IsNullOrWhiteSpace(x));
+            var summaryUsers = await LoadUserNamesAsync(summaryUserIds);
+            foreach (var summary in summaries)
+            {
+                if (string.IsNullOrWhiteSpace(summary.ExpertName))
+                {
+                    summary.ExpertName = TryGetUserName(summary.CreatedBy ?? _meetingLeaderId, summaryUsers);
+                }
+            }
+
             _summaries.AddRange(summaries);
 
             var summaryIds = summaries.Select(x => x.Id).ToList();
@@ -462,7 +521,7 @@
                     i == 0));
             }
 
-            BuildStatistics();
+            BuildStatistics(allAppraises);
             EnsureCasePreviewSelection();
             EnsureAppraiseSelection();
             EnsureReviewTab();
@@ -497,6 +556,21 @@
                 .Select(x => x.DisplayName ?? x.Name)
                 .FirstOrDefaultAsync();
         }
+
+        if (!string.IsNullOrWhiteSpace(_case.OperatorName) && !IsGuidText(_case.OperatorName))
+        {
+            _operatorName = _case.OperatorName;
+            return;
+        }
+
+        var operatorId = TryParseGuid(_case.OperatorId) ?? TryParseGuid(_case.OperatorName);
+        if (operatorId.HasValue)
+        {
+            _operatorName = await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => x.Id == operatorId.Value)
+                .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+                .FirstOrDefaultAsync();
+        }
     }
 
     private async Task LoadLeaderStateAsync()
@@ -506,8 +580,12 @@
             return;
         }
 
-        _isMeetingLeader = await _registryContext.MeetingExperts.AsNoTracking()
-            .AnyAsync(x => x.MeetingId == MeetingId && x.Level == 1 && x.ExpertId == CurrentUserId);
+        var leader = await _registryContext.MeetingExperts.AsNoTracking()
+            .Where(x => x.MeetingId == MeetingId && x.Level == 1)
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync();
+        _meetingLeaderId = leader?.ExpertId;
+        _isMeetingLeader = IsCurrentUser(_meetingLeaderId);
     }
 
     private async Task<Dictionary<Guid, string>> LoadUserNamesAsync(IEnumerable<string?> rawIds)
@@ -549,7 +627,7 @@
             new("出院时间", FormatDate(_case.DischargeTime)),
             new("住院天数", _case.HospitalStayDays?.ToString(CultureInfo.InvariantCulture)),
             new("手术类型", _case.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(_case.DiseaseId ?? _case.SurgeryTypeValue)),
-            new("术者", _case.OperatorName ?? _case.OperatorId),
+            new("术者", _operatorName ?? _case.OperatorName ?? _case.OperatorId),
             new("是否急诊介入", RegistryFixedCatalog.GetYesNoName(_case.IsEmergencyIntervention)),
             new("情况说明/原因说明", RegistryFixedCatalog.GetSituationReasonName(_case.SituationReason)),
             new("离院方式", _case.DischargeMode)
@@ -646,34 +724,60 @@
         _caseSections.Add(section);
     }
 
-    private void BuildStatistics()
+    private void BuildStatistics(IReadOnlyList<CaseAppraise> appraises)
     {
-        AddStatistic("介入适应症", _appraises.Select(x => DisplayOption(IndicationOptions, x.Indication)));
-        AddStatistic("介入操作", _appraises.Select(x => DisplayOption(OperationOptions, x.Operation)));
-        AddStatistic("设备器械配套是否齐全", _appraises.Select(x => DisplayOption(CompleteOptions, x.DeviceComplete)));
-        AddStatistic("介入分级手术管理是否落实到位", _appraises.Select(x => RegistryFixedCatalog.GetYesNoName(x.SurgeryLevelImplemented)));
-        AddStatistic("是否存在其他管理问题", _appraises.Select(x => RegistryFixedCatalog.GetYesNoName(x.HasManagementProblem)));
-        AddStatistic("救治是否及时", _appraises.Select(x => RegistryFixedCatalog.GetYesNoName(x.RescueTimely)));
-        AddStatistic("救治措施是否得当", _appraises.Select(x => RegistryFixedCatalog.GetYesNoName(x.RescueMeasureProper)));
-        AddStatistic("救治药品设备是否齐全", _appraises.Select(x => DisplayOption(CompleteOptions, x.RescueDeviceComplete)));
-        AddStatistic("死亡原因", _appraises.Select(x => DisplayOption(DeathReasonOptions, x.DeathReason)));
-        AddStatistic("是否需要提交进一步改进措施", _appraises.Select(x => RegistryFixedCatalog.GetYesNoName(x.NeedImprovement)));
+        AddChoiceStatistic("介入适应症", IndicationOptions, appraises.Select(x => x.Indication));
+        AddChoiceStatistic("介入操作", OperationOptions, appraises.Select(x => x.Operation));
+        AddChoiceStatistic("设备器械配套是否齐全", CompleteOptions, appraises.Select(x => x.DeviceComplete));
+        AddChoiceStatistic("介入分级手术管理是否落实到位", RegistryFixedCatalog.YesNoOptions, appraises.Select(x => x.SurgeryLevelImplemented));
+        AddChoiceStatistic("是否存在其他管理问题", RegistryFixedCatalog.YesNoOptions, appraises.Select(x => x.HasManagementProblem));
+        AddChoiceStatistic("救治是否及时", RegistryFixedCatalog.YesNoOptions, appraises.Select(x => x.RescueTimely));
+        AddChoiceStatistic("救治措施是否得当", RegistryFixedCatalog.YesNoOptions, appraises.Select(x => x.RescueMeasureProper));
+        AddChoiceStatistic("救治药品设备是否齐全", CompleteOptions, appraises.Select(x => x.RescueDeviceComplete));
+        AddChoiceStatistic("死亡原因", DeathReasonOptions, appraises.Select(x => x.DeathReason));
+        AddChoiceStatistic("是否需要提交进一步改进措施", RegistryFixedCatalog.YesNoOptions, appraises.Select(x => x.NeedImprovement));
+        AddTextStatistic("改进措施内容", appraises.Select(x => x.ImprovementContent));
     }
 
-    private void AddStatistic(string fieldName, IEnumerable<string?> values)
+    private void AddChoiceStatistic(string fieldName, IReadOnlyList<FixedOption> options, IEnumerable<string?> values)
     {
-        var options = values
+        var valueList = values
             .Where(x => !string.IsNullOrWhiteSpace(x))
-            .GroupBy(x => x!)
-            .Select(x => new FieldStatisticOption(x.Key, x.Count()))
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Text)
             .ToList();
-        if (options.Count > 0)
+        _statistics.Add(new FieldStatistic(fieldName, options
+            .Select(x => new FieldStatisticOption(x.Text, valueList.Count(value => ContainsOptionValue(value, x))))
+            .ToList()));
+    }
+
+    private void AddTextStatistic(string fieldName, IEnumerable<string?> values)
+    {
+        var textOptions = values
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select((x, index) => new FieldStatisticOption($"{index + 1}.{x!.Trim()}", null))
+            .ToList();
+        if (textOptions.Count > 0)
         {
-            _statistics.Add(new FieldStatistic(fieldName, options));
+            _statistics.Add(new FieldStatistic(fieldName, textOptions));
         }
     }
+
+    private static bool ContainsOptionValue(string? value, FixedOption option)
+        => !string.IsNullOrWhiteSpace(value)
+           && value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+               .Any(x => IsSameValue(x, option.Value) || IsSameValue(x, option.Text));
+
+    private CaseSummary CreateDraftSummary()
+        => new()
+        {
+            Id = Guid.Empty,
+            MeetingId = MeetingId,
+            CaseId = CaseId,
+            Content = "",
+            Status = 0,
+            CreatedAt = ToDbTimestamp(DateTime.Now) ?? DateTime.Now,
+            CreatedBy = _meetingLeaderId,
+            ExpertName = TryGetUserName(_meetingLeaderId, new Dictionary<Guid, string>())
+        };
 
     private void EnsureCasePreviewSelection()
     {
@@ -772,6 +876,59 @@
 
     private static bool ShouldShowImprovementContent(AppraiseBlock appraise)
         => IsSameValue(appraise.NeedImprovement, "1") || IsSameValue(appraise.NeedImprovement, "是");
+
+    private static List<AppraisePdfSection> BuildAppraisePdfSections(AppraiseBlock appraise)
+    {
+        var sections = new List<AppraisePdfSection>
+        {
+            new("介入信息",
+            [
+                new("介入适应症", DisplayOption(IndicationOptions, appraise.Indication)),
+                new("介入操作", DisplayOption(OperationOptions, appraise.Operation))
+            ])
+        };
+
+        var manageFields = new List<AppraisePdfField>
+        {
+            new("设备器械配套是否齐全", DisplayOption(CompleteOptions, appraise.DeviceComplete)),
+            new("介入分级手术管理是否落实到位", RegistryFixedCatalog.GetYesNoName(appraise.SurgeryLevelImplemented)),
+            new("是否存在其他管理问题", RegistryFixedCatalog.GetYesNoName(appraise.HasManagementProblem))
+        };
+        if (ShouldShowManagementProblemDescription(appraise))
+        {
+            manageFields.Add(new("其他管理问题描述", appraise.ManagementProblemDescription, true));
+        }
+
+        sections.Add(new("医院管理", manageFields));
+        sections.Add(new("并发症救治",
+        [
+            new("救治是否及时", RegistryFixedCatalog.GetYesNoName(appraise.RescueTimely)),
+            new("救治措施是否得当", RegistryFixedCatalog.GetYesNoName(appraise.RescueMeasureProper)),
+            new("救治药品设备是否齐全", DisplayOption(CompleteOptions, appraise.RescueDeviceComplete))
+        ]));
+
+        var deathFields = new List<AppraisePdfField>
+        {
+            new("死亡原因", DisplayOption(DeathReasonOptions, appraise.DeathReason))
+        };
+        if (ShouldShowOtherDeathReason(appraise))
+        {
+            deathFields.Add(new("其他死亡原因", appraise.OtherDeathReason));
+        }
+
+        sections.Add(new("死亡信息", deathFields));
+        var improveFields = new List<AppraisePdfField>
+        {
+            new("是否需要提交进一步改进措施", RegistryFixedCatalog.GetYesNoName(appraise.NeedImprovement))
+        };
+        if (ShouldShowImprovementContent(appraise))
+        {
+            improveFields.Add(new("改进措施内容", appraise.ImprovementContent, true));
+        }
+
+        sections.Add(new("下一步改进措施", improveFields));
+        return sections;
+    }
 
     private bool IsReviewSectionCollapsed(string key) => _collapsedReviewSections.Contains(key);
 
@@ -957,6 +1114,36 @@
            && _meeting?.Status == 1
            && _isMeetingLeader;
 
+    private async Task<CaseSummary?> GetOrCreateSummaryEntityAsync(CaseSummary summary, DateTime now)
+    {
+        if (_registryContext == null)
+        {
+            return null;
+        }
+
+        var entity = summary.Id == Guid.Empty
+            ? null
+            : await _registryContext.CaseSummaries.FirstOrDefaultAsync(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId);
+        entity ??= await _registryContext.CaseSummaries.FirstOrDefaultAsync(x => x.MeetingId == MeetingId && x.CaseId == CaseId);
+        if (entity != null)
+        {
+            return entity;
+        }
+
+        entity = new CaseSummary
+        {
+            MeetingId = MeetingId,
+            CaseId = CaseId,
+            Content = "",
+            Status = 0,
+            CreatedAt = now,
+            CreatedBy = _meetingLeaderId ?? CurrentUserId,
+            ExpertName = CurrentUserName
+        };
+        _registryContext.CaseSummaries.Add(entity);
+        return entity;
+    }
+
     private async Task SaveSummaryAsync(CaseSummary summary)
     {
         if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.AppraiseEdit) || !await RequireLeaderAsync(summary))
@@ -981,21 +1168,19 @@
             return;
         }
 
-        var now = ToDbTimestamp(DateTime.Now);
-        var affected = await _registryContext.CaseSummaries
-            .Where(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId && x.Status == 0)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.Content, summary.Content ?? "")
-                .SetProperty(x => x.UpdatedAt, now)
-                .SetProperty(x => x.UpdatedBy, CurrentUserId));
-        if (affected == 0)
+        var now = ToDbTimestamp(DateTime.Now) ?? DateTime.Now;
+        var entity = await GetOrCreateSummaryEntityAsync(summary, now);
+        if (entity == null || entity.Status != 0)
         {
             inj_snackbar.Add("汇总状态已变化，请刷新后重试", Severity.Warning);
             await LoadAppraiseAsync();
             return;
         }
 
-        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "保存汇总", "summary", summary.Id));
+        entity.Content = summary.Content ?? "";
+        entity.UpdatedAt = now;
+        entity.UpdatedBy = CurrentUserId;
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "保存汇总", "summary", entity.Id));
         await _registryContext.SaveChangesAsync();
         inj_snackbar.Add("汇总已保存", Severity.Success);
         await LoadAppraiseAsync();
@@ -1025,20 +1210,19 @@
             return;
         }
 
-        var now = ToDbTimestamp(DateTime.Now);
-        var affected = await _registryContext.CaseSummaries
-            .Where(x => x.Id == summary.Id && x.MeetingId == MeetingId && x.CaseId == CaseId && x.Status == 0)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.Content, summary.Content ?? "")
-                .SetProperty(x => x.Status, 1)
-                .SetProperty(x => x.UpdatedAt, now)
-                .SetProperty(x => x.UpdatedBy, CurrentUserId));
-        if (affected == 0)
+        var now = ToDbTimestamp(DateTime.Now) ?? DateTime.Now;
+        var entity = await GetOrCreateSummaryEntityAsync(summary, now);
+        if (entity == null || entity.Status != 0)
         {
             inj_snackbar.Add("汇总状态已变化，请刷新后重试", Severity.Warning);
             await LoadAppraiseAsync();
             return;
         }
+
+        entity.Content = summary.Content ?? "";
+        entity.Status = 1;
+        entity.UpdatedAt = now;
+        entity.UpdatedBy = CurrentUserId;
 
         await _registryContext.Cases.Where(x => x.Id == CaseId)
             .ExecuteUpdateAsync(setters => setters
@@ -1065,7 +1249,7 @@
                     .SetProperty(x => x.UpdatedBy, CurrentUserId));
         }
 
-        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "提交汇总", "summary", summary.Id));
+        _registryContext.OperationLogs.Add(CreateOperationLog("评审", "提交汇总", "summary", entity.Id));
         await _registryContext.SaveChangesAsync();
         inj_snackbar.Add("汇总已提交", Severity.Success);
         await LoadAppraiseAsync();
@@ -1107,7 +1291,7 @@
         yield return new("患者姓名", _case.PatientName);
         yield return new("性别", ShowSex(_case.PatientSexText ?? _case.PatientSex));
         yield return new("出院时间", FormatDate(_case.DischargeTime));
-        yield return new("术者", _case.OperatorName ?? _case.OperatorId);
+        yield return new("术者", _operatorName ?? _case.OperatorName ?? _case.OperatorId);
         yield return new("手术类型", _case.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(_case.DiseaseId ?? _case.SurgeryTypeValue));
     }
 
@@ -1117,10 +1301,23 @@
 
     private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
 
+    private static bool IsGuidText(string? value) => Guid.TryParse(value, out _);
+
     private static string GetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
     {
         var userId = TryParseGuid(id);
         return userId.HasValue && users.TryGetValue(userId.Value, out var name) ? name : ShowValue(id);
+    }
+
+    private static string? TryGetUserName(string? id, IReadOnlyDictionary<Guid, string> users)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        var userId = TryParseGuid(id);
+        return userId.HasValue && users.TryGetValue(userId.Value, out var name) ? name : id;
     }
 
     private static string DisplayOption(IReadOnlyList<FixedOption> options, string? value)
@@ -1188,9 +1385,13 @@
         public List<CasePreviewField> Fields { get; } = [];
     }
 
-    private sealed record FieldStatisticOption(string Text, int Count);
+    private sealed record FieldStatisticOption(string Text, int? Count);
 
     private sealed record FieldStatistic(string FieldName, List<FieldStatisticOption> Options);
+
+    private sealed record AppraisePdfField(string Name, string? Value, bool FullRow = false);
+
+    private sealed record AppraisePdfSection(string Title, List<AppraisePdfField> Fields);
 
     private sealed class AppraiseBlock
     {

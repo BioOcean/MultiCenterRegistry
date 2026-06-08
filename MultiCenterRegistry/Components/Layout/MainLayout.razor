@@ -229,7 +229,7 @@
     private static bool IsAppraiseEditPath(string path)
     {
         var parts = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length == 5
+        return parts.Length >= 5
                && parts[0].Equals(RouteConstants.MeetingList.Trim('/'), StringComparison.OrdinalIgnoreCase)
                && Guid.TryParse(parts[1], out _)
                && parts[2].Equals("cases", StringComparison.OrdinalIgnoreCase)

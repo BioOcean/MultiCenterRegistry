@@ -1291,6 +1291,35 @@ body .appraise-page .form-nav-link {
     background: transparent !important;
 }
 
+body .appraise-page .form-nav-link {
+    grid-template-columns: minmax(0, 1fr) 34px !important;
+}
+
+body .appraise-page .form-nav-text {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+body .appraise-page .form-nav-count {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 28px !important;
+    height: 22px !important;
+    padding: 0 6px !important;
+    color: var(--mcr-primary) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    border: 1px solid var(--mcr-border-strong) !important;
+    border-radius: 999px !important;
+    background: var(--mcr-primary-soft) !important;
+}
+
 body .case-detail-page .form-nav-link:hover,
 body .case-detail-page .form-nav-link:focus-visible,
 body .appraise-page .form-nav-link:hover,
@@ -1368,6 +1397,75 @@ body .appraise-page .review-question {
 body .case-detail-page .question-row.full-row,
 body .appraise-page .review-question.full-row {
     grid-column: 1 / -1 !important;
+}
+
+body .appraise-page .review-question-grid > .review-question:last-child:nth-child(odd) {
+    grid-column: 1 / -1 !important;
+}
+
+body .appraise-page .review-pdf-view {
+    display: grid !important;
+    gap: 12px !important;
+    padding-bottom: 24px !important;
+}
+
+body .appraise-page .review-pdf-section {
+    overflow: hidden !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: var(--mcr-radius) !important;
+    background: var(--mcr-surface) !important;
+}
+
+body .appraise-page .review-pdf-section h3 {
+    min-height: 42px !important;
+    margin: 0 !important;
+    padding: 11px 14px !important;
+    color: var(--mcr-text) !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    border-bottom: 1px solid var(--mcr-border) !important;
+    background: var(--mcr-surface) !important;
+}
+
+body .appraise-page .review-pdf-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1px !important;
+    background: var(--mcr-border-light) !important;
+}
+
+body .appraise-page .review-pdf-field {
+    display: grid !important;
+    grid-template-columns: 132px minmax(0, 1fr) !important;
+    gap: 10px !important;
+    min-height: 58px !important;
+    padding: 12px 14px !important;
+    background: #ffffff !important;
+}
+
+body .appraise-page .review-pdf-field.full-row,
+body .appraise-page .review-pdf-grid > .review-pdf-field:last-child:nth-child(odd) {
+    grid-column: 1 / -1 !important;
+}
+
+body .appraise-page .review-pdf-field.full-row {
+    grid-template-columns: 1fr !important;
+}
+
+body .appraise-page .review-pdf-field span {
+    color: #0f4772 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    line-height: 22px !important;
+}
+
+body .appraise-page .review-pdf-field strong {
+    color: var(--mcr-text) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 22px !important;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere !important;
 }
 
 body .case-detail-page .question-row.filler {
@@ -1670,7 +1768,7 @@ body .appraise-page .case-preview-panel {
 
 body .appraise-page .case-form-layout {
     display: grid !important;
-    grid-template-columns: 168px minmax(0, 1fr) !important;
+    grid-template-columns: 220px minmax(0, 1fr) !important;
     grid-template-rows: minmax(0, 1fr) !important;
     gap: 12px !important;
     min-width: 0 !important;

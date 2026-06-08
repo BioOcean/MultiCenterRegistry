@@ -3,20 +3,7 @@
 
 <PageTitle>@(_meeting == null ? "会议详情" : $"{_meeting.Title} - 会议详情")</PageTitle>
 
-<div class="detail-page meeting-detail-page">
-    <div class="detail-header">
-        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="BackToList">返回</MudButton>
-        <div>
-            <h1>@(_meeting?.Title ?? "会议详情")</h1>
-            <div class="page-subtitle">@(_meeting == null ? "" : $"{FormatDateTime(_meeting.MeetingTime)} - {FormatDateTime(_meeting.EndTime)}")</div>
-        </div>
-        <MudSpacer />
-        @if (_meeting != null)
-        {
-            <span class="status-pill">@GetMeetingStatusText(_meeting.Status)</span>
-        }
-    </div>
-
+<div class="meeting-detail-page">
     @if (_showMeetingEditor)
     {
         <div class="meeting-dialog-mask" role="presentation">
@@ -39,148 +26,206 @@
     }
     else
     {
-        <MudPaper Class="summary-panel" Elevation="0">
-            @foreach (var item in BuildSummaryItems())
-            {
-                <div class="summary-item">
-                    <div class="summary-label">@item.Label</div>
-                    <div class="summary-value">@ShowValue(item.Value)</div>
+        var filteredCases = GetFilteredCases();
+        var pageCases = GetPagedCases(filteredCases);
+        var totalPages = GetTotalPages(filteredCases.Count);
+        <section class="meeting-board">
+            <header class="meeting-board-header">
+                <button type="button" class="meeting-back-button" @onclick="BackToList">
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" />
+                    <span>返回</span>
+                </button>
+                <div class="meeting-title-block">
+                    <h1>评审会议</h1>
+                    <span>@ShowValue(_meeting.Title)</span>
                 </div>
-            }
-        </MudPaper>
+                <span class="status-pill @GetMeetingStatusClass(_meeting.Status)">@GetMeetingStatusText(_meeting.Status)</span>
+                @if (HasPermission(PermissionConstants.QualityManage))
+                {
+                    <div class="meeting-header-actions">
+                        <button type="button" class="meeting-text-button" @onclick="EditMeeting">编辑会议</button>
+                        @if (_meeting.Status == 0)
+                        {
+                            <button type="button" class="meeting-text-button primary" @onclick="AddCaseToMeetingAsync">添加病例</button>
+                            <button type="button" class="meeting-text-button" @onclick="@(() => ChangeMeetingStatusAsync(1, StartMeetingAction))">开始会议</button>
+                        }
+                        @if (_meeting.Status == 1)
+                        {
+                            <button type="button" class="meeting-text-button" @onclick="@(() => ChangeMeetingStatusAsync(2, PublishMeetingAction))">发布会议</button>
+                        }
+                        @if (_meeting.Status == 2)
+                        {
+                            <button type="button" class="meeting-text-button" @onclick="@(() => ChangeMeetingStatusAsync(3, FinishMeetingAction))">结束会议</button>
+                        }
+                        <button type="button" class="meeting-text-button danger" @onclick="DeleteMeetingAsync">删除会议</button>
+                    </div>
+                }
+            </header>
 
-        <MudPaper Class="action-panel" Elevation="0">
-            @if (HasPermission(PermissionConstants.QualityManage))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" OnClick="EditMeeting">编辑会议</MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddCaseToMeetingAsync">添加病例</MudButton>
-                @if (_meeting.Status == 0)
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => ChangeMeetingStatusAsync(1, StartMeetingAction))">开始会议</MudButton>
-                }
-                @if (_meeting.Status == 1)
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Publish" OnClick="@(() => ChangeMeetingStatusAsync(2, PublishMeetingAction))">发布会议</MudButton>
-                }
-                @if (_meeting.Status == 2)
-                {
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Done" OnClick="@(() => ChangeMeetingStatusAsync(3, FinishMeetingAction))">结束会议</MudButton>
-                }
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="DeleteMeetingAsync">删除会议</MudButton>
-            }
-        </MudPaper>
-
-        <MudPaper Class="expert-panel" Elevation="0">
-            <div class="panel-title">
-                <h2>评审专家</h2>
-                <span>@_experts.Count 人</span>
-            </div>
-            @if (_experts.Count == 0)
-            {
-                <div class="empty-line">暂无专家</div>
-            }
-            else
-            {
-                <div class="expert-list">
-                    @foreach (var expert in _experts)
-                    {
-                        <div class="expert-item">
-                            <span>@expert.Name</span>
-                            <em>@(expert.Level == 1 ? "组长" : "专家")</em>
-                        </div>
-                    }
+            <section class="meeting-info-grid">
+                <div class="meeting-info-column">
+                    <div class="meeting-info-row">
+                        <span>评审主题：</span>
+                        <strong>@ShowValue(_meeting.Title)</strong>
+                    </div>
+                    <div class="meeting-info-row">
+                        <span>评审时间：</span>
+                        <strong>@FormatDateTime(_meeting.MeetingTime) - @FormatDateTime(_meeting.EndTime)</strong>
+                    </div>
+                    <div class="meeting-info-row">
+                        <span>评审地点：</span>
+                        <strong>@ShowValue(_meeting.Place)</strong>
+                    </div>
                 </div>
-            }
-        </MudPaper>
+                <div class="meeting-info-column">
+                    <div class="meeting-info-row">
+                        <span>评审组长：</span>
+                        <strong>@ShowValue(LeaderName)</strong>
+                    </div>
+                    <div class="meeting-info-row">
+                        <span>评审组员：</span>
+                        <strong>@ShowValue(MemberNames)</strong>
+                    </div>
+                    <div class="meeting-info-row">
+                        <span>本次评审病例数：</span>
+                        <strong>@_cases.Count 例</strong>
+                    </div>
+                </div>
+            </section>
 
-        <MudPaper Class="list-panel" Elevation="0">
-            <div class="panel-title table-title">
-                <h2>会议病例</h2>
-                <span>@_cases.Count 例</span>
-            </div>
-            @if (_cases.Count == 0)
-            {
-                <div class="empty-row">该会议暂无病例</div>
-            }
-            else
-            {
-                <div class="table-wrap">
-                    <table class="case-table">
-                        <thead>
+            <section class="filter-panel meeting-case-filter">
+                <label>
+                    <span>所属医院：</span>
+                    <select @bind="_filterHospital">
+                        <option value="">请选择</option>
+                        @foreach (var option in _hospitalFilterOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>病案号：</span>
+                    <input type="text" placeholder="请输入病案号" @bind="_filterPatientNumber" />
+                </label>
+                <label>
+                    <span>患者姓名：</span>
+                    <input type="text" placeholder="请输入患者姓名" @bind="_filterPatientName" />
+                </label>
+                <label class="meeting-date-filter">
+                    <span>出院时间：</span>
+                    <div class="meeting-date-range">
+                        <input type="date" class="@GetDateFilterClass(_filterDischargeStart)" value="@_filterDischargeStart" @onchange="OnDischargeStartChanged" />
+                        <em>-</em>
+                        <input type="date" class="@GetDateFilterClass(_filterDischargeEnd)" value="@_filterDischargeEnd" @onchange="OnDischargeEndChanged" />
+                    </div>
+                </label>
+                <label>
+                    <span>手术类别：</span>
+                    <select @bind="_filterSurgeryType">
+                        <option value="">请选择</option>
+                        @foreach (var option in _surgeryFilterOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>术者：</span>
+                    <select @bind="_filterOperator">
+                        <option value="">请选择</option>
+                        @foreach (var option in _operatorFilterOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <div class="meeting-filter-actions">
+                    <button type="button" class="meeting-search-button" @onclick="ApplyFilters">查询</button>
+                    <button type="button" class="meeting-reset-button" @onclick="ResetFilters">重置</button>
+                </div>
+            </section>
+
+            <div class="meeting-table-wrap">
+                <table class="meeting-case-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>所属医院 <span>⇅</span></th>
+                            <th>状态 <span>⇅</span></th>
+                            <th>创建时间 <span>⇅</span></th>
+                            <th>病案号 <span>⇅</span></th>
+                            <th>患者姓名 <span>⇅</span></th>
+                            <th>性别 <span>⇅</span></th>
+                            <th>出院时间 <span>⇅</span></th>
+                            <th>术者 <span>⇅</span></th>
+                            <th>手术类别 <span>⇅</span></th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (pageCases.Count == 0)
+                        {
                             <tr>
-                                <th>排序</th>
-                                <th>患者</th>
-                                <th>病案号</th>
-                                <th>医院/科室</th>
-                                <th>入院时间</th>
-                                <th>评审进度</th>
-                                <th>汇总</th>
-                                <th>状态</th>
-                                <th>操作</th>
+                                <td colspan="11" class="meeting-empty-cell">无符合条件数据</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in _cases)
+                        }
+                        else
+                        {
+                            @foreach (var item in pageCases)
                             {
                                 <tr>
                                     <td>@item.Sort</td>
-                                    <td>
-                                        <div class="patient-name">@item.PatientName</div>
-                                        <div class="muted">@ShowSexAge(item.PatientSex, item.PatientAge)</div>
-                                    </td>
-                                    <td>@ShowValue(item.PatientNumber)</td>
-                                    <td>
-                                        <div>@ShowValue(item.HospitalName)</div>
-                                        <div class="muted">@ShowValue(item.DepartmentName)</div>
-                                    </td>
-                                    <td>@FormatDate(item.AdmissionTime)</td>
-                                    <td>@item.FinishedAppraiseCount / @item.AppraiseCount</td>
-                                    <td>@item.SummaryCount 条</td>
-                                    <td>
-                                        <span class="status-pill">@GetCaseStatusText(item.Status)</span>
-                                        <span class="muted">@GetSubStatusText(item.SubStatus)</span>
-                                    </td>
-                                    <td class="operation-cell">
-                                        <div class="meeting-case-actions">
-                                            <MudButton Variant="Variant.Text"
-                                                       Color="Color.Primary"
-                                                       Size="Size.Small"
-                                                       StartIcon="@Icons.Material.Filled.Description"
-                                                       OnClick="@(() => OpenCase(item.CaseId))">病例</MudButton>
-                                            <MudButton Variant="Variant.Text"
-                                                       Color="Color.Primary"
-                                                       Size="Size.Small"
-                                                       StartIcon="@Icons.Material.Filled.RateReview"
-                                                       OnClick="@(() => OpenAppraise(item.CaseId))">评审</MudButton>
-                                            @if (HasPermission(PermissionConstants.QualityManage))
-                                            {
-                                                <MudButton Variant="Variant.Text"
-                                                           Color="Color.Primary"
-                                                           Size="Size.Small"
-                                                           Disabled="@IsFirstCase(item.CaseId)"
-                                                           StartIcon="@Icons.Material.Filled.KeyboardArrowUp"
-                                                           OnClick="@(() => MoveCaseAsync(item.CaseId, -1))">上移</MudButton>
-                                                <MudButton Variant="Variant.Text"
-                                                           Color="Color.Primary"
-                                                           Size="Size.Small"
-                                                           Disabled="@IsLastCase(item.CaseId)"
-                                                           StartIcon="@Icons.Material.Filled.KeyboardArrowDown"
-                                                           OnClick="@(() => MoveCaseAsync(item.CaseId, 1))">下移</MudButton>
-                                                <MudButton Variant="Variant.Text"
-                                                           Color="Color.Error"
-                                                           Size="Size.Small"
-                                                           StartIcon="@Icons.Material.Filled.Delete"
-                                                           OnClick="@(() => RemoveCaseAsync(item.CaseId))">移除</MudButton>
-                                            }
-                                        </div>
+                                    <td title="@ShowValue(item.HospitalName)">@ShowValue(item.HospitalName)</td>
+                                    <td><span class="@GetMeetingCaseStatusClass(item.SubStatus)">@GetSubStatusText(item.SubStatus)</span></td>
+                                    <td>@FormatDate(item.CreatedAt)</td>
+                                    <td title="@ShowValue(item.PatientNumber)">@ShowValue(item.PatientNumber)</td>
+                                    <td title="@ShowValue(item.PatientName)">@ShowValue(item.PatientName)</td>
+                                    <td>@ShowSex(item.PatientSex)</td>
+                                    <td>@FormatDate(item.DischargeTime)</td>
+                                    <td title="@ShowValue(item.OperatorName)">@ShowValue(item.OperatorName)</td>
+                                    <td title="@ShowValue(item.SurgeryTypeName)">@ShowValue(item.SurgeryTypeName)</td>
+                                    <td class="meeting-operation-cell">
+                                        @if (CanOpenCaseDetail())
+                                        {
+                                            <button type="button" class="meeting-link-button" @onclick="@(() => OpenCase(item.CaseId))">查看病例</button>
+                                        }
+                                        @if (CanOpenAppraise(item))
+                                        {
+                                            <button type="button" class="meeting-link-button" @onclick="@(() => OpenAppraise(item.CaseId))">@GetAppraiseButtonText(item)</button>
+                                        }
+                                        @if (CanRemoveMeetingCase(item))
+                                        {
+                                            <button type="button" class="meeting-link-button danger" @onclick="@(() => RemoveCaseAsync(item.CaseId))">删除</button>
+                                        }
                                     </td>
                                 </tr>
                             }
-                        </tbody>
-                    </table>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <footer class="pager meeting-detail-pager">
+                <div class="pager-total">共 @filteredCases.Count 条</div>
+                <div class="pager-pages">
+                    <button type="button" class="pager-page wide" disabled="@(_currentPage <= 1)" @onclick="PreviousPage">上一页</button>
+                    @foreach (var page in GetPagerItems(totalPages))
+                    {
+                        if (page < 0)
+                        {
+                            <span class="pager-ellipsis">...</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="@GetPagerClass(page)" @onclick="@(() => GoToPage(page))">@(page)</button>
+                        }
+                    }
+                    <button type="button" class="pager-page wide" disabled="@(_currentPage >= totalPages)" @onclick="@(() => NextPage(totalPages))">下一页</button>
                 </div>
-            }
-        </MudPaper>
+                <div class="pager-summary">第 @_currentPage / @totalPages 页 · 每页 @MeetingPageSize 条</div>
+            </footer>
+        </section>
     }
 </div>
 
@@ -195,8 +240,25 @@
     private ReviewMeeting? _meeting;
     private readonly List<ExpertItem> _experts = [];
     private readonly List<MeetingCaseItem> _cases = [];
+    private readonly List<string> _hospitalFilterOptions = [];
+    private readonly List<string> _operatorFilterOptions = [];
+    private readonly List<string> _surgeryFilterOptions = [];
     private bool _isLoading = true;
     private bool _showMeetingEditor;
+    private string _filterHospital = "";
+    private string _filterPatientNumber = "";
+    private string _filterPatientName = "";
+    private string _filterDischargeStart = "";
+    private string _filterDischargeEnd = "";
+    private string _filterSurgeryType = "";
+    private string _filterOperator = "";
+    private int _currentPage = 1;
+    private const int MeetingPageSize = 10;
+
+    private string? LeaderName => _experts.FirstOrDefault(x => x.Level == 1)?.Name;
+
+    private string MemberNames
+        => string.Join("、", _experts.Select(x => x.Name).Where(x => !string.IsNullOrWhiteSpace(x)));
 
     protected override Task OnPageInitializedAsync() => LoadMeetingAsync();
 
@@ -219,6 +281,9 @@
             _meeting = await _registryContext.ReviewMeetings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == MeetingId);
             _experts.Clear();
             _cases.Clear();
+            _hospitalFilterOptions.Clear();
+            _operatorFilterOptions.Clear();
+            _surgeryFilterOptions.Clear();
             if (_meeting == null)
             {
                 return;
@@ -249,6 +314,7 @@
             var userIds = experts
                 .Select(x => TryParseGuid(x.ExpertId))
                 .Concat(appraises.Select(x => TryParseGuid(x.ExpertId)))
+                .Concat(cases.Select(x => TryParseGuid(x.OperatorId)))
                 .Where(x => x.HasValue)
                 .Select(x => x!.Value)
                 .Distinct()
@@ -257,7 +323,7 @@
                 ? new Dictionary<Guid, string>()
                 : await _registryContext.SystemUsers.AsNoTracking()
                     .Where(x => userIds.Contains(x.Id))
-                    .ToDictionaryAsync(x => x.Id, x => x.DisplayName);
+                    .ToDictionaryAsync(x => x.Id, x => string.IsNullOrWhiteSpace(x.DisplayName) ? x.Account : x.DisplayName);
 
             foreach (var expert in experts)
             {
@@ -286,9 +352,13 @@
                     item.PatientSex,
                     item.PatientAge,
                     item.PatientNumber,
-                    GetName(item.HospitalId, hospitals),
+                    GetName(item.HospitalId, hospitals, item.HospitalName),
                     GetName(item.DepartmentId, departments),
+                    item.CreatedAt,
                     item.AdmissionTime,
+                    item.DischargeTime,
+                    GetName(item.OperatorId, users, item.OperatorName),
+                    GetSurgeryTypeName(item),
                     item.Sort,
                     item.Status,
                     item.SubStatus,
@@ -296,6 +366,9 @@
                     caseAppraises.Count(x => x.Status == 1),
                     summaries.Count(x => x.CaseId == item.Id)));
             }
+
+            BuildFilterOptions();
+            _currentPage = 1;
         }
         finally
         {
@@ -308,6 +381,151 @@
     private void OpenCase(Guid id) => inj_navigationManager.NavigateTo(RouteConstants.CaseDetail(id));
 
     private void OpenAppraise(Guid caseId) => inj_navigationManager.NavigateTo(RouteConstants.AppraiseDetail(MeetingId, caseId));
+
+    private void BuildFilterOptions()
+    {
+        _hospitalFilterOptions.AddRange(_cases.Select(x => x.HospitalName).Where(HasText).Select(x => x!).Distinct().OrderBy(x => x));
+        _operatorFilterOptions.AddRange(_cases.Select(x => x.OperatorName).Where(HasText).Select(x => x!).Distinct().OrderBy(x => x));
+        _surgeryFilterOptions.AddRange(_cases.Select(x => x.SurgeryTypeName).Where(HasText).Select(x => x!).Distinct().OrderBy(x => x));
+    }
+
+    private List<MeetingCaseItem> GetFilteredCases()
+    {
+        var start = ParseDate(_filterDischargeStart);
+        var end = ParseDate(_filterDischargeEnd);
+        return _cases
+            .Where(x => string.IsNullOrWhiteSpace(_filterHospital) || IsSameValue(x.HospitalName, _filterHospital))
+            .Where(x => string.IsNullOrWhiteSpace(_filterPatientNumber) || ContainsText(x.PatientNumber, _filterPatientNumber))
+            .Where(x => string.IsNullOrWhiteSpace(_filterPatientName) || ContainsText(x.PatientName, _filterPatientName))
+            .Where(x => !start.HasValue || (x.DischargeTime.HasValue && x.DischargeTime.Value.Date >= start.Value.Date))
+            .Where(x => !end.HasValue || (x.DischargeTime.HasValue && x.DischargeTime.Value.Date <= end.Value.Date))
+            .Where(x => string.IsNullOrWhiteSpace(_filterSurgeryType) || IsSameValue(x.SurgeryTypeName, _filterSurgeryType))
+            .Where(x => string.IsNullOrWhiteSpace(_filterOperator) || IsSameValue(x.OperatorName, _filterOperator))
+            .OrderBy(x => x.Sort)
+            .ThenBy(x => x.PatientName)
+            .ThenBy(x => x.CaseId)
+            .ToList();
+    }
+
+    private List<MeetingCaseItem> GetPagedCases(IReadOnlyList<MeetingCaseItem> filteredCases)
+        => filteredCases
+            .Skip((_currentPage - 1) * MeetingPageSize)
+            .Take(MeetingPageSize)
+            .ToList();
+
+    private static int GetTotalPages(int totalCount)
+        => Math.Max(1, (int)Math.Ceiling(totalCount / (double)MeetingPageSize));
+
+    private void ApplyFilters()
+    {
+        _currentPage = 1;
+    }
+
+    private void ResetFilters()
+    {
+        _filterHospital = "";
+        _filterPatientNumber = "";
+        _filterPatientName = "";
+        _filterDischargeStart = "";
+        _filterDischargeEnd = "";
+        _filterSurgeryType = "";
+        _filterOperator = "";
+        _currentPage = 1;
+    }
+
+    private void OnDischargeStartChanged(ChangeEventArgs args)
+    {
+        _filterDischargeStart = args.Value?.ToString() ?? "";
+    }
+
+    private void OnDischargeEndChanged(ChangeEventArgs args)
+    {
+        _filterDischargeEnd = args.Value?.ToString() ?? "";
+    }
+
+    private static string GetDateFilterClass(string value)
+        => string.IsNullOrWhiteSpace(value) ? "date-input date-empty" : "date-input";
+
+    private string GetPagerClass(int page)
+        => page == _currentPage ? "pager-page active" : "pager-page";
+
+    private IEnumerable<int> GetPagerItems(int totalPages)
+    {
+        if (totalPages <= 7)
+        {
+            for (var page = 1; page <= totalPages; page++)
+            {
+                yield return page;
+            }
+
+            yield break;
+        }
+
+        yield return 1;
+        var start = Math.Max(2, _currentPage - 2);
+        var end = Math.Min(totalPages - 1, _currentPage + 2);
+        if (start > 2)
+        {
+            yield return -1;
+        }
+
+        for (var page = start; page <= end; page++)
+        {
+            yield return page;
+        }
+
+        if (end < totalPages - 1)
+        {
+            yield return -1;
+        }
+
+        yield return totalPages;
+    }
+
+    private void PreviousPage()
+    {
+        if (_currentPage > 1)
+        {
+            _currentPage--;
+        }
+    }
+
+    private void NextPage(int totalPages)
+    {
+        if (_currentPage < totalPages)
+        {
+            _currentPage++;
+        }
+    }
+
+    private void GoToPage(int page)
+    {
+        var totalPages = GetTotalPages(GetFilteredCases().Count);
+        _currentPage = Math.Clamp(page, 1, totalPages);
+    }
+
+    private void OnPageInputChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var page))
+        {
+            GoToPage(page);
+        }
+    }
+
+    private bool CanOpenCaseDetail()
+        => !HasPermission(PermissionConstants.AppraiseEdit);
+
+    private bool CanOpenAppraise(MeetingCaseItem item)
+        => (HasPermission(PermissionConstants.AppraiseEdit) && item.SubStatus != 2)
+           || (HasAnyPermission(PermissionConstants.AppraiseView, PermissionConstants.QualityManage) && item.SubStatus == 2);
+
+    private string GetAppraiseButtonText(MeetingCaseItem item)
+        => HasPermission(PermissionConstants.AppraiseEdit) && item.SubStatus != 2 ? "评审" : "查看评价";
+
+    private bool CanRemoveMeetingCase(MeetingCaseItem item)
+        => _meeting?.Status == 0
+           && HasPermission(PermissionConstants.QualityManage)
+           && !HasPermission(PermissionConstants.AppraiseEdit);
 
     private void EditMeeting() => _showMeetingEditor = true;
 
@@ -560,7 +778,34 @@
         return guid.HasValue && names.TryGetValue(guid.Value, out var name) ? name : ShowValue(id);
     }
 
-    private static string ShowSexAge(string? sex, string? age) => $"{ShowValue(sex)} / {ShowValue(age)}";
+    private static string GetName(string? id, IReadOnlyDictionary<Guid, string> names, string? fallback)
+    {
+        var guid = TryParseGuid(id);
+        if (guid.HasValue && names.TryGetValue(guid.Value, out var name))
+        {
+            return name;
+        }
+
+        return ShowValue(fallback ?? id);
+    }
+
+    private static string GetSurgeryTypeName(RegistryCase item)
+        => ShowValue(item.SurgeryTypeText ?? item.DiseaseName ?? RegistryFixedCatalog.GetDiseaseName(item.DiseaseId ?? item.SurgeryTypeValue));
+
+    private static bool HasText(string? value) => !string.IsNullOrWhiteSpace(value) && value != "-";
+
+    private static bool ContainsText(string? value, string keyword)
+        => !string.IsNullOrWhiteSpace(value)
+           && value.Contains(keyword.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSameValue(string? left, string? right)
+        => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static DateTime? ParseDate(string? value)
+        => DateTime.TryParse(value, out var date) ? date.Date : null;
+
+    private static string ShowSex(string? value)
+        => ShowValue(RegistryFixedCatalog.GetSexName(value));
 
     private static string ShowValue(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
@@ -594,8 +839,27 @@
         {
             0 => "待分配",
             1 => "待评审",
-            2 => "已评审",
+            2 => "评审完成",
             _ => $"子状态 {status}"
+        };
+
+    private static string GetMeetingStatusClass(int status)
+        => status switch
+        {
+            0 => "pending",
+            1 => "running",
+            2 => "published",
+            3 => "finished",
+            _ => "pending"
+        };
+
+    private static string GetMeetingCaseStatusClass(int status)
+        => status switch
+        {
+            0 => "meeting-case-status pending",
+            1 => "meeting-case-status reviewing",
+            2 => "meeting-case-status finished",
+            _ => "meeting-case-status pending"
         };
 
     private sealed record SummaryItem(string Label, string? Value);
@@ -610,7 +874,11 @@
         string? PatientNumber,
         string? HospitalName,
         string? DepartmentName,
+        DateTime CreatedAt,
         DateTime? AdmissionTime,
+        DateTime? DischargeTime,
+        string? OperatorName,
+        string? SurgeryTypeName,
         int Sort,
         int Status,
         int SubStatus,
