@@ -337,26 +337,6 @@
                                     </div>
                                 }
                             </MudPaper>
-
-                            @if (_votes.Count > 0)
-                            {
-                                <MudPaper Class="section-panel appraise-section-panel appraise-vote-section" Elevation="0">
-                                    <div class="panel-title">
-                                        <h2>投票记录</h2>
-                                        <span>@_votes.Count 条</span>
-                                    </div>
-                                    <div class="vote-list">
-                                        @foreach (var vote in _votes)
-                                        {
-                                            <div class="vote-item">
-                                                <strong>@ShowValue(vote.ExpertName)</strong>
-                                                <span>@(vote.Agreed ? "同意" : "不同意")</span>
-                                                <em>@ShowValue(vote.Content)</em>
-                                            </div>
-                                        }
-                                    </div>
-                                </MudPaper>
-                            }
                         }
                     </div>
                 </div>
@@ -416,7 +396,6 @@
     private readonly List<CasePreviewSection> _caseSections = [];
     private readonly List<AppraiseBlock> _appraises = [];
     private readonly List<CaseSummary> _summaries = [];
-    private readonly List<CaseVote> _votes = [];
     private readonly List<FieldStatistic> _statistics = [];
     private string? _hospitalName;
     private string? _departmentName;
@@ -446,7 +425,6 @@
             _caseSections.Clear();
             _appraises.Clear();
             _summaries.Clear();
-            _votes.Clear();
             _statistics.Clear();
             _hospitalName = null;
             _departmentName = null;
@@ -499,15 +477,6 @@
             }
 
             _summaries.AddRange(summaries);
-
-            var summaryIds = summaries.Select(x => x.Id).ToList();
-            if (summaryIds.Count > 0)
-            {
-                _votes.AddRange(await _registryContext.CaseVotes.AsNoTracking()
-                    .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId && summaryIds.Contains(x.SummaryId))
-                    .OrderByDescending(x => x.CreatedAt)
-                    .ToListAsync());
-            }
 
             var users = await LoadUserNamesAsync(appraises.Select(x => x.ExpertId));
             for (var i = 0; i < appraises.Count; i++)

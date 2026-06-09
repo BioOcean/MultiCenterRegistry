@@ -723,7 +723,7 @@
 
     private async Task DeleteMeetingAsync()
     {
-        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("确认删除该会议？会议专家、评审、汇总和投票都会删除。"))
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.QualityManage) || !await ConfirmAsync("确认删除该会议？会议专家、评审和汇总都会删除。"))
         {
             return;
         }

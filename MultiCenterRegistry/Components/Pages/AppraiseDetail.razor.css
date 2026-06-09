@@ -703,15 +703,13 @@
     background: #f8fafc;
 }
 
-.summary-list,
-.vote-list {
+.summary-list {
     display: grid;
     gap: 12px;
     padding: 12px;
 }
 
 .summary-note,
-.vote-item,
 .stat-card {
     min-width: 0;
     overflow: hidden;
@@ -894,19 +892,6 @@
     font-weight: 800;
 }
 
-.vote-item {
-    display: grid;
-    grid-template-columns: 140px 80px minmax(0, 1fr);
-    gap: 10px;
-    align-items: center;
-    padding: 12px;
-}
-
-.vote-item span {
-    color: #218aa5;
-    font-weight: 800;
-}
-
 .empty-line {
     display: flex;
     align-items: center;
@@ -1049,7 +1034,6 @@
 
     .review-question-grid,
     .stat-grid,
-    .vote-item,
     .pdf-question {
         grid-template-columns: 1fr;
     }

@@ -87,10 +87,6 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
             .Where(x => x.MeetingId == meetingId && x.CaseId == caseId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync();
-        var votes = await dbContext.CaseVotes.AsNoTracking()
-            .Where(x => x.MeetingId == meetingId && x.CaseId == caseId)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
         var statistics = BuildStatistics(appraises);
 
         var bytes = BuildPdf(registryCase.PatientName, meeting.Title, column =>
@@ -148,11 +144,6 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                 }
             }
 
-            if (votes.Count > 0)
-            {
-                AddSectionTitle(column, "投票记录");
-                column.Item().Element(container => ComposeVotes(container, votes));
-            }
         });
 
         return new RegistryPdfFileResult(BuildFileName($"评审_{registryCase.PatientName}_{DateTime.Now:yyyyMMddHHmmss}.pdf"), bytes);
@@ -440,26 +431,6 @@ public sealed class RegistryPdfService(IDbContextFactory<RegistryDbContext> cont
                 });
             });
         }
-    }
-
-    private static void ComposeVotes(IContainer container, IReadOnlyList<CaseVote> votes)
-    {
-        container.Table(table =>
-        {
-            table.ColumnsDefinition(columns =>
-            {
-                columns.ConstantColumn(100);
-                columns.ConstantColumn(60);
-                columns.RelativeColumn();
-            });
-
-            foreach (var vote in votes)
-            {
-                table.Cell().Element(LabelCell).Text(ShowValue(vote.ExpertName));
-                table.Cell().Element(LabelCell).Text(vote.Agreed ? "同意" : "不同意");
-                table.Cell().Element(ValueCell).Text(ShowValue(vote.Content));
-            }
-        });
     }
 
     private static List<PdfStatistic> BuildStatistics(IReadOnlyList<CaseAppraise> appraises)

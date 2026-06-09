@@ -37,6 +37,7 @@ try
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddMudServices();
     builder.Services.AddScoped<RegistryPdfService>();
+    builder.Services.AddHostedService<RegistryBackgroundJobService>();
 
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new InvalidOperationException("缺少数据库连接配置 DefaultConnection。");
@@ -635,23 +636,15 @@ static async Task<IQueryable<RegistryCase>> ApplyCaseScopeAsync(HttpContext http
 
         var scopes = await dbContext.SystemUserRoleScopes.AsNoTracking()
             .Where(x => x.UserId == userId && x.RoleId == roleId)
-            .Select(x => new { x.HospitalId, x.DepartmentId })
+            .Select(x => x.HospitalId)
             .ToListAsync();
         if (scopes.Count == 0)
         {
             return query;
         }
 
-        var hospitalIds = scopes.Select(x => x.HospitalId.ToString()).Distinct().ToList();
-        var departmentIds = scopes.Where(x => x.DepartmentId.HasValue).Select(x => x.DepartmentId!.Value.ToString()).Distinct().ToList();
-        var hasHospitalWideScope = scopes.Any(x => !x.DepartmentId.HasValue);
-
+        var hospitalIds = scopes.Select(x => x.ToString()).Distinct().ToList();
         query = query.Where(x => x.HospitalId != null && hospitalIds.Contains(x.HospitalId));
-        if (departmentIds.Count > 0 && !hasHospitalWideScope)
-        {
-            query = query.Where(x => x.DepartmentId != null && departmentIds.Contains(x.DepartmentId));
-        }
-
         return query;
     }
 

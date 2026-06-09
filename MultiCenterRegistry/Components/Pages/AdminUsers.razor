@@ -56,20 +56,10 @@
                             <label class="account-field">
                                 <span>医院范围</span>
                                 <select class="account-input" value="@_edit.HospitalIdText" @onchange="OnHospitalChanged">
-                                    <option value="">未设置</option>
+                                    <option value="">全部医院</option>
                                     @foreach (var hospital in _hospitals)
                                     {
                                         <option value="@hospital.Id">@hospital.Name</option>
-                                    }
-                                </select>
-                            </label>
-                            <label class="account-field">
-                                <span>科室范围</span>
-                                <select class="account-input" value="@_edit.DepartmentIdText" @onchange="OnDepartmentChanged">
-                                    <option value="">全部科室</option>
-                                    @foreach (var department in FilteredDepartments)
-                                    {
-                                        <option value="@department.Id">@department.Name</option>
                                     }
                                 </select>
                             </label>
@@ -256,7 +246,6 @@
     private readonly List<UserListItem> _users = [];
     private readonly List<RoleOption> _roles = [];
     private readonly List<HospitalOption> _hospitals = [];
-    private readonly List<DepartmentOption> _departments = [];
     private UserEditModel _edit = new();
     private string _keyword = "";
     private string _hospitalFilterValue = "";
@@ -269,11 +258,6 @@
     private bool _showEditor;
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
-
-    private IEnumerable<DepartmentOption> FilteredDepartments
-        => Guid.TryParse(_edit.HospitalIdText, out var hospitalId)
-            ? _departments.Where(x => x.HospitalId == hospitalId)
-            : [];
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -393,12 +377,6 @@
             .OrderBy(x => x.Name)
             .Select(x => new HospitalOption(x.Id, x.Name))
             .ToListAsync());
-
-        _departments.Clear();
-        _departments.AddRange(await _registryContext.SystemDepartments.AsNoTracking()
-            .OrderBy(x => x.Name)
-            .Select(x => new DepartmentOption(x.Id, x.HospitalId, string.IsNullOrWhiteSpace(x.DisplayName) ? x.Name : x.DisplayName!))
-            .ToListAsync());
     }
 
     private async Task LoadUsersAsync()
@@ -439,7 +417,9 @@
 
             if (Guid.TryParse(_hospitalFilterValue, out var hospitalFilterId))
             {
-                query = query.Where(x => _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId));
+                query = query.Where(x =>
+                    !_registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && mcrRoleIds.Contains(scope.RoleId))
+                    || _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId && mcrRoleIds.Contains(scope.RoleId)));
             }
 
             _totalCount = await query.CountAsync();
@@ -466,7 +446,7 @@
 
                 scopeRows = await _registryContext.SystemUserRoleScopes.AsNoTracking()
                     .Where(x => userIds.Contains(x.UserId) && mcrRoleIds.Contains(x.RoleId))
-                    .Select(x => new UserScopeRow(x.UserId, x.RoleId, x.HospitalName, x.DepartmentName))
+                    .Select(x => new UserScopeRow(x.UserId, x.RoleId, x.HospitalName))
                     .ToListAsync();
             }
 
@@ -497,7 +477,7 @@
                 ProjectName = projectName,
                 IsValid = x.IsValid,
                 RoleNames = rolesByUser.TryGetValue(x.Id, out var roles) ? roles : [],
-                HospitalNames = hospitalsByUser.TryGetValue(x.Id, out var hospitals) ? hospitals : []
+                HospitalNames = hospitalsByUser.TryGetValue(x.Id, out var hospitals) && hospitals.Count > 0 ? hospitals : ["全部医院"]
             }));
         }
         finally
@@ -551,7 +531,6 @@
             IsValid = user.IsValid,
             MustChangePassword = user.MustChangePassword,
             HospitalIdText = scope?.HospitalId.ToString() ?? "",
-            DepartmentIdText = scope?.DepartmentId?.ToString() ?? "",
             SelectedRoleIds = selectedRoleIds.ToHashSet()
         };
         _showEditor = true;
@@ -582,12 +561,6 @@
         if (_edit.SelectedRoleIds.Count == 0)
         {
             inj_snackbar.Add("请至少选择一个本系统角色", Severity.Warning);
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_edit.DepartmentIdText) && string.IsNullOrWhiteSpace(_edit.HospitalIdText))
-        {
-            inj_snackbar.Add("选择科室前必须先选择医院", Severity.Warning);
             return;
         }
 
@@ -680,18 +653,7 @@
             return;
         }
 
-        Guid? departmentId = null;
-        string? departmentName = null;
-        if (Guid.TryParse(_edit.DepartmentIdText, out var parsedDepartmentId))
-        {
-            var department = _departments.FirstOrDefault(x => x.Id == parsedDepartmentId && x.HospitalId == hospitalId);
-            if (department != null)
-            {
-                departmentId = department.Id;
-                departmentName = department.Name;
-            }
-        }
-
+        var now = ToDbTimestamp(DateTime.Now);
         foreach (var roleId in _edit.SelectedRoleIds)
         {
             _registryContext.SystemUserRoleScopes.Add(new SystemUserRoleScope
@@ -701,9 +663,7 @@
                 RoleId = roleId,
                 HospitalId = hospital.Id,
                 HospitalName = hospital.Name,
-                DepartmentId = departmentId,
-                DepartmentName = departmentName,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = now
             });
         }
     }
@@ -755,13 +715,7 @@
             .ToListAsync();
 
     private void OnHospitalChanged(ChangeEventArgs args)
-    {
-        _edit.HospitalIdText = args.Value?.ToString() ?? "";
-        _edit.DepartmentIdText = "";
-    }
-
-    private void OnDepartmentChanged(ChangeEventArgs args)
-        => _edit.DepartmentIdText = args.Value?.ToString() ?? "";
+        => _edit.HospitalIdText = args.Value?.ToString() ?? "";
 
     private void OnEditValidChanged(ChangeEventArgs args)
         => _edit.IsValid = args.Value is bool value && value;
@@ -786,6 +740,9 @@
     private static string GetUserRowClass(UserListItem item)
         => item.IsValid ? "" : "disabled-row";
 
+    private static DateTime ToDbTimestamp(DateTime value)
+        => DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+
     private sealed class UserEditModel
     {
         public Guid? Id { get; set; }
@@ -796,7 +753,6 @@
         public bool IsValid { get; set; } = true;
         public bool MustChangePassword { get; set; } = true;
         public string HospitalIdText { get; set; } = "";
-        public string DepartmentIdText { get; set; } = "";
         public HashSet<Guid> SelectedRoleIds { get; set; } = [];
     }
 
@@ -814,7 +770,6 @@
 
     private sealed record RoleOption(Guid Id, string Name);
     private sealed record HospitalOption(Guid Id, string Name);
-    private sealed record DepartmentOption(Guid Id, Guid HospitalId, string Name);
     private sealed record UserRoleRow(Guid UserId, Guid RoleId, string RoleName);
-    private sealed record UserScopeRow(Guid UserId, Guid RoleId, string HospitalName, string? DepartmentName);
+    private sealed record UserScopeRow(Guid UserId, Guid RoleId, string HospitalName);
 }

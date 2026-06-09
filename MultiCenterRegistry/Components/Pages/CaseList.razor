@@ -413,13 +413,11 @@
     private readonly HashSet<Guid> _selectedCaseIds = [];
     private readonly HashSet<Guid> _excludedCaseIds = [];
     private readonly List<string> _scopeHospitalIds = [];
-    private readonly List<string> _scopeDepartmentIds = [];
     private string _targetOperatorId = "";
     private int _pageIndex;
     private int _totalCount;
     private int _eligibleBatchTotalCount;
     private bool _isLoading;
-    private bool _hasHospitalWideScope;
     private bool _showExportPanel;
     private bool _showCreateCaseModal;
     private bool _showImportModal;
@@ -646,21 +644,13 @@
 
         var scopes = await _registryContext.SystemUserRoleScopes.AsNoTracking()
             .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
-            .Select(x => new { x.HospitalId, x.DepartmentId })
+            .Select(x => x.HospitalId)
             .ToListAsync();
 
         _scopeHospitalIds.Clear();
         _scopeHospitalIds.AddRange(scopes
-            .Select(x => x.HospitalId.ToString())
+            .Select(x => x.ToString())
             .Distinct(StringComparer.OrdinalIgnoreCase));
-
-        _scopeDepartmentIds.Clear();
-        _scopeDepartmentIds.AddRange(scopes
-            .Where(x => x.DepartmentId.HasValue)
-            .Select(x => x.DepartmentId!.Value.ToString())
-            .Distinct(StringComparer.OrdinalIgnoreCase));
-
-        _hasHospitalWideScope = scopes.Any(x => !x.DepartmentId.HasValue);
     }
 
     private async Task LoadCasesAsync()
@@ -1252,11 +1242,6 @@
                 query = query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
             }
 
-            if (_scopeDepartmentIds.Count > 0 && !_hasHospitalWideScope)
-            {
-                query = query.Where(x => x.DepartmentId != null && _scopeDepartmentIds.Contains(x.DepartmentId));
-            }
-
             return query;
         }
 
@@ -1407,7 +1392,7 @@
             return;
         }
 
-        if (!await ConfirmAsync($"确认删除病例“{patientName}”？病例附件、意见、评审、汇总和投票都会删除。"))
+        if (!await ConfirmAsync($"确认删除病例“{patientName}”？病例附件、意见、评审和汇总都会删除。"))
         {
             return;
         }
