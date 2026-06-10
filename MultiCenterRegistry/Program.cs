@@ -785,7 +785,15 @@ static string GetQualityStatusText(int status)
     };
 
 static string ResolveStorageRoot(string root, IWebHostEnvironment environment)
-    => Path.GetFullPath(Path.IsPathRooted(root) ? root : Path.Combine(environment.ContentRootPath, root));
+{
+    var normalizedRoot = NormalizeConfiguredPath(root);
+    return Path.GetFullPath(Path.IsPathRooted(normalizedRoot) ? normalizedRoot : Path.Combine(environment.ContentRootPath, normalizedRoot));
+}
+
+static string NormalizeConfiguredPath(string value)
+    => value.Trim()
+        .Replace('\\', Path.DirectorySeparatorChar)
+        .Replace('/', Path.DirectorySeparatorChar);
 
 internal sealed record McrRoleListRequest(string Account, string Password);
 

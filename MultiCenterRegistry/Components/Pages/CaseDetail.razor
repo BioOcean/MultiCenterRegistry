@@ -992,7 +992,15 @@
            || IsImageExtension(Path.GetExtension(fileName));
 
     private string ResolveStorageRoot(string root)
-        => Path.GetFullPath(Path.IsPathRooted(root) ? root : Path.Combine(inj_webHostEnvironment.ContentRootPath, root));
+    {
+        var normalizedRoot = NormalizeConfiguredPath(root);
+        return Path.GetFullPath(Path.IsPathRooted(normalizedRoot) ? normalizedRoot : Path.Combine(inj_webHostEnvironment.ContentRootPath, normalizedRoot));
+    }
+
+    private static string NormalizeConfiguredPath(string value)
+        => value.Trim()
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
 
     private static string NormalizeFilePath(string value) => value.Replace('\\', '/');
 
