@@ -6,17 +6,29 @@ begin
         execute $sql$
             delete from system.sys_user_role_scope scope
             using mcr.migration_map map
-            where (map.source_table = 'MCR_User' and scope.user_id = map.target_id)
-               or (map.source_table = 'MCR_Role' and scope.role_id = map.target_id)
-               or (map.source_table = 'MCR_Hospital' and scope.hospital_id = map.target_id)
-               or (map.source_table = 'MCR_Department' and scope.department_id = map.target_id)
+            where (
+                    (map.source_table = 'MCR_User' and scope.user_id = map.target_id)
+                 or (map.source_table = 'MCR_Role' and scope.role_id = map.target_id)
+                 or (map.source_table = 'MCR_Hospital' and scope.hospital_id = map.target_id)
+                 or (map.source_table = 'MCR_Department' and scope.department_id = map.target_id)
+              )
+              and not exists (
+                  select 1 from system.sys_user preserved_user
+                  where preserved_user.id = scope.user_id
+              )
         $sql$;
 
         execute $sql$
             delete from system.sys_map_user_role user_role
             using mcr.migration_map map
-            where (map.source_table = 'MCR_User' and user_role.user_id = map.target_id)
-               or (map.source_table = 'MCR_Role' and user_role.role_id = map.target_id)
+            where (
+                    (map.source_table = 'MCR_User' and user_role.user_id = map.target_id)
+                 or (map.source_table = 'MCR_Role' and user_role.role_id = map.target_id)
+              )
+              and not exists (
+                  select 1 from system.sys_user preserved_user
+                  where preserved_user.id = user_role.user_id
+              )
         $sql$;
 
         execute $sql$
@@ -31,6 +43,10 @@ begin
             using mcr.migration_map map
             where map.source_table = 'MCR_Department'
               and department.id = map.target_id
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.department_id = department.id
+              )
         $sql$;
 
         execute $sql$
@@ -38,6 +54,14 @@ begin
             using mcr.migration_map map
             where map.source_table = 'MCR_Hospital'
               and hospital.id = map.target_id
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.hospital_id = hospital.id
+              )
+              and not exists (
+                  select 1 from system.sys_department department
+                  where department.hospital_id = hospital.id
+              )
         $sql$;
 
         execute $sql$
@@ -54,15 +78,16 @@ begin
             where map.source_table = 'MCR_Role'
               and role_row.id = map.target_id
               and role_row.type = 'MCR'
+              and not exists (
+                  select 1 from system.sys_map_user_role user_role
+                  where user_role.role_id = role_row.id
+              )
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.role_id = role_row.id
+              )
         $sql$;
 
-        execute $sql$
-            delete from system.sys_user user_row
-            using mcr.migration_map map
-            where map.source_table = 'MCR_User'
-              and user_row.id = map.target_id
-              and user_row.source_type = 'mcr'
-        $sql$;
     end if;
 end
 $$;
@@ -264,6 +289,7 @@ create table if not exists mcr.registry_file (
     file_path text not null,
     content_type text,
     file_size bigint,
+    remark text,
     created_at timestamp without time zone not null,
     created_by text
 );

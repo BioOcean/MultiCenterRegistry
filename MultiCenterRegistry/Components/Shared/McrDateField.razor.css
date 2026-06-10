@@ -1,0 +1,197 @@
+﻿.mcr-date-field {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+}
+
+.mcr-date-trigger {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 7px 0 11px;
+    color: var(--mcr-text);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    border: 1px solid #cfd8e3;
+    border-radius: 4px;
+    background: #ffffff;
+}
+
+.mcr-date-trigger span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mcr-date-trigger ::deep svg {
+    color: var(--mcr-primary);
+}
+
+.mcr-date-trigger:hover,
+.mcr-date-trigger:focus-visible {
+    border-color: rgba(37, 99, 235, .55);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    outline: none;
+}
+
+.mcr-date-field.is-disabled .mcr-date-trigger {
+    color: #64748b;
+    cursor: not-allowed;
+    border-color: #d8e1ec;
+    background: #f4f7fb;
+    box-shadow: none;
+}
+
+.mcr-date-clear {
+    position: absolute;
+    top: 6px;
+    right: 34px;
+    width: 28px;
+    height: 28px;
+    color: #94a3b8;
+    border-radius: 5px;
+    background: transparent;
+}
+
+.mcr-date-clear:hover {
+    color: var(--mcr-danger);
+    background: #fef2f2;
+}
+
+.mcr-date-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1800;
+    width: 318px;
+    max-width: min(318px, calc(100vw - 32px));
+    padding: 12px;
+    border: 1px solid var(--mcr-border);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, .22);
+    animation: mcr-date-panel-in .14s ease-out;
+}
+
+.mcr-date-panel-head {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.mcr-date-panel-head strong {
+    color: var(--mcr-text);
+    font-size: 14px;
+    font-weight: 800;
+    text-align: center;
+}
+
+.mcr-date-panel-head button {
+    width: 34px;
+    height: 34px;
+    color: var(--mcr-text-soft);
+    border: 1px solid var(--mcr-border);
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.mcr-date-panel-head button:hover {
+    color: var(--mcr-primary);
+    border-color: rgba(37, 99, 235, .24);
+    background: #eff6ff;
+}
+
+.mcr-date-week,
+.mcr-date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.mcr-date-week {
+    margin-bottom: 5px;
+}
+
+.mcr-date-week span {
+    color: var(--mcr-muted);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 26px;
+    text-align: center;
+}
+
+.mcr-date-day {
+    width: 36px;
+    height: 34px;
+    color: var(--mcr-text);
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 6px;
+    background: transparent;
+}
+
+.mcr-date-day:hover {
+    color: var(--mcr-primary);
+    background: #eff6ff;
+}
+
+.mcr-date-day.is-muted {
+    color: #b6c2d1;
+}
+
+.mcr-date-day.is-today {
+    color: var(--mcr-primary);
+    background: #f8fbff;
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .24);
+}
+
+.mcr-date-day.is-selected {
+    color: #ffffff;
+    background: var(--mcr-primary);
+    box-shadow: none;
+}
+
+.mcr-date-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--mcr-border-light);
+}
+
+.mcr-date-actions button {
+    min-width: 54px;
+    height: 32px;
+    padding: 0 10px;
+    color: var(--mcr-primary);
+    font-size: 13px;
+    font-weight: 800;
+    border: 1px solid rgba(37, 99, 235, .22);
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.mcr-date-actions button:hover {
+    background: #eff6ff;
+}
+
+@keyframes mcr-date-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

@@ -56,7 +56,10 @@
                             <label class="account-field">
                                 <span>医院范围</span>
                                 <select class="account-input" value="@_edit.HospitalIdText" @onchange="OnHospitalChanged">
-                                    <option value="">全部医院</option>
+                                    @if (!IsHospitalMaintenanceMode)
+                                    {
+                                        <option value="">全部医院</option>
+                                    }
                                     @foreach (var hospital in _hospitals)
                                     {
                                         <option value="@hospital.Id">@hospital.Name</option>
@@ -246,6 +249,7 @@
     private readonly List<UserListItem> _users = [];
     private readonly List<RoleOption> _roles = [];
     private readonly List<HospitalOption> _hospitals = [];
+    private readonly List<Guid> _scopeHospitalIds = [];
     private UserEditModel _edit = new();
     private string _keyword = "";
     private string _hospitalFilterValue = "";
@@ -258,6 +262,11 @@
     private bool _showEditor;
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    private bool IsHospitalMaintenanceMode
+        => HasPermission(PermissionConstants.AccountManager)
+           && !HasPermission(PermissionConstants.MessageManager)
+           && !HasPermission(PermissionConstants.QualityManage);
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -364,16 +373,30 @@
             return;
         }
 
+        await LoadRoleScopesAsync();
         var mcrRoleIds = await GetMcrRoleIdsAsync();
+        var roleQuery = _registryContext.SystemRoles.AsNoTracking()
+            .Where(x => x.IsValid && mcrRoleIds.Contains(x.Id));
+        if (IsHospitalMaintenanceMode)
+        {
+            var blockedRoleIds = await GetRoleIdsByPermissionsAsync(PermissionConstants.QualityManage, PermissionConstants.MessageManager);
+            roleQuery = roleQuery.Where(x => !blockedRoleIds.Contains(x.Id));
+        }
+
         _roles.Clear();
-        _roles.AddRange(await _registryContext.SystemRoles.AsNoTracking()
-            .Where(x => x.IsValid && mcrRoleIds.Contains(x.Id))
+        _roles.AddRange(await roleQuery
             .OrderBy(x => x.Name)
             .Select(x => new RoleOption(x.Id, x.Name))
             .ToListAsync());
 
+        var hospitalQuery = _registryContext.SystemHospitals.AsNoTracking();
+        if (IsHospitalMaintenanceMode)
+        {
+            hospitalQuery = hospitalQuery.Where(x => _scopeHospitalIds.Contains(x.Id));
+        }
+
         _hospitals.Clear();
-        _hospitals.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+        _hospitals.AddRange(await hospitalQuery
             .OrderBy(x => x.Name)
             .Select(x => new HospitalOption(x.Id, x.Name))
             .ToListAsync());
@@ -401,8 +424,23 @@
             }
 
             var mcrRoleIds = _roles.Select(x => x.Id).ToList();
+            if (mcrRoleIds.Count == 0 || (IsHospitalMaintenanceMode && _scopeHospitalIds.Count == 0))
+            {
+                _users.Clear();
+                _totalCount = 0;
+                return;
+            }
+
+            var allMcrRoleIds = IsHospitalMaintenanceMode ? await GetMcrRoleIdsAsync() : mcrRoleIds;
             var query = _registryContext.SystemUsers.AsNoTracking()
                 .Where(x => _registryContext.SystemMapUserRoles.Any(role => role.UserId == x.Id && mcrRoleIds.Contains(role.RoleId)));
+            if (IsHospitalMaintenanceMode)
+            {
+                query = query
+                    .Where(x => !_registryContext.SystemMapUserRoles.Any(role => role.UserId == x.Id && allMcrRoleIds.Contains(role.RoleId) && !mcrRoleIds.Contains(role.RoleId)))
+                    .Where(x => _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && mcrRoleIds.Contains(scope.RoleId) && _scopeHospitalIds.Contains(scope.HospitalId)));
+            }
+
             var keyword = _keyword.Trim();
             if (!string.IsNullOrWhiteSpace(keyword))
             {
@@ -412,14 +450,30 @@
 
             if (Guid.TryParse(_roleFilterValue, out var roleFilterId))
             {
+                if (!mcrRoleIds.Contains(roleFilterId))
+                {
+                    _users.Clear();
+                    _totalCount = 0;
+                    return;
+                }
+
                 query = query.Where(x => _registryContext.SystemMapUserRoles.Any(role => role.UserId == x.Id && role.RoleId == roleFilterId));
             }
 
             if (Guid.TryParse(_hospitalFilterValue, out var hospitalFilterId))
             {
-                query = query.Where(x =>
-                    !_registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && mcrRoleIds.Contains(scope.RoleId))
-                    || _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId && mcrRoleIds.Contains(scope.RoleId)));
+                if (IsHospitalMaintenanceMode && !_scopeHospitalIds.Contains(hospitalFilterId))
+                {
+                    _users.Clear();
+                    _totalCount = 0;
+                    return;
+                }
+
+                query = IsHospitalMaintenanceMode
+                    ? query.Where(x => _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId && mcrRoleIds.Contains(scope.RoleId)))
+                    : query.Where(x =>
+                        !_registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && mcrRoleIds.Contains(scope.RoleId))
+                        || _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.HospitalId == hospitalFilterId && mcrRoleIds.Contains(scope.RoleId)));
             }
 
             _totalCount = await query.CountAsync();
@@ -492,7 +546,8 @@
         {
             IsValid = true,
             MustChangePassword = true,
-            Password = DefaultPassword
+            Password = DefaultPassword,
+            HospitalIdText = IsHospitalMaintenanceMode && _hospitals.Count == 1 ? _hospitals[0].Id.ToString() : ""
         };
         _showEditor = true;
     }
@@ -508,6 +563,12 @@
         if (user == null)
         {
             inj_snackbar.Add("账号不存在", Severity.Warning);
+            return;
+        }
+
+        if (!await CanManageUserAsync(id))
+        {
+            inj_snackbar.Add("当前医院维护账号无权维护该账号", Severity.Warning);
             return;
         }
 
@@ -562,6 +623,28 @@
         {
             inj_snackbar.Add("请至少选择一个本系统角色", Severity.Warning);
             return;
+        }
+
+        var assignableRoleIds = _roles.Select(x => x.Id).ToHashSet();
+        if (_edit.SelectedRoleIds.Any(x => !assignableRoleIds.Contains(x)))
+        {
+            inj_snackbar.Add("包含不可分配的角色", Severity.Warning);
+            return;
+        }
+
+        if (IsHospitalMaintenanceMode)
+        {
+            if (!Guid.TryParse(_edit.HospitalIdText, out var hospitalId) || !_scopeHospitalIds.Contains(hospitalId))
+            {
+                inj_snackbar.Add("医院维护账号只能维护本医院范围内账号", Severity.Warning);
+                return;
+            }
+
+            if (_edit.Id.HasValue && !await CanManageUserAsync(_edit.Id.Value))
+            {
+                inj_snackbar.Add("当前医院维护账号无权维护该账号", Severity.Warning);
+                return;
+            }
         }
 
         _isSaving = true;
@@ -681,9 +764,14 @@
             return;
         }
 
+        if (!await CanManageUserAsync(item.Id))
+        {
+            inj_snackbar.Add("当前医院维护账号无权维护该账号", Severity.Warning);
+            return;
+        }
+
         var action = item.IsValid ? "禁用" : "启用";
-        var confirmed = await inj_dialogService.ShowMessageBox($"{action}账号", $"确定要{action}账号 [{item.Account}] 吗？", yesText: "确定", cancelText: "取消");
-        if (confirmed != true)
+        if (!await ConfirmAsync($"确定要{action}账号 [{item.Account}] 吗？"))
         {
             return;
         }
@@ -701,6 +789,65 @@
         inj_snackbar.Add($"账号已{action}", Severity.Success);
         await LoadUsersAsync();
     }
+
+    private async Task<bool> CanManageUserAsync(Guid userId)
+    {
+        if (!IsHospitalMaintenanceMode)
+        {
+            return true;
+        }
+
+        if (_registryContext == null || _roles.Count == 0 || _scopeHospitalIds.Count == 0)
+        {
+            return false;
+        }
+
+        var roleIds = _roles.Select(x => x.Id).ToList();
+        var allMcrRoleIds = await GetMcrRoleIdsAsync();
+        var hasBlockedRole = await _registryContext.SystemMapUserRoles.AsNoTracking()
+            .AnyAsync(x => x.UserId == userId && allMcrRoleIds.Contains(x.RoleId) && !roleIds.Contains(x.RoleId));
+        if (hasBlockedRole)
+        {
+            return false;
+        }
+
+        var hasAllowedRole = await _registryContext.SystemMapUserRoles.AsNoTracking()
+            .AnyAsync(x => x.UserId == userId && roleIds.Contains(x.RoleId));
+        if (!hasAllowedRole)
+        {
+            return false;
+        }
+
+        return await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .AnyAsync(x => x.UserId == userId && roleIds.Contains(x.RoleId) && _scopeHospitalIds.Contains(x.HospitalId));
+    }
+
+    private async Task LoadRoleScopesAsync()
+    {
+        _scopeHospitalIds.Clear();
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId) || CurrentRoleId == Guid.Empty)
+        {
+            return;
+        }
+
+        _scopeHospitalIds.AddRange(await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId)
+            .Distinct()
+            .ToListAsync());
+    }
+
+    private async Task<List<Guid>> GetRoleIdsByPermissionsAsync(params string[] permissionCodes)
+        => await _registryContext!.SystemMapRolePermissions.AsNoTracking()
+            .Join(
+                _registryContext.SystemPermissions.AsNoTracking(),
+                rolePermission => rolePermission.PermissionId,
+                permission => permission.Id,
+                (rolePermission, permission) => new { rolePermission.RoleId, permission.Code })
+            .Where(x => x.Code != null && permissionCodes.Contains(x.Code))
+            .Select(x => x.RoleId)
+            .Distinct()
+            .ToListAsync();
 
     private async Task<List<Guid>> GetMcrRoleIdsAsync()
         => await _registryContext!.SystemMapRolePermissions.AsNoTracking()

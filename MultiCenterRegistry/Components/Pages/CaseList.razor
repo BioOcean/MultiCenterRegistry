@@ -1237,20 +1237,20 @@
 
         if (HasPermission(PermissionConstants.CaseApprove))
         {
-            if (_scopeHospitalIds.Count > 0)
+            if (_scopeHospitalIds.Count == 0)
             {
-                query = query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
+                return query.Where(x => false);
             }
 
-            return query;
+            return query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
         }
 
         if (HasPermission(PermissionConstants.CaseSubmit))
         {
-            query = query.Where(x => x.OperatorId == CurrentUserId);
+            return query.Where(x => x.OperatorId == CurrentUserId);
         }
 
-        return query;
+        return query.Where(x => false);
     }
 
     private async Task<IQueryable<RegistryCase>?> BuildCaseQueryAsync()

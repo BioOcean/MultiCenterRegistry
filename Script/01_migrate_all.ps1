@@ -4,19 +4,33 @@
     [string]$TargetConfigPath = "./MultiCenterRegistry/appsettings.json",
     [string]$OutputDirectory = "./Script/output/all_migration",
     [string]$TemporaryPasswordHash = $env:MCR_TEMP_PASSWORD_HASH,
+    [string]$SourceUploadRoot = $env:MCR_SOURCE_UPLOAD_ROOT,
+    [string]$SourceDicomRoot = $env:MCR_SOURCE_DICOM_ROOT,
+    [string]$TargetUploadRoot = $env:MCR_TARGET_UPLOAD_ROOT,
+    [string]$TargetDicomRoot = $env:MCR_TARGET_DICOM_ROOT,
     [switch]$Export,
     [switch]$Execute,
+    [switch]$CopyFiles,
     [switch]$PlanOnly
 )
 
 $ErrorActionPreference = "Stop"
 
+function Get-Utf8BomEncoding {
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        return "utf8BOM"
+    }
+
+    return "UTF8"
+}
+
 if ($PlanOnly -or (-not $Export -and -not $Execute)) {
     Write-Host "总迁移脚本计划："
     Write-Host "1. 读取旧 SQL Server 身份、病例、数据报表、会议评审、附件、文章数据。"
     Write-Host "2. 生成 CSV 和 01_import_all.sql。"
-    Write-Host "3. 导入 SQL 会按 mcr.migration_map 定点清理 system 中的 MCR 数据，删除并重建 mcr schema。"
-    Write-Host "4. 指定 -Execute 时才调用 psql 写入目标库。"
+    Write-Host "3. 生成附件清单 05_files/file_manifest.csv；指定 -CopyFiles 且提供文件根目录时复制实体文件。"
+    Write-Host "4. 导入 SQL 会按 mcr.migration_map 定点清理 system 中的 MCR 数据，删除并重建 mcr schema。"
+    Write-Host "5. 指定 -Execute 时才调用 psql 写入目标库。"
     return
 }
 
@@ -253,6 +267,9 @@ function New-FixedFieldLookup {
         Add-FieldAlias $lookup "angiography_result" @("造影结果", "造影检查结果", "造影所见")
         Add-FieldAlias $lookup "intervention_process" @("介入过程", "介入经过", "手术过程", "操作过程")
         Add-FieldAlias $lookup "rescue_process" @("抢救过程", "救治过程", "救治经过")
+        Add-FieldAlias $lookup "lab_file" @("化验单图片上传", "化验单上传", "化验单", "HYCTPSC")
+        Add-FieldAlias $lookup "ecg_file" @("心电图图片上传", "心电图上传", "心电图", "XDTTPSC")
+        Add-FieldAlias $lookup "echo_file" @("心脏彩超", "心脏彩超图片上传", "彩超", "XZCC")
         Add-FieldAlias $lookup "complication_discussion" @("并发症讨论", "是否组织医院或科室并发症讨论", "并发症病例讨论", "讨论记录")
         Add-FieldAlias $lookup "occurrence_reason" @("发生原因", "并发症发生原因")
         Add-FieldAlias $lookup "death_reason" @("死亡原因", "死因")
@@ -378,11 +395,136 @@ function Get-ContentType {
     }
 }
 
+function Get-ObjectText {
+    param(
+        [object]$Object,
+        [string[]]$Names
+    )
+
+    if ($null -eq $Object) {
+        return ""
+    }
+
+    foreach ($property in $Object.PSObject.Properties) {
+        foreach ($name in $Names) {
+            if ($property.Name.Equals($name, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $value = [string]$property.Value
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    return $value
+                }
+            }
+        }
+    }
+
+    return ""
+}
+
+function Get-FileRemark {
+    param(
+        [object]$File,
+        [object]$ResponseFile
+    )
+
+    $names = @("remark", "remarks", "fileRemark", "fileRemarks", "description", "describe", "comment", "note", "memo", "bz", "beizhu", "备注")
+    $remark = Get-ObjectText -Object $ResponseFile -Names $names
+    if ([string]::IsNullOrWhiteSpace($remark)) {
+        $remark = Get-ObjectText -Object $File -Names $names
+    }
+
+    return $remark
+}
+
+function ConvertTo-RelativeFilePath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    return $Path.TrimStart([char[]]@('\', '/')).Replace("\", "/")
+}
+
+function Resolve-MigrationFilePath {
+    param(
+        [string]$Root,
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return ""
+    }
+
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Root)) {
+        return ""
+    }
+
+    $normalized = $Path.Replace("/", [System.IO.Path]::DirectorySeparatorChar).Replace("\", [System.IO.Path]::DirectorySeparatorChar)
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($Root, $normalized))
+}
+
+function Copy-MigrationFile {
+    param(
+        [string]$SourcePath,
+        [string]$TargetPath
+    )
+
+    if (-not $CopyFiles -or [string]::IsNullOrWhiteSpace($SourcePath) -or [string]::IsNullOrWhiteSpace($TargetPath) -or -not (Test-Path $SourcePath)) {
+        return $false
+    }
+
+    $targetDirectory = [System.IO.Path]::GetDirectoryName($TargetPath)
+    if (-not [string]::IsNullOrWhiteSpace($targetDirectory)) {
+        New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+    }
+
+    Copy-Item -LiteralPath $SourcePath -Destination $TargetPath -Force
+    return $true
+}
+
+function Add-FileManifestRow {
+    param(
+        [System.Collections.Generic.List[object]]$Rows,
+        [string]$TargetFileId,
+        [string]$OwnerType,
+        [string]$OwnerId,
+        [string]$SourceArea,
+        [string]$SourceRoot,
+        [string]$SourceRelativePath,
+        [string]$TargetArea,
+        [string]$TargetRoot,
+        [string]$TargetRelativePath
+    )
+
+    $sourcePath = Resolve-MigrationFilePath -Root $SourceRoot -Path $SourceRelativePath
+    $targetPath = Resolve-MigrationFilePath -Root $TargetRoot -Path $TargetRelativePath
+    $existsInSource = (-not [string]::IsNullOrWhiteSpace($sourcePath)) -and (Test-Path $sourcePath)
+    $copied = Copy-MigrationFile -SourcePath $sourcePath -TargetPath $targetPath
+
+    $Rows.Add([pscustomobject]@{
+        target_file_id = $TargetFileId
+        owner_type = $OwnerType
+        owner_id = $OwnerId
+        source_area = $SourceArea
+        source_relative_path = $SourceRelativePath
+        target_area = $TargetArea
+        target_relative_path = $TargetRelativePath
+        source_path = $sourcePath
+        target_path = $targetPath
+        exists_in_source = Get-BoolText $existsInSource
+        copied = Get-BoolText $copied
+    })
+}
+
 function Split-FileCode {
     param(
         [string]$FileCode,
         [string]$FallbackName,
-        [string]$FallbackSize
+        [string]$FallbackSize,
+        [string]$Remark
     )
 
     $items = [System.Collections.Generic.List[object]]::new()
@@ -420,6 +562,7 @@ function Split-FileCode {
             StoredName = $fileName
             FileKey = [System.IO.Path]::GetFileNameWithoutExtension($fileName).ToLowerInvariant()
             FileSize = $FallbackSize
+            Remark = $Remark
         })
     }
 
@@ -452,7 +595,8 @@ function Get-AnswerFiles {
         $responseFiles = @($file.response.data.fileList)
         if ($responseFiles.Count -gt 0) {
             foreach ($responseFile in $responseFiles) {
-                foreach ($item in (Split-FileCode -FileCode ([string]$responseFile.fileCode) -FallbackName $name -FallbackSize $size)) {
+                $remark = Get-FileRemark -File $file -ResponseFile $responseFile
+                foreach ($item in (Split-FileCode -FileCode ([string]$responseFile.fileCode) -FallbackName $name -FallbackSize $size -Remark $remark)) {
                     if ($seen.Add($item.RelativePath)) {
                         $items.Add($item)
                     }
@@ -463,7 +607,8 @@ function Get-AnswerFiles {
 
         $url = [string]$file.url
         if (-not [string]::IsNullOrWhiteSpace($url)) {
-            foreach ($item in (Split-FileCode -FileCode $url -FallbackName $name -FallbackSize $size)) {
+            $remark = Get-FileRemark -File $file -ResponseFile $null
+            foreach ($item in (Split-FileCode -FileCode $url -FallbackName $name -FallbackSize $size -Remark $remark)) {
                 if ($seen.Add($item.RelativePath)) {
                     $items.Add($item)
                 }
@@ -472,6 +617,33 @@ function Get-AnswerFiles {
     }
 
     return $items
+}
+
+function Get-CaseFileFieldKey {
+    param(
+        [System.Data.DataRow]$Row,
+        [hashtable]$Lookup
+    )
+
+    foreach ($value in @((Get-DbValue $Row "FieldName"), (Get-DbValue $Row "FieldCode"))) {
+        $key = Get-NormalizedFieldKey $value
+        if (-not [string]::IsNullOrWhiteSpace($key) -and $Lookup.ContainsKey($key)) {
+            return $Lookup[$key]
+        }
+    }
+
+    return ""
+}
+
+function Get-MigratedCaseFileRelativePath {
+    param(
+        [string]$OwnerId,
+        [string]$FieldKey,
+        [string]$StoredName
+    )
+
+    $casePathId = $OwnerId.Replace("-", "")
+    return "cases/$casePathId/$FieldKey/$StoredName"
 }
 
 function Set-FixedAnswer {
@@ -574,22 +746,43 @@ create temp table tmp_user_role (user_old_id text, role_old_id text, old_hospita
 create temp table tmp_quality_user_map (old_quality_id text, user_old_id text);
 \copy tmp_quality_user_map from __QUALITY_USER_MAP_CSV__ with (format csv, header true);
 
+create temp table tmp_preserved_system_user as
+select id as target_id
+from system.sys_user;
+
+create temp table tmp_existing_user as
+select distinct u.old_id, u.account, su.id as target_id
+from tmp_user u
+join system.sys_user su on lower(su.account) = lower(u.account);
+
 do $$
 begin
     if to_regclass('mcr.migration_map') is not null then
         execute $sql$
             delete from system.sys_user_role_scope scope
             using mcr.migration_map map
-            where (map.source_table = 'MCR_User' and scope.user_id = map.target_id)
-               or (map.source_table = 'MCR_Role' and scope.role_id = map.target_id)
-               or (map.source_table = 'MCR_Hospital' and scope.hospital_id = map.target_id)
-               or (map.source_table = 'MCR_Department' and scope.department_id = map.target_id)
+            where (
+                    (map.source_table = 'MCR_User' and scope.user_id = map.target_id)
+                 or (map.source_table = 'MCR_Role' and scope.role_id = map.target_id)
+                 or (map.source_table = 'MCR_Hospital' and scope.hospital_id = map.target_id)
+                 or (map.source_table = 'MCR_Department' and scope.department_id = map.target_id)
+              )
+              and not exists (
+                  select 1 from tmp_preserved_system_user preserved_user
+                  where preserved_user.target_id = scope.user_id
+              )
         $sql$;
         execute $sql$
             delete from system.sys_map_user_role user_role
             using mcr.migration_map map
-            where (map.source_table = 'MCR_User' and user_role.user_id = map.target_id)
-               or (map.source_table = 'MCR_Role' and user_role.role_id = map.target_id)
+            where (
+                    (map.source_table = 'MCR_User' and user_role.user_id = map.target_id)
+                 or (map.source_table = 'MCR_Role' and user_role.role_id = map.target_id)
+              )
+              and not exists (
+                  select 1 from tmp_preserved_system_user preserved_user
+                  where preserved_user.target_id = user_role.user_id
+              )
         $sql$;
         execute $sql$
             delete from system.sys_map_role_permission role_permission
@@ -601,11 +794,23 @@ begin
             delete from system.sys_department department
             using mcr.migration_map map
             where map.source_table = 'MCR_Department' and department.id = map.target_id
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.department_id = department.id
+              )
         $sql$;
         execute $sql$
             delete from system.sys_hospital hospital
             using mcr.migration_map map
             where map.source_table = 'MCR_Hospital' and hospital.id = map.target_id
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.hospital_id = hospital.id
+              )
+              and not exists (
+                  select 1 from system.sys_department department
+                  where department.hospital_id = hospital.id
+              )
         $sql$;
         execute $sql$
             delete from system.sys_permission permission
@@ -620,6 +825,14 @@ begin
             where map.source_table = 'MCR_Role'
               and role_row.id = map.target_id
               and role_row.type = 'MCR'
+              and not exists (
+                  select 1 from system.sys_map_user_role user_role
+                  where user_role.role_id = role_row.id
+              )
+              and not exists (
+                  select 1 from system.sys_user_role_scope scope
+                  where scope.role_id = role_row.id
+              )
         $sql$;
         execute $sql$
             delete from system.sys_user user_row
@@ -627,6 +840,10 @@ begin
             where map.source_table = 'MCR_User'
               and user_row.id = map.target_id
               and user_row.source_type = 'mcr'
+              and not exists (
+                  select 1 from tmp_preserved_system_user preserved_user
+                  where preserved_user.target_id = user_row.id
+              )
         $sql$;
     end if;
 end
@@ -634,7 +851,11 @@ $$;
 
 delete from system.sys_user_role_scope scope
 using tmp_user_role ur
-where scope.id = ur.scope_id::uuid;
+where scope.id = ur.scope_id::uuid
+  and not exists (
+      select 1 from tmp_preserved_system_user preserved_user
+      where preserved_user.target_id = scope.user_id
+  );
 delete from system.sys_map_role_permission rp
 using tmp_role r
 where rp.role_id = r.id::uuid;
@@ -643,16 +864,36 @@ using tmp_permission p
 where rp.permission_id = p.id::uuid;
 delete from system.sys_map_user_role ur
 using tmp_user u
-where ur.user_id = u.id::uuid;
+where ur.user_id = u.id::uuid
+  and not exists (
+      select 1 from tmp_preserved_system_user preserved_user
+      where preserved_user.target_id = ur.user_id
+  );
 delete from system.sys_map_user_role ur
 using tmp_role r
-where ur.role_id = r.id::uuid;
+where ur.role_id = r.id::uuid
+  and not exists (
+      select 1 from tmp_preserved_system_user preserved_user
+      where preserved_user.target_id = ur.user_id
+  );
 delete from system.sys_department d
 using tmp_department source
-where d.id = source.id::uuid;
+where d.id = source.id::uuid
+  and not exists (
+      select 1 from system.sys_user_role_scope scope
+      where scope.department_id = d.id
+  );
 delete from system.sys_hospital h
 using tmp_hospital source
-where h.id = source.id::uuid;
+where h.id = source.id::uuid
+  and not exists (
+      select 1 from system.sys_user_role_scope scope
+      where scope.hospital_id = h.id
+  )
+  and not exists (
+      select 1 from system.sys_department department
+      where department.hospital_id = h.id
+  );
 delete from system.sys_permission p
 using tmp_permission source
 where p.id = source.id::uuid
@@ -660,11 +901,23 @@ where p.id = source.id::uuid
 delete from system.sys_role r
 using tmp_role source
 where r.id = source.id::uuid
-  and r.type = 'MCR';
+  and r.type = 'MCR'
+  and not exists (
+      select 1 from system.sys_map_user_role user_role
+      where user_role.role_id = r.id
+  )
+  and not exists (
+      select 1 from system.sys_user_role_scope scope
+      where scope.role_id = r.id
+  );
 delete from system.sys_user u
 using tmp_user source
 where u.id = source.id::uuid
-  and u.source_type = 'mcr';
+  and u.source_type = 'mcr'
+  and not exists (
+      select 1 from tmp_preserved_system_user preserved_user
+      where preserved_user.target_id = u.id
+  );
 
 drop schema if exists mcr cascade;
 \i __SCHEMA_SQL__
@@ -732,7 +985,11 @@ set display_name = coalesce(nullif(u.display_name, ''), u.account),
     must_change_password = true,
     source_type = 'mcr'
 from tmp_user_resolved u
-where su.id = u.target_id and su.source_type = 'mcr';
+where su.id = u.target_id and su.source_type = 'mcr'
+  and not exists (
+      select 1 from tmp_existing_user existing_user
+      where existing_user.target_id = su.id
+  );
 
 insert into mcr.migration_map (id, source_table, source_id, target_table, target_id, created_at)
 select pg_temp.tmp_stable_uuid('MCR_User:' || old_id), 'MCR_User', old_id, 'system.sys_user', target_id, now()
@@ -786,6 +1043,10 @@ select distinct um.target_id, rm.target_id
 from tmp_user_role ur
 join mcr.migration_map um on um.source_table = 'MCR_User' and um.source_id = ur.user_old_id
 join mcr.migration_map rm on rm.source_table = 'MCR_Role' and rm.source_id = ur.role_old_id
+where not exists (
+    select 1 from tmp_existing_user existing_user
+    where existing_user.target_id = um.target_id
+)
 on conflict (user_id, role_id) do nothing;
 
 insert into system.sys_user_role_scope (id, user_id, role_id, hospital_id, hospital_name, department_id, department_name, created_at)
@@ -798,6 +1059,10 @@ join system.sys_hospital h on h.id = hm.target_id
 left join mcr.migration_map dm on dm.source_table = 'MCR_Department' and dm.source_id = nullif(ur.old_department_id, '')
 left join system.sys_department d on d.id = dm.target_id
 where nullif(ur.old_hospital_id, '') is not null
+  and not exists (
+      select 1 from tmp_existing_user existing_user
+      where existing_user.target_id = um.target_id
+  )
 on conflict (id) do update set user_id = excluded.user_id, role_id = excluded.role_id, hospital_id = excluded.hospital_id,
     hospital_name = excluded.hospital_name, department_id = excluded.department_id, department_name = excluded.department_name;
 
@@ -961,13 +1226,13 @@ from tmp_case_vote;
 
 create temp table tmp_registry_file (
     id text, owner_type text, owner_id text, file_name text, file_path text,
-    content_type text, file_size text, created_at text, created_by text
+    content_type text, file_size text, remark text, created_at text, created_by text
 );
 \copy tmp_registry_file from __FILE_CSV__ with (format csv, header true);
 
-insert into mcr.registry_file (id, owner_type, owner_id, file_name, file_path, content_type, file_size, created_at, created_by)
+insert into mcr.registry_file (id, owner_type, owner_id, file_name, file_path, content_type, file_size, remark, created_at, created_by)
 select id::uuid, owner_type, owner_id::uuid, coalesce(nullif(file_name, ''), file_path), file_path,
-       nullif(content_type, ''), nullif(file_size, '')::bigint,
+       nullif(content_type, ''), nullif(file_size, '')::bigint, nullif(remark, ''),
        coalesce(nullif(created_at, '')::timestamp, now()), nullif(created_by, '')
 from tmp_registry_file;
 
@@ -1076,6 +1341,18 @@ foreach ($directory in @($identityDirectory, $caseDirectory, $qualityDirectory, 
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
 }
 
+if (([string]::IsNullOrWhiteSpace($TargetUploadRoot) -or [string]::IsNullOrWhiteSpace($TargetDicomRoot)) -and (Test-Path $TargetConfigPath)) {
+    $targetConfigFile = (Resolve-Path $TargetConfigPath).Path
+    $targetConfigRoot = Split-Path -Parent $targetConfigFile
+    $targetConfig = Get-Content $targetConfigFile -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace($TargetUploadRoot) -and $targetConfig.FileStorage.UploadRoot) {
+        $TargetUploadRoot = if ([System.IO.Path]::IsPathRooted([string]$targetConfig.FileStorage.UploadRoot)) { [string]$targetConfig.FileStorage.UploadRoot } else { Join-Path $targetConfigRoot ([string]$targetConfig.FileStorage.UploadRoot) }
+    }
+    if ([string]::IsNullOrWhiteSpace($TargetDicomRoot) -and $targetConfig.FileStorage.DicomRoot) {
+        $TargetDicomRoot = if ([System.IO.Path]::IsPathRooted([string]$targetConfig.FileStorage.DicomRoot)) { [string]$targetConfig.FileStorage.DicomRoot } else { Join-Path $targetConfigRoot ([string]$targetConfig.FileStorage.DicomRoot) }
+    }
+}
+
 $connectionType = Get-MigrationSqlConnectionType
 $connection = New-Object $connectionType $SourceConnection
 
@@ -1098,6 +1375,7 @@ $appraiseRowsByOldId = @{}
 $summaryRows = [System.Collections.Generic.List[object]]::new()
 $voteRows = [System.Collections.Generic.List[object]]::new()
 $fileRows = [System.Collections.Generic.List[object]]::new()
+$fileManifestRows = [System.Collections.Generic.List[object]]::new()
 $articleRows = [System.Collections.Generic.List[object]]::new()
 $mapRows = [System.Collections.Generic.List[object]]::new()
 $unmappedRows = [System.Collections.Generic.List[object]]::new()
@@ -1159,6 +1437,7 @@ left join DoctorInfo d on d.UserID = u.ID
         $oldId = Get-DbValue $row "ID"
         $account = (Get-DbValue $row "UserName").Trim()
         if ([string]::IsNullOrWhiteSpace($oldId) -or [string]::IsNullOrWhiteSpace($account)) { continue }
+        if ([string]::Equals($account, "admin", [System.StringComparison]::OrdinalIgnoreCase)) { continue }
         $displayName = Get-DbValue $row "DoctorName"
         if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = Get-DbValue $row "UKName" }
         if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = $account }
@@ -1225,6 +1504,7 @@ from UserRoleMap urm
 join Users u on u.ID = urm.UserID
 left join DoctorInfo d on d.UserID = u.ID
 where urm.Status = 1
+  and lower(u.UserName) <> 'admin'
 "@
     foreach ($row in $userRoles.Rows) {
         $roleOldId = Get-DbValue $row "RoleID"
@@ -1509,10 +1789,13 @@ order by a.CardID, a.Sort, a.ID
 
         $referencedFileKeys = [System.Collections.Generic.HashSet[string]]::new()
         $answerRows = Invoke-SourceQuery $connection @"
-select a.ID, a.CardID, cast(a.Answer as nvarchar(max)) as Answer, a.CreateUserID, a.CreateTime
+select a.ID, a.CardID, cast(a.Answer as nvarchar(max)) as Answer, a.CreateUserID, a.CreateTime,
+       coalesce(nullif(ltrim(rtrim(s.Rename)), ''), nullif(ltrim(rtrim(sc.ReName)), ''), nullif(ltrim(rtrim(sl.Name)), ''), nullif(ltrim(rtrim(sc.TableColumnDef)), ''), nullif(ltrim(rtrim(sl.Code)), ''), nullif(ltrim(rtrim(sc.cubeColumn)), ''), nullif(ltrim(rtrim(s.SubjectMark)), '')) as FieldName,
+       coalesce(nullif(ltrim(rtrim(sl.Code)), ''), nullif(ltrim(rtrim(sc.TableColumnDef)), ''), nullif(ltrim(rtrim(sc.cubeColumn)), ''), nullif(ltrim(rtrim(s.SubjectMark)), '')) as FieldCode
 from CM_CAHD_Care_CustomFormAnswer a
 inner join CM_CAHD_Care_CustomFormSubject s on s.ID = a.SubjectID
 inner join CM_CAHD_Care_SubjectConfig sc on sc.ID = s.SubjectConfigID
+left join CM_CAHD_Care_SubjectList sl on sl.ID = s.SubjectListID
 inner join MCR_Case c on c.ID = a.CardID
 where sc.Type = 7 and a.Answer is not null and ltrim(rtrim(cast(a.Answer as nvarchar(max)))) <> ''
 order by a.CreateTime, a.ID
@@ -1523,6 +1806,11 @@ order by a.CreateTime, a.ID
             $createdAt = Get-DateValue $row "CreateTime"
             $createdBy = Get-DbValue $row "CreateUserID"
             $ownerId = ConvertTo-StableGuid "case:$oldCaseId"
+            $fileFieldKey = Get-CaseFileFieldKey -Row $row -Lookup $caseFieldLookup
+            if ([string]::IsNullOrWhiteSpace($fileFieldKey)) {
+                $unmappedRows.Add([pscustomobject]@{ owner_type = "case_file"; owner_id = $oldCaseId; answer_id = $answerId; custom_form_id = ""; subject_id = ""; field_name = Get-DbValue $row "FieldName"; field_code = Get-DbValue $row "FieldCode"; answer = Get-DbValue $row "Answer" })
+                continue
+            }
             $files = Get-AnswerFiles (Get-DbValue $row "Answer")
             $fileIndex = 0
             foreach ($file in $files) {
@@ -1540,7 +1828,9 @@ order by a.CreateTime, a.ID
                 }
                 $targetId = ConvertTo-StableGuid "registry-file:case:${ownerId}:$($file.RelativePath):$fileIndex"
                 $sourceId = "$answerId`:$($file.FileKey)`:$fileIndex"
-                $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "case"; owner_id = $ownerId; file_name = $file.OriginalName; file_path = "upload/$($file.RelativePath)"; content_type = Get-ContentType $file.StoredName; file_size = $size; created_at = $fileCreatedAt; created_by = $createdBy })
+                $targetRelativePath = Get-MigratedCaseFileRelativePath -OwnerId $ownerId -FieldKey $fileFieldKey -StoredName $file.StoredName
+                $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "case"; owner_id = $ownerId; file_name = $file.OriginalName; file_path = "upload/$targetRelativePath"; content_type = Get-ContentType $file.StoredName; file_size = $size; remark = $file.Remark; created_at = $fileCreatedAt; created_by = $createdBy })
+                Add-FileManifestRow -Rows $fileManifestRows -TargetFileId $targetId -OwnerType "case" -OwnerId $ownerId -SourceArea "upload" -SourceRoot $SourceUploadRoot -SourceRelativePath $file.RelativePath -TargetArea "upload" -TargetRoot $TargetUploadRoot -TargetRelativePath $targetRelativePath
                 $mapRows.Add([pscustomobject]@{ id = ConvertTo-StableGuid "migration-map:CM_CAHD_Care_CustomFormAnswer_File:$sourceId"; source_table = "CM_CAHD_Care_CustomFormAnswer_File"; source_id = $sourceId; target_table = "mcr.registry_file"; target_id = $targetId; created_at = $fileCreatedAt })
             }
         }
@@ -1556,7 +1846,9 @@ order by a.CreateTime, a.ID
             $fileName = ($path.Replace("\", "/") -split "/")[-1]
             $relativePath = if ([string]::IsNullOrWhiteSpace($dateFolder)) { $fileName } else { "$dateFolder/$fileName" }
             $targetId = ConvertTo-StableGuid "registry-file:legacy-file:$oldFileId"
-            $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "legacy_file"; owner_id = $targetId; file_name = $fileName; file_path = "upload/$relativePath"; content_type = Get-ContentType $fileName; file_size = Get-DbValue $row "Size"; created_at = $createdAt; created_by = Get-DbValue $row "VID" })
+            $sourceRelativePath = ConvertTo-RelativeFilePath $path
+            $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "legacy_file"; owner_id = $targetId; file_name = $fileName; file_path = "upload/$relativePath"; content_type = Get-ContentType $fileName; file_size = Get-DbValue $row "Size"; remark = ""; created_at = $createdAt; created_by = Get-DbValue $row "VID" })
+            Add-FileManifestRow -Rows $fileManifestRows -TargetFileId $targetId -OwnerType "legacy_file" -OwnerId $targetId -SourceArea "upload" -SourceRoot $SourceUploadRoot -SourceRelativePath $sourceRelativePath -TargetArea "upload" -TargetRoot $TargetUploadRoot -TargetRelativePath $relativePath
             $mapRows.Add([pscustomobject]@{ id = ConvertTo-StableGuid "migration-map:FileInfo:$oldFileId"; source_table = "FileInfo"; source_id = $oldFileId; target_table = "mcr.registry_file"; target_id = $targetId; created_at = $createdAt })
         }
     }
@@ -1571,7 +1863,8 @@ order by a.CreateTime, a.ID
             $studyUid = Get-DbValue $row "StudyUid"
             $ownerId = ConvertTo-StableGuid "dicom-study:$studyUid"
             $createdAt = Get-DateValue $row "CreateTime"
-            $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "dicom"; owner_id = $ownerId; file_name = ($path -split "/")[-1]; file_path = "dicom/$path"; content_type = "application/dicom"; file_size = ""; created_at = $createdAt; created_by = Get-DbValue $row "CreateUserID" })
+            $fileRows.Add([pscustomobject]@{ id = $targetId; owner_type = "dicom"; owner_id = $ownerId; file_name = ($path -split "/")[-1]; file_path = "dicom/$path"; content_type = "application/dicom"; file_size = ""; remark = ""; created_at = $createdAt; created_by = Get-DbValue $row "CreateUserID" })
+            Add-FileManifestRow -Rows $fileManifestRows -TargetFileId $targetId -OwnerType "dicom" -OwnerId $ownerId -SourceArea "dicom" -SourceRoot $SourceDicomRoot -SourceRelativePath $path -TargetArea "dicom" -TargetRoot $TargetDicomRoot -TargetRelativePath $path
             $mapRows.Add([pscustomobject]@{ id = ConvertTo-StableGuid "migration-map:DicomFile:$oldId"; source_table = "DicomFile"; source_id = $oldId; target_table = "mcr.registry_file"; target_id = $targetId; created_at = $createdAt })
         }
     }
@@ -1615,31 +1908,33 @@ $files = @{
     Summary = Join-Path $meetingDirectory "case_summary.csv"
     Vote = Join-Path $meetingDirectory "case_vote.csv"
     File = Join-Path $fileDirectory "registry_file.csv"
+    FileManifest = Join-Path $fileDirectory "file_manifest.csv"
     Article = Join-Path $articleDirectory "article.csv"
     Map = Join-Path $OutputDirectory "migration_map.csv"
 }
 
-$hospitalRows | Export-Csv -Path $files.Hospital -NoTypeInformation -Encoding utf8BOM
-$departmentRows | Export-Csv -Path $files.Department -NoTypeInformation -Encoding utf8BOM
-$userRows | Export-Csv -Path $files.User -NoTypeInformation -Encoding utf8BOM
-$roleRows | Export-Csv -Path $files.Role -NoTypeInformation -Encoding utf8BOM
-$permissionRows | Export-Csv -Path $files.Permission -NoTypeInformation -Encoding utf8BOM
-$rolePermissionRows | Export-Csv -Path $files.RolePermission -NoTypeInformation -Encoding utf8BOM
-$userRoleRows | Export-Csv -Path $files.UserRole -NoTypeInformation -Encoding utf8BOM
-$qualityUserMapRows | Export-Csv -Path $files.QualityUserMap -NoTypeInformation -Encoding utf8BOM
-$caseRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Case -NoTypeInformation -Encoding utf8BOM
-$qualityRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Quality -NoTypeInformation -Encoding utf8BOM
-$qualityItemRows | Export-Csv -Path $files.QualityItem -NoTypeInformation -Encoding utf8BOM
-$qualityRejectRows | Export-Csv -Path $files.QualityReject -NoTypeInformation -Encoding utf8BOM
-$meetingRows | Export-Csv -Path $files.Meeting -NoTypeInformation -Encoding utf8BOM
-$meetingExpertRows | Export-Csv -Path $files.MeetingExpert -NoTypeInformation -Encoding utf8BOM
-$appraiseRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Appraise -NoTypeInformation -Encoding utf8BOM
-$summaryRows | Export-Csv -Path $files.Summary -NoTypeInformation -Encoding utf8BOM
-$voteRows | Export-Csv -Path $files.Vote -NoTypeInformation -Encoding utf8BOM
-$fileRows | Export-Csv -Path $files.File -NoTypeInformation -Encoding utf8BOM
-$articleRows | Export-Csv -Path $files.Article -NoTypeInformation -Encoding utf8BOM
-$mapRows | Export-Csv -Path $files.Map -NoTypeInformation -Encoding utf8BOM
-$unmappedRows | Export-Csv -Path (Join-Path $OutputDirectory "unmapped_answers.csv") -NoTypeInformation -Encoding utf8BOM
+$hospitalRows | Export-Csv -Path $files.Hospital -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$departmentRows | Export-Csv -Path $files.Department -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$userRows | Export-Csv -Path $files.User -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$roleRows | Export-Csv -Path $files.Role -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$permissionRows | Export-Csv -Path $files.Permission -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$rolePermissionRows | Export-Csv -Path $files.RolePermission -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$userRoleRows | Export-Csv -Path $files.UserRole -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$qualityUserMapRows | Export-Csv -Path $files.QualityUserMap -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$caseRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Case -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$qualityRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Quality -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$qualityItemRows | Export-Csv -Path $files.QualityItem -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$qualityRejectRows | Export-Csv -Path $files.QualityReject -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$meetingRows | Export-Csv -Path $files.Meeting -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$meetingExpertRows | Export-Csv -Path $files.MeetingExpert -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$appraiseRowsByOldId.Values | ForEach-Object { [pscustomobject]$_ } | Export-Csv -Path $files.Appraise -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$summaryRows | Export-Csv -Path $files.Summary -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$voteRows | Export-Csv -Path $files.Vote -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$fileRows | Export-Csv -Path $files.File -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$fileManifestRows | Export-Csv -Path $files.FileManifest -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$articleRows | Export-Csv -Path $files.Article -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$mapRows | Export-Csv -Path $files.Map -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
+$unmappedRows | Export-Csv -Path (Join-Path $OutputDirectory "unmapped_answers.csv") -NoTypeInformation -Encoding (Get-Utf8BomEncoding)
 
 $importSql = Join-Path $OutputDirectory "01_import_all.sql"
 $schemaPath = Join-Path $PSScriptRoot "00_create_schema.sql"
@@ -1657,6 +1952,10 @@ $report = [pscustomobject]@{
     meeting_count = $meetingRows.Count
     case_appraise_count = $appraiseRowsByOldId.Count
     file_count = $fileRows.Count
+    file_manifest_count = $fileManifestRows.Count
+    file_manifest_path = (Resolve-Path $files.FileManifest).Path
+    copied_file_count = @($fileManifestRows | Where-Object { $_.copied -eq "true" }).Count
+    missing_source_file_count = @($fileManifestRows | Where-Object { $_.exists_in_source -ne "true" }).Count
     article_count = $articleRows.Count
     migration_map_count = $mapRows.Count
     unmapped_answer_count = $unmappedRows.Count
@@ -1664,7 +1963,7 @@ $report = [pscustomobject]@{
     output_directory = (Resolve-Path $OutputDirectory).Path
 }
 
-$report | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $OutputDirectory "migration_report.json") -Encoding utf8BOM
+$report | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $OutputDirectory "migration_report.json") -Encoding (Get-Utf8BomEncoding)
 $report | ConvertTo-Json -Depth 4
 
 if ($Execute) {

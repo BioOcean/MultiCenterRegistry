@@ -5,3 +5,4 @@ obj/
 *.user
 *.suo
 Script/output/
+/MultiCenterRegistry/FileStorage

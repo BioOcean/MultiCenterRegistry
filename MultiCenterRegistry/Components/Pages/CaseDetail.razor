@@ -27,7 +27,7 @@
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveCaseAsync">保存表单</MudButton>
                 }
-                @if ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
+                @if ((_case.Status is 1 or 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" OnClick="SubmitCaseAsync">提交审核</MudButton>
                 }
@@ -132,6 +132,18 @@
     }
 </div>
 
+@if (_previewImageFile != null)
+{
+    <div class="image-preview-mask" role="presentation" @onclick="CloseImagePreview">
+        <section class="image-preview-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <button type="button" class="image-preview-close" title="关闭" @onclick="CloseImagePreview">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Medium" />
+            </button>
+            <img src="@GetFileUrl(_previewImageFile, false)" alt="" />
+        </section>
+    </div>
+}
+
 @code {
     [Parameter]
     public Guid CaseId { get; set; }
@@ -143,7 +155,9 @@
     private readonly List<CaseFormSection> _sections = [];
     private readonly List<FieldOption> _hospitalOptions = [];
     private readonly List<FieldOption> _operatorOptions = [];
+    private readonly List<string> _scopeHospitalIds = [];
     private readonly HashSet<string> _expandedSections = new(StringComparer.OrdinalIgnoreCase);
+    private RegistryFile? _previewImageFile;
     private bool _isLoading = true;
     private bool _isEditing;
 
@@ -160,30 +174,105 @@
 
     protected override async Task OnPageInitializedAsync()
     {
-        await LoadOptionsAsync();
+        await LoadRoleScopesAsync();
+        await LoadHospitalOptionsAsync();
         await LoadCaseAsync();
     }
 
-    private async Task LoadOptionsAsync()
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId) || CurrentRoleId == Guid.Empty)
+        {
+            return;
+        }
+
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId.ToString())
+            .Distinct()
+            .ToListAsync());
+    }
+
+    private async Task LoadHospitalOptionsAsync()
     {
         if (_registryContext == null)
         {
             return;
         }
 
+        var query = _registryContext.SystemHospitals.AsNoTracking();
+        if (!HasPermission(PermissionConstants.QualityManage))
+        {
+            if (_scopeHospitalIds.Count == 0)
+            {
+                _hospitalOptions.Clear();
+                return;
+            }
+
+            var scopeIds = _scopeHospitalIds.Select(TryParseGuid).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+            query = query.Where(x => scopeIds.Contains(x.Id));
+        }
+
         _hospitalOptions.Clear();
-        _hospitalOptions.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+        _hospitalOptions.AddRange(await query
             .OrderBy(x => x.Name)
             .Select(x => new FieldOption(x.Id.ToString(), x.Name))
             .ToListAsync());
+    }
 
+    private async Task LoadOperatorOptionsAsync(string? hospitalId)
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        string[] operatorPermissionCodes = [PermissionConstants.CaseSubmit, "Power-MCR-N-N-N-Operator"];
+        var query =
+            from user in _registryContext.SystemUsers.AsNoTracking()
+            join userRole in _registryContext.SystemMapUserRoles.AsNoTracking() on user.Id equals userRole.UserId
+            join rolePermission in _registryContext.SystemMapRolePermissions.AsNoTracking() on userRole.RoleId equals rolePermission.RoleId
+            join permission in _registryContext.SystemPermissions.AsNoTracking() on rolePermission.PermissionId equals permission.Id
+            where user.IsValid && permission.Code != null && operatorPermissionCodes.Contains(permission.Code)
+            select new { user.Id, user.DisplayName, user.Account, userRole.RoleId };
+
+        if (Guid.TryParse(hospitalId, out var hospitalGuid))
+        {
+            query = query.Where(x =>
+                !_registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.RoleId == x.RoleId)
+                || _registryContext.SystemUserRoleScopes.Any(scope => scope.UserId == x.Id && scope.RoleId == x.RoleId && scope.HospitalId == hospitalGuid));
+        }
+
+        var rows = await query.ToListAsync();
         _operatorOptions.Clear();
-        _operatorOptions.AddRange(await _registryContext.SystemUsers.AsNoTracking()
-            .Where(x => x.IsValid)
+        _operatorOptions.AddRange(rows
+            .GroupBy(x => x.Id)
+            .Select(x => x.First())
             .OrderBy(x => x.DisplayName)
             .ThenBy(x => x.Account)
-            .Select(x => new FieldOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName))
-            .ToListAsync());
+            .Select(x => new FieldOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName)));
+
+        await EnsureCurrentOperatorOptionAsync();
+    }
+
+    private async Task EnsureCurrentOperatorOptionAsync()
+    {
+        if (_registryContext == null || _edit == null || string.IsNullOrWhiteSpace(_edit.OperatorId) || _operatorOptions.Any(x => IsSameValue(x.Value, _edit.OperatorId)))
+        {
+            return;
+        }
+
+        var operatorText = _case?.OperatorName;
+        if (Guid.TryParse(_edit.OperatorId, out var operatorId))
+        {
+            operatorText = await _registryContext.SystemUsers.AsNoTracking()
+                .Where(x => x.Id == operatorId)
+                .Select(x => x.DisplayName == "" ? x.Account : x.DisplayName)
+                .FirstOrDefaultAsync() ?? operatorText;
+        }
+
+        _operatorOptions.Add(new FieldOption(_edit.OperatorId, string.IsNullOrWhiteSpace(operatorText) ? _edit.OperatorId : operatorText));
     }
 
     private async Task LoadCaseAsync()
@@ -197,6 +286,12 @@
         try
         {
             _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
+            if (_case != null && !await CanAccessCaseAsync(_case))
+            {
+                _case = null;
+                inj_snackbar.Add("当前账号无权查看该病例", Severity.Warning);
+            }
+
             _edit = _case == null ? null : CaseEditModel.FromCase(_case);
             _isEditing = CanEditCaseForm();
 
@@ -209,6 +304,7 @@
                 return;
             }
 
+            await LoadOperatorOptionsAsync(_edit?.HospitalId);
             BuildCaseSections();
 
             _advices.AddRange(await _registryContext.CaseAdvices.AsNoTracking()
@@ -224,6 +320,39 @@
         {
             _isLoading = false;
         }
+    }
+
+    private async Task<bool> CanAccessCaseAsync(RegistryCase item)
+    {
+        if (_registryContext == null)
+        {
+            return false;
+        }
+
+        if (HasPermission(PermissionConstants.QualityManage))
+        {
+            return true;
+        }
+
+        if (HasPermission(PermissionConstants.CaseApprove))
+        {
+            return !string.IsNullOrWhiteSpace(item.HospitalId) && _scopeHospitalIds.Contains(item.HospitalId);
+        }
+
+        if (HasPermission(PermissionConstants.CaseSubmit) && string.Equals(item.OperatorId, CurrentUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (HasAnyPermission(PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView))
+        {
+            return await _registryContext.CaseAppraises.AsNoTracking()
+                .AnyAsync(x => x.CaseId == item.Id && x.ExpertId == CurrentUserId)
+                || await _registryContext.CaseSummaries.AsNoTracking()
+                    .AnyAsync(x => x.CaseId == item.Id && x.CreatedBy == CurrentUserId);
+        }
+
+        return false;
     }
 
     private void BuildCaseSections()
@@ -271,7 +400,7 @@
         AddCaseSection("case-rescue", "并发症救治情况", [new("rescue_process", "救治经过", true)]);
         AddCaseSection("case-discussion", "并发症讨论结论",
         [
-            new("complication_discussion", "是否组织医院或科室并发症讨论"),
+            new("complication_discussion", "是否组织医院或科室并发症讨论", true),
             new("occurrence_reason", "发生原因", true),
             new("death_reason", "死亡原因", true),
             new("lessons_learned", "经验教训", true),
@@ -339,6 +468,7 @@
         }
 
         ApplyEdit(item, _edit);
+        await SaveFileRemarksAsync();
         item.UpdatedAt = ToDbTimestamp(DateTime.Now);
         item.UpdatedBy = CurrentUserId;
 
@@ -396,6 +526,25 @@
         item.ImprovementMeasures = ShouldShowDiscussionFollowup(edit) ? EmptyToNull(edit.ImprovementMeasures) : null;
     }
 
+    private async Task SaveFileRemarksAsync()
+    {
+        if (_registryContext == null || _files.Count == 0)
+        {
+            return;
+        }
+
+        var remarks = _files.ToDictionary(x => x.Id, x => EmptyToNull(x.Remark));
+        var fileIds = remarks.Keys.ToList();
+        var files = await _registryContext.Files
+            .Where(x => fileIds.Contains(x.Id) && x.OwnerType == "case" && x.OwnerId == CaseId)
+            .ToListAsync();
+
+        foreach (var file in files)
+        {
+            file.Remark = remarks[file.Id];
+        }
+    }
+
     private async Task SubmitCaseAsync()
     {
         if (_registryContext == null || _case == null || !await RequirePermissionAsync(PermissionConstants.CaseSubmit) || !await ConfirmAsync("确认提交该病例进入审核？"))
@@ -403,7 +552,7 @@
             return;
         }
 
-        if (_case.Status is not (3 or 4))
+        if (_case.Status is not (1 or 3 or 4))
         {
             inj_snackbar.Add("当前状态不能提交审核", Severity.Warning);
             return;
@@ -654,60 +803,84 @@
     {
         var files = GetFilesForField(field.Key);
         builder.OpenElement(0, "div");
-        builder.AddAttribute(1, "class", files.Count == 0 ? "file-field empty" : "file-field has-file");
+        builder.AddAttribute(1, "class", files.Count == 0 ? "file-field" : "file-field has-file");
+        var sequence = 2;
+        if (_isEditing)
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "file-field-actions");
+            builder.AddContent(sequence++, FileUploadButton(field.Key, "上传图片"));
+            builder.CloseElement();
+        }
+
         if (files.Count == 0)
         {
-            builder.AddContent(2, FileUploadButton(field.Key, "上传图片"));
+            if (!_isEditing)
+            {
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "file-empty-text");
+                builder.AddContent(sequence++, "暂无附件");
+                builder.CloseElement();
+            }
         }
         else
         {
-            var file = files[0];
-            builder.OpenElement(2, "div");
-            builder.AddAttribute(3, "class", "file-preview");
-            if (IsImageFile(file))
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "file-answer-list");
+            foreach (var file in files)
             {
-                builder.OpenElement(4, "a");
-                builder.AddAttribute(5, "href", GetFileUrl(file, false));
-                builder.AddAttribute(6, "target", "_blank");
-                builder.OpenElement(7, "img");
-                builder.AddAttribute(8, "src", GetFileUrl(file, false));
-                builder.AddAttribute(9, "alt", file.FileName);
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "file-answer-item");
+                if (IsImageFile(file))
+                {
+                    builder.OpenElement(sequence++, "button");
+                    builder.AddAttribute(sequence++, "type", "button");
+                    builder.AddAttribute(sequence++, "class", "file-preview image-preview-button");
+                    builder.AddAttribute(sequence++, "title", "点击查看大图");
+                    builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => OpenImagePreview(file)));
+                    builder.OpenElement(sequence++, "img");
+                    builder.AddAttribute(sequence++, "src", GetFileUrl(file, false));
+                    builder.AddAttribute(sequence++, "alt", "");
+                    builder.CloseElement();
+                    builder.OpenElement(sequence++, "span");
+                    builder.AddContent(sequence++, "查看大图");
+                    builder.CloseElement();
+                    builder.CloseElement();
+                }
+                else
+                {
+                    builder.OpenElement(sequence++, "div");
+                    builder.AddAttribute(sequence++, "class", "file-preview file-preview-file");
+                    builder.OpenComponent<MudIcon>(sequence++);
+                    builder.AddAttribute(sequence++, "Icon", Icons.Material.Filled.InsertDriveFile);
+                    builder.AddAttribute(sequence++, "Size", Size.Small);
+                    builder.CloseComponent();
+                    builder.CloseElement();
+                }
+
+                builder.OpenElement(sequence++, "textarea");
+                builder.AddAttribute(sequence++, "class", "form-textarea file-remark");
+                builder.AddAttribute(sequence++, "placeholder", "备注");
+                builder.AddAttribute(sequence++, "disabled", !_isEditing);
+                builder.AddAttribute(sequence++, "value", file.Remark ?? "");
+                builder.AddAttribute(sequence++, "oninput", EventCallback.Factory.Create<ChangeEventArgs>(this, args => UpdateFileRemark(file.Id, args.Value?.ToString())));
                 builder.CloseElement();
-                builder.CloseElement();
-            }
-            else
-            {
-                builder.OpenElement(4, "a");
-                builder.AddAttribute(5, "class", "file-preview-file");
-                builder.AddAttribute(6, "href", GetFileUrl(file, true));
-                builder.AddAttribute(7, "target", "_blank");
-                builder.OpenComponent<MudIcon>(8);
-                builder.AddAttribute(9, "Icon", Icons.Material.Filled.InsertDriveFile);
-                builder.AddAttribute(10, "Size", Size.Small);
-                builder.CloseComponent();
-                builder.OpenElement(11, "span");
-                builder.AddContent(12, file.FileName);
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "file-row-actions");
+                if (_isEditing)
+                {
+                    builder.OpenElement(sequence++, "a");
+                    builder.AddAttribute(sequence++, "class", "file-delete-link");
+                    builder.AddAttribute(sequence++, "href", "javascript:void(0)");
+                    builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => DeleteCaseFileAsync(file.Id)));
+                    builder.AddContent(sequence++, "删除");
+                    builder.CloseElement();
+                }
+
                 builder.CloseElement();
                 builder.CloseElement();
             }
 
-            builder.CloseElement();
-            builder.OpenElement(13, "div");
-            builder.AddAttribute(14, "class", "file-meta");
-            builder.OpenElement(15, "textarea");
-            builder.AddAttribute(16, "class", "form-textarea file-remark");
-            builder.AddAttribute(17, "placeholder", "备注");
-            builder.AddAttribute(18, "disabled", true);
-            builder.CloseElement();
-            builder.OpenElement(19, "div");
-            builder.AddAttribute(20, "class", "file-toolbar");
-            builder.AddContent(21, FileUploadButton(field.Key, "重新上传"));
-            builder.OpenElement(22, "a");
-            builder.AddAttribute(23, "class", "file-link");
-            builder.AddAttribute(24, "href", GetFileUrl(file, true));
-            builder.AddContent(25, file.FileName);
-            builder.CloseElement();
-            builder.CloseElement();
             builder.CloseElement();
         }
 
@@ -727,7 +900,7 @@
         builder.CloseElement();
         builder.OpenComponent<InputFile>(7);
         builder.AddAttribute(8, "class", "file-input");
-        builder.AddAttribute(9, "accept", "image/*");
+        builder.AddAttribute(9, "accept", "image/*,.dcm,application/dicom");
         builder.AddAttribute(10, "disabled", !_isEditing);
         builder.AddAttribute(11, "OnChange", EventCallback.Factory.Create<InputFileChangeEventArgs>(this, args => UploadCaseFileAsync(fieldKey, args)));
         builder.CloseComponent();
@@ -758,15 +931,19 @@
         }
 
         var file = args.File;
-        if (!IsImageFile(file.Name, file.ContentType))
+        if (!IsAllowedCaseFile(file.Name, file.ContentType))
         {
-            inj_snackbar.Add("请选择图片文件", Severity.Warning);
+            inj_snackbar.Add("请选择图片或 DICOM 文件", Severity.Warning);
             return;
         }
 
         const long maxFileSize = 50 * 1024 * 1024;
-        var uploadRoot = inj_configuration["FileStorage:UploadRoot"] ?? "FileStorage\\upload";
-        var rootPath = ResolveStorageRoot(uploadRoot);
+        var isDicom = IsDicomFile(file.Name, file.ContentType);
+        var storageRoot = isDicom
+            ? inj_configuration["FileStorage:DicomRoot"] ?? "FileStorage\\dicom"
+            : inj_configuration["FileStorage:UploadRoot"] ?? "FileStorage\\upload";
+        var storageArea = isDicom ? "dicom" : "upload";
+        var rootPath = ResolveStorageRoot(storageRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var relativeDirectory = Path.Combine("cases", CaseId.ToString("N"), fieldKey);
         var directory = Path.Combine(rootPath, relativeDirectory);
         Directory.CreateDirectory(directory);
@@ -774,7 +951,7 @@
         var extension = Path.GetExtension(file.Name);
         if (string.IsNullOrWhiteSpace(extension))
         {
-            extension = ".img";
+            extension = isDicom ? ".dcm" : ".img";
         }
 
         var storedName = $"{Guid.NewGuid():N}{extension}";
@@ -790,17 +967,25 @@
             OwnerType = "case",
             OwnerId = CaseId,
             FileName = SanitizeFileName(file.Name),
-            FilePath = NormalizeFilePath($"upload/{relativeDirectory}/{storedName}"),
-            ContentType = file.ContentType,
+            FilePath = NormalizeFilePath($"{storageArea}/{relativeDirectory}/{storedName}"),
+            ContentType = string.IsNullOrWhiteSpace(file.ContentType) && isDicom ? "application/dicom" : file.ContentType,
             FileSize = file.Size,
+            Remark = null,
             CreatedAt = ToDbTimestamp(DateTime.Now)!.Value,
             CreatedBy = CurrentUserId
         });
-        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "上传图片", "case", CaseId, fieldKey));
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "上传文件", "case", CaseId, fieldKey));
         await _registryContext.SaveChangesAsync();
         await LoadCaseFilesAsync();
-        inj_snackbar.Add("图片已上传", Severity.Success);
+        inj_snackbar.Add("文件已上传", Severity.Success);
     }
+
+    private static bool IsAllowedCaseFile(string fileName, string? contentType)
+        => IsImageFile(fileName, contentType) || IsDicomFile(fileName, contentType);
+
+    private static bool IsDicomFile(string fileName, string? contentType)
+        => string.Equals(contentType, "application/dicom", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(Path.GetExtension(fileName), ".dcm", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsImageFile(string fileName, string? contentType)
         => contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
@@ -830,6 +1015,89 @@
             .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync());
+    }
+
+    private void UpdateFileRemark(Guid fileId, string? value)
+    {
+        var file = _files.FirstOrDefault(x => x.Id == fileId);
+        if (file != null)
+        {
+            file.Remark = value;
+        }
+    }
+
+    private void OpenImagePreview(RegistryFile file) => _previewImageFile = file;
+
+    private void CloseImagePreview() => _previewImageFile = null;
+
+    private async Task DeleteCaseFileAsync(Guid fileId)
+    {
+        if (_registryContext == null || !await RequirePermissionAsync(PermissionConstants.CaseEdit))
+        {
+            return;
+        }
+
+        if (!_isEditing)
+        {
+            inj_snackbar.Add("当前病例状态不能删除附件", Severity.Warning);
+            return;
+        }
+
+        var file = await _registryContext.Files.FirstOrDefaultAsync(x => x.Id == fileId && x.OwnerType == "case" && x.OwnerId == CaseId);
+        if (file == null)
+        {
+            inj_snackbar.Add("附件不存在", Severity.Warning);
+            await LoadCaseFilesAsync();
+            return;
+        }
+
+        if (!await ConfirmAsync("确认删除该附件？"))
+        {
+            return;
+        }
+
+        TryDeleteLocalFile(file.FilePath);
+        if (_previewImageFile?.Id == fileId)
+        {
+            _previewImageFile = null;
+        }
+
+        _registryContext.Files.Remove(file);
+        _registryContext.OperationLogs.Add(CreateOperationLog("病例", "删除文件", "case", CaseId, file.FileName));
+        await _registryContext.SaveChangesAsync();
+        await LoadCaseFilesAsync();
+        inj_snackbar.Add("附件已删除", Severity.Success);
+    }
+
+    private void TryDeleteLocalFile(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return;
+        }
+
+        var normalizedPath = NormalizeFilePath(filePath);
+        var isDicom = normalizedPath.StartsWith("dicom/", StringComparison.OrdinalIgnoreCase);
+        var storageRoot = isDicom
+            ? inj_configuration["FileStorage:DicomRoot"] ?? "FileStorage\\dicom"
+            : inj_configuration["FileStorage:UploadRoot"] ?? "FileStorage\\upload";
+        var rootPath = ResolveStorageRoot(storageRoot);
+        var relativePath = isDicom
+            ? normalizedPath["dicom/".Length..]
+            : normalizedPath.StartsWith("upload/", StringComparison.OrdinalIgnoreCase)
+                ? normalizedPath["upload/".Length..]
+                : normalizedPath;
+        var fullPath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+        if (!string.Equals(fullPath, rootPath, StringComparison.OrdinalIgnoreCase)
+            && !fullPath.StartsWith(rootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (File.Exists(fullPath))
+        {
+            File.Delete(fullPath);
+        }
     }
 
     private bool HasCaseFieldValue(CaseFormField field)
@@ -893,13 +1161,13 @@
 
     private RenderFragment DateInput(DateTime? value, Action<DateTime?> setter) => builder =>
     {
-        builder.OpenElement(0, "input");
-        builder.AddAttribute(1, "class", string.IsNullOrWhiteSpace(FormatInputDate(value)) ? "form-input date-input date-empty" : "form-input date-input");
-        builder.AddAttribute(2, "type", "date");
-        builder.AddAttribute(3, "value", FormatInputDate(value));
-        builder.AddAttribute(4, "disabled", !_isEditing);
-        builder.AddAttribute(5, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(ParseDate(args.Value?.ToString()))));
-        builder.CloseElement();
+        builder.OpenComponent<McrDateField>(0);
+        builder.AddAttribute(1, "Class", "form-date-picker");
+        builder.AddAttribute(2, "Date", value);
+        builder.AddAttribute(3, "DateChanged", EventCallback.Factory.Create<DateTime?>(this, date => setter(date)));
+        builder.AddAttribute(4, "Disabled", !_isEditing);
+        builder.AddAttribute(5, "Clearable", _isEditing);
+        builder.CloseComponent();
     };
 
     private RenderFragment LongTextInput(string? value, Action<string?> setter) => builder =>
@@ -933,29 +1201,34 @@
 
     private RenderFragment SelectField(IReadOnlyList<FixedOption> options, string? value, Action<string?> setter) => builder =>
     {
-        builder.OpenElement(0, "select");
-        builder.AddAttribute(1, "class", "form-select");
-        builder.AddAttribute(2, "value", value ?? "");
-        builder.AddAttribute(3, "disabled", !_isEditing);
-        builder.AddAttribute(4, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, args => setter(EmptyToNull(args.Value?.ToString()))));
-        builder.OpenElement(5, "option");
-        builder.AddAttribute(6, "value", "");
-        builder.AddContent(7, "请选择");
-        builder.CloseElement();
-        var sequence = 8;
-        foreach (var option in options)
-        {
-            builder.OpenElement(sequence++, "option");
-            builder.AddAttribute(sequence++, "value", option.Value);
-            builder.AddContent(sequence++, option.Text);
-            builder.CloseElement();
-        }
-        builder.CloseElement();
+        builder.OpenComponent<McrSearchSelect>(0);
+        builder.AddAttribute(1, "Class", "form-search-select");
+        builder.AddAttribute(2, "Options", options);
+        builder.AddAttribute(3, "Value", value);
+        builder.AddAttribute(4, "ValueChanged", EventCallback.Factory.Create<string?>(this, setter));
+        builder.AddAttribute(5, "Disabled", !_isEditing);
+        builder.AddAttribute(6, "Placeholder", "请选择");
+        builder.CloseComponent();
     };
 
-    private RenderFragment HospitalField() => SelectField(_hospitalOptions.Select(x => new FixedOption(x.Value, x.Text)).ToList(), _edit?.HospitalId, value => _edit!.HospitalId = value);
+    private RenderFragment HospitalField() => SelectField(_hospitalOptions.Select(x => new FixedOption(x.Value, x.Text)).ToList(), _edit?.HospitalId, SetHospital);
 
     private RenderFragment OperatorField() => SelectField(_operatorOptions.Select(x => new FixedOption(x.Value, x.Text)).ToList(), _edit?.OperatorId, value => _edit!.OperatorId = value);
+
+    private void SetHospital(string? value)
+    {
+        if (_edit == null)
+        {
+            return;
+        }
+
+        _edit.HospitalId = value;
+        _ = InvokeAsync(async () =>
+        {
+            await LoadOperatorOptionsAsync(value);
+            StateHasChanged();
+        });
+    }
 
     private void SetDisease(string? value)
     {
@@ -1033,6 +1306,9 @@
     private static bool IsSameValue(string? left, string? right)
         => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    private static Guid? TryParseGuid(string? value)
+        => Guid.TryParse(value, out var guid) ? guid : null;
+
     private static string GetSectionFieldsClass(CaseFormSection section)
         => section.AnchorId == "case-basic" ? "section-fields basic-info-fields" : "section-fields";
 
@@ -1076,7 +1352,7 @@
     private bool CanShowCaseActions()
         => _case != null
             && (CanEditCaseForm()
-                || ((_case.Status is 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
+                || ((_case.Status is 1 or 3 or 4) && HasPermission(PermissionConstants.CaseSubmit))
                 || (_case.Status == 0 && HasPermission(PermissionConstants.CaseApprove))
                 || (_case.Status == 2 && HasPermission(PermissionConstants.QualityManage))
                 || CanDeleteCase);
@@ -1101,11 +1377,6 @@
         => ShowValue(RegistryFixedCatalog.GetSexName(value));
 
     private static string FormatDateTime(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm") ?? "-";
-
-    private static string FormatInputDate(DateTime? value) => value?.ToString("yyyy-MM-dd") ?? "";
-
-    private static DateTime? ParseDate(string? value)
-        => DateTime.TryParse(value, out var result) ? result.Date : null;
 
     private static int? ParseInt(string? value)
         => int.TryParse(value, out var result) ? result : null;

@@ -269,23 +269,6 @@
     gap: 10px;
 }
 
-.pdf-image-thumb {
-    width: 130px;
-    height: 92px;
-    padding: 0;
-    overflow: hidden;
-    cursor: pointer;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    background: #ffffff;
-}
-
-.pdf-image-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
 .pdf-file-link {
     display: inline-flex;
     align-items: center;
@@ -304,6 +287,138 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pdf-image-item {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 200px;
+    height: 200px;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid #d6e0ea;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.pdf-image-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.pdf-image-item span {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+    opacity: 0;
+    background: rgba(15, 23, 42, .58);
+    transition: opacity .16s ease;
+}
+
+.pdf-image-item:hover,
+.pdf-image-item:focus-visible {
+    border-color: var(--mcr-primary);
+}
+
+.pdf-image-item:hover span,
+.pdf-image-item:focus-visible span {
+    opacity: 1;
+}
+
+.pdf-file-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    min-width: 40px;
+    padding: 8px 10px;
+    color: #111827;
+    text-decoration: none;
+    border: 1px solid #dbe3ed;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.pdf-file-item:hover {
+    color: var(--mcr-primary);
+    border-color: var(--mcr-primary);
+}
+
+.pdf-file-remark {
+    width: 100%;
+    padding: 8px 10px;
+    color: #475569;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.image-preview-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: rgba(15, 23, 42, .72);
+}
+
+.image-preview-dialog {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80vw;
+    max-width: 80vw;
+    height: 86vh;
+    max-height: 86vh;
+    padding: 18px;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 24px 64px rgba(15, 23, 42, .36);
+}
+
+.image-preview-dialog img {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.image-preview-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    color: #334155;
+    cursor: pointer;
+    border: 1px solid #dbe3ed;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .12);
+}
+
+.image-preview-close:hover {
+    color: #0f172a;
+    border-color: var(--mcr-primary);
 }
 
 .review-shell {

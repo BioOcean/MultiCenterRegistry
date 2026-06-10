@@ -151,7 +151,7 @@ public static class FeatureCatalog
             [
                 new(
                     "cases",
-                    "病例管理",
+                    "病例报表",
                     RouteConstants.CaseList,
                     Icons.Material.Filled.Assignment,
                     [

@@ -764,8 +764,7 @@
             return;
         }
 
-        var confirmed = await inj_dialogService.ShowMessageBox("删除文献介绍", "确定要删除这条文献介绍吗？", yesText: "确定", cancelText: "取消");
-        if (confirmed != true)
+        if (!await ConfirmAsync("确定要删除这条文献介绍吗？"))
         {
             return;
         }
@@ -842,8 +841,7 @@
             return;
         }
 
-        var confirmed = await inj_dialogService.ShowMessageBox("删除系统消息", "确定要删除这条系统消息吗？", yesText: "确定", cancelText: "取消");
-        if (confirmed != true)
+        if (!await ConfirmAsync("确定要删除这条系统消息吗？"))
         {
             return;
         }

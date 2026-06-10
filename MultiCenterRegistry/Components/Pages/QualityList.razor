@@ -1,13 +1,13 @@
 ﻿@page "/quality"
 @inherits BasePage
 
-<PageTitle>@(IsQualityCenterMode ? "数据报表" : "质控管理")</PageTitle>
+<PageTitle>@QualityPageTitle</PageTitle>
 
 <div class="quality-page quality-list-page">
     <div class="page-header">
         <div>
-            <h1>@(IsQualityCenterMode ? "数据报表" : "质控管理")</h1>
-            <div class="page-subtitle">@(IsQualityCenterMode ? $"共 {_qualityMonthSummaries.Count} 个月度数据报表" : $"共 {_totalCount} 条质控报表")</div>
+            <h1>@QualityPageTitle</h1>
+            <div class="page-subtitle">@QualityPageSubtitle</div>
         </div>
         <div class="header-actions">
             @if (!IsQualityCenterMode && HasPermission(PermissionConstants.QualityCreate))
@@ -388,6 +388,20 @@
 
     private bool IsQualityCenterMode => HasPermission(PermissionConstants.QualityManage) && !HasPermission(PermissionConstants.QualityCreate);
 
+    private bool IsHospitalQualityMode
+        => HasPermission(PermissionConstants.QualityCreate)
+           && HasPermission(PermissionConstants.CaseApprove)
+           && !HasPermission(PermissionConstants.QualityManage);
+
+    private bool IsDataReportMode => IsQualityCenterMode || IsHospitalQualityMode;
+
+    private string QualityPageTitle => IsDataReportMode ? "数据报表" : "质控管理";
+
+    private string QualityPageSubtitle
+        => IsQualityCenterMode
+            ? $"共 {_qualityMonthSummaries.Count} 个月度数据报表"
+            : $"共 {_totalCount} 条{(IsHospitalQualityMode ? "数据报表" : "质控报表")}";
+
     private string QualityDetailTitle
         => !_selectedQualityMonth.HasValue
             ? "医院明细"
@@ -763,8 +777,16 @@
         }
 
         var hospitalQuery = _registryContext.SystemHospitals.AsNoTracking();
-        if (!HasPermission(PermissionConstants.QualityManage) && _scopeHospitalIds.Count > 0)
+        if (!HasPermission(PermissionConstants.QualityManage))
         {
+            if (_scopeHospitalIds.Count == 0)
+            {
+                _hospitalOptions.Clear();
+                _templateOptions.Clear();
+                _templateOptions.AddRange(RegistryFixedCatalog.Diseases.Select(x => new TemplateOption(x.Value, x.Text)));
+                return;
+            }
+
             var scopeIds = _scopeHospitalIds.Select(TryParseGuid).Where(x => x.HasValue).Select(x => x!.Value).ToList();
             hospitalQuery = hospitalQuery.Where(x => scopeIds.Contains(x.Id));
         }
@@ -786,12 +808,12 @@
             return query;
         }
 
-        if (_scopeHospitalIds.Count > 0)
+        if (_scopeHospitalIds.Count == 0)
         {
-            query = query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
+            return query.Where(x => false);
         }
 
-        return query;
+        return query.Where(x => x.HospitalId != null && _scopeHospitalIds.Contains(x.HospitalId));
     }
 
     private void ToggleExportPanel()

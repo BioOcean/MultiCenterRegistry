@@ -81,13 +81,39 @@
 
     protected virtual Task OnPageDisposedAsync() => Task.CompletedTask;
 
-    protected Task<bool> ConfirmAsync(string message)
-        => inj_jsRuntime.InvokeAsync<bool>("confirm", message).AsTask();
+    private static DialogOptions McrDialogOptions => new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = false,
+        BackdropClick = false,
+        CloseOnEscapeKey = true,
+        BackgroundClass = "mcr-dialog-backdrop"
+    };
+
+    protected async Task<bool> ConfirmAsync(string message)
+    {
+        var result = await inj_dialogService.ShowMessageBox(
+            "确认操作",
+            message,
+            yesText: "确定",
+            cancelText: "取消",
+            options: McrDialogOptions);
+        return result == true;
+    }
 
     protected async Task<string?> PromptAsync(string message)
     {
-        var result = await inj_jsRuntime.InvokeAsync<string?>("prompt", message);
-        return string.IsNullOrWhiteSpace(result) ? null : result.Trim();
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(McrPromptDialog.Message), message);
+        var dialog = await inj_dialogService.ShowAsync<McrPromptDialog>("输入内容", parameters, McrDialogOptions);
+        var result = await dialog.Result;
+        if (result?.Canceled != false || result.Data is not string value || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     protected OperationLog CreateOperationLog(string module, string action, string ownerType, Guid ownerId, string? content = null)

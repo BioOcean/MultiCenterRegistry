@@ -1348,11 +1348,20 @@ body .case-detail-page .form-section,
 body .appraise-page .review-form-section,
 body .appraise-page .case-pdf-view,
 body .appraise-page .review-shell {
-    overflow: hidden !important;
     border: 1px solid var(--mcr-border) !important;
     border-radius: var(--mcr-radius) !important;
     background: var(--mcr-surface) !important;
     box-shadow: var(--mcr-shadow-soft) !important;
+}
+
+body .case-detail-page .form-section {
+    overflow: visible !important;
+}
+
+body .appraise-page .review-form-section,
+body .appraise-page .case-pdf-view,
+body .appraise-page .review-shell {
+    overflow: hidden !important;
 }
 
 body .case-detail-page .section-header,
@@ -1516,6 +1525,14 @@ body .appraise-page .review-input {
     padding: 0 11px !important;
 }
 
+body .case-detail-page .form-date-picker {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    margin: 0 !important;
+}
+
 body .case-detail-page .form-textarea,
 body .appraise-page .review-textarea {
     min-height: 112px !important;
@@ -1526,10 +1543,6 @@ body .appraise-page .review-textarea {
     line-height: 1.55 !important;
     resize: vertical !important;
     overflow-y: hidden !important;
-}
-
-body .case-detail-page .date-input {
-    color-scheme: light !important;
 }
 
 body .case-detail-page .form-input:disabled,
@@ -1543,6 +1556,59 @@ body .appraise-page .review-textarea:disabled {
     box-shadow: none !important;
     cursor: not-allowed !important;
     opacity: 1 !important;
+}
+
+body .mud-popover {
+    z-index: 1900 !important;
+}
+
+body .mcr-search-select-popover {
+    z-index: 1900 !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, .18) !important;
+}
+
+body .mcr-search-select-popover .mud-list {
+    padding: 6px !important;
+}
+
+body .mcr-search-select-popover .mud-list-item {
+    min-height: 34px !important;
+    border-radius: 6px !important;
+}
+
+body .mcr-search-select-popover .mud-list-item:hover,
+body .mcr-search-select-popover .mud-list-item.mud-selected-item {
+    color: var(--mcr-primary) !important;
+    background: var(--mcr-primary-soft) !important;
+}
+
+body .mcr-search-select-popover .mcr-search-select-option-text,
+body .mcr-search-select-popover .mcr-search-select-empty {
+    color: inherit;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+body .mcr-search-select-popover .mcr-search-select-empty {
+    display: block;
+    padding: 8px 10px;
+    color: var(--mcr-muted);
+}
+
+body .mud-popover .mud-picker-content {
+    min-width: 340px !important;
+    min-height: 336px !important;
+    overflow: visible !important;
+}
+
+body .mud-popover .mud-picker-calendar-header-day .mud-day-label,
+body .mud-popover .mud-picker-calendar .mud-picker-calendar-content .mud-day {
+    width: 40px !important;
+    height: 34px !important;
+    margin: 2px !important;
 }
 
 body .case-detail-page .question-row.is-disabled,
@@ -1615,70 +1681,109 @@ body .case-detail-page .choice-tag.disabled.selected {
 
 body .case-detail-page .file-field {
     display: grid !important;
-    gap: 12px !important;
+    gap: 10px !important;
     align-items: start !important;
 }
 
-body .case-detail-page .file-field.empty {
+body .case-detail-page .file-field-actions {
+    display: flex !important;
+    align-items: center !important;
+}
+
+body .case-detail-page .file-empty-text {
     display: flex !important;
     align-items: center !important;
     min-height: 40px !important;
+    padding: 0 11px !important;
+    color: var(--mcr-muted) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    border: 1px dashed #cfd8e3 !important;
+    border-radius: 4px !important;
+    background: #f8fafc !important;
 }
 
-body .case-detail-page .file-field.has-file {
-    grid-template-columns: 220px minmax(0, 1fr) !important;
+body .case-detail-page .file-answer-list {
+    display: grid !important;
+    gap: 8px !important;
 }
 
-body .case-detail-page .file-preview {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    height: 160px !important;
-    overflow: hidden !important;
-    border: 1px solid var(--mcr-border) !important;
+body .case-detail-page .file-answer-item {
+    display: grid !important;
+    grid-template-columns: 70px minmax(0, 1fr) 42px !important;
+    align-items: start !important;
+    gap: 10px !important;
+    min-height: 88px !important;
+    padding: 8px !important;
+    border: 1px solid #dbe3ed !important;
     border-radius: 8px !important;
     background: #ffffff !important;
 }
 
-body .case-detail-page .file-preview a,
+body .case-detail-page .file-preview {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 70px !important;
+    height: 70px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+    border: 1px solid var(--mcr-border) !important;
+    border-radius: 6px !important;
+    background: #f8fafc !important;
+}
+
 body .case-detail-page .file-preview img {
     display: block !important;
     width: 100% !important;
     height: 100% !important;
+    object-fit: contain !important;
 }
 
-body .case-detail-page .file-preview img {
-    object-fit: cover !important;
+body .case-detail-page .image-preview-button span {
+    position: absolute !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #ffffff !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    opacity: 0 !important;
+    background: rgba(15, 23, 42, .58) !important;
+    transition: opacity .16s ease !important;
+}
+
+body .case-detail-page .image-preview-button:hover,
+body .case-detail-page .image-preview-button:focus-visible {
+    border-color: var(--mcr-primary) !important;
+}
+
+body .case-detail-page .image-preview-button:hover span,
+body .case-detail-page .image-preview-button:focus-visible span {
+    opacity: 1 !important;
 }
 
 body .case-detail-page .file-preview-file {
-    display: grid !important;
-    justify-items: center !important;
-    align-content: center !important;
-    gap: 8px !important;
-    padding: 12px !important;
     color: var(--mcr-muted) !important;
-    font-size: 13px !important;
-    font-weight: 700 !important;
-    text-align: center !important;
-    text-decoration: none !important;
-}
-
-body .case-detail-page .file-meta {
-    display: grid !important;
-    gap: 10px !important;
-    min-width: 0 !important;
+    cursor: default !important;
 }
 
 body .case-detail-page .file-remark {
-    min-height: 160px !important;
+    height: 70px !important;
+    min-height: 70px !important;
+    max-height: 70px !important;
+    resize: none !important;
+    overflow-y: auto !important;
 }
 
-body .case-detail-page .file-toolbar {
+body .case-detail-page .file-row-actions {
     display: flex !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    gap: 10px !important;
+    align-items: flex-start !important;
+    justify-content: flex-end !important;
+    min-height: 70px !important;
 }
 
 body .case-detail-page .file-upload-button {
@@ -1720,15 +1825,17 @@ body .case-detail-page .file-upload-button.disabled .file-input {
     pointer-events: none !important;
 }
 
-body .case-detail-page .file-link {
-    min-width: 0 !important;
-    color: var(--mcr-primary) !important;
+body .case-detail-page .file-delete-link {
+    color: #dc2626 !important;
     font-size: 13px !important;
-    font-weight: 700 !important;
+    font-weight: 800 !important;
+    line-height: 24px !important;
     text-decoration: none !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+}
+
+body .case-detail-page .file-delete-link:hover {
+    color: #b91c1c !important;
+    text-decoration: underline !important;
 }
 
 body .appraise-page {
@@ -1825,6 +1932,50 @@ body .case-edit-dialog .case-create-label {
     font-size: 13px !important;
     font-weight: 800 !important;
     text-align: right !important;
+}
+
+body .mcr-dialog-backdrop {
+    background: rgba(15, 23, 42, 0.36) !important;
+}
+
+body .mud-dialog {
+    overflow: hidden !important;
+    border-radius: 8px !important;
+    box-shadow: 0 24px 54px rgba(15, 23, 42, 0.22) !important;
+}
+
+body .mud-dialog-title {
+    padding: 18px 20px 12px !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.22) !important;
+}
+
+body .mud-dialog-title .mud-typography {
+    color: var(--mcr-primary) !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+}
+
+body .mud-dialog-content {
+    padding: 16px 20px !important;
+    color: var(--mcr-primary) !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+}
+
+body .mud-dialog-actions {
+    gap: 8px !important;
+    padding: 12px 20px 18px !important;
+    border-top: 1px solid rgba(148, 163, 184, 0.18) !important;
+}
+
+body .mcr-prompt-message {
+    margin-bottom: 10px !important;
+    color: var(--mcr-muted) !important;
+}
+
+body .mcr-prompt-dialog textarea {
+    min-height: 92px !important;
 }
 
 @media (max-width: 960px) {

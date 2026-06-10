@@ -46,33 +46,32 @@
                 <MudSelectItem T="int" Value="2">已发布</MudSelectItem>
                 <MudSelectItem T="int" Value="3">已结束</MudSelectItem>
             </MudSelect>
-            <MudTextField T="string" @bind-Value="_leaderId" Label="组长用户 ID" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            <MudTextField T="string" @bind-Value="_expertIds" Label="专家用户 ID" Placeholder="多个用户 ID 用逗号分隔" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" />
+            <MudSelect T="string"
+                       MultiSelection="true"
+                       SelectedValues="_selectedExpertIds"
+                       SelectedValuesChanged="OnExpertIdsChanged"
+                       ToStringFunc="GetExpertText"
+                       Label="评审专家"
+                       Placeholder="请选择专家"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense">
+                @foreach (var expert in _expertOptions)
+                {
+                    <MudSelectItem T="string" Value="@expert.Id">@expert.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_leaderId" Label="评审组长" Placeholder="请选择组长" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!_selectedExpertIds.Any())">
+                @foreach (var expert in SelectedExpertOptions)
+                {
+                    <MudSelectItem T="string" Value="@expert.Id">@expert.Name</MudSelectItem>
+                }
+            </MudSelect>
             <MudTextField T="string" @bind-Value="_description" Label="说明" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
 
             <div class="actions editor-actions">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">保存</MudButton>
             </div>
         </MudPaper>
-
-        @if (_users.Count > 0)
-        {
-            <MudPaper Class="user-panel" Elevation="0">
-                <div class="panel-title">
-                    <h2>用户 ID 参考</h2>
-                    <span>@_users.Count 人</span>
-                </div>
-                <div class="user-grid">
-                    @foreach (var user in _users)
-                    {
-                        <div class="user-item">
-                            <strong>@user.DisplayName</strong>
-                            <span>@user.Id</span>
-                        </div>
-                    }
-                </div>
-            </MudPaper>
-        }
     }
 </MudContainer>
 
@@ -89,7 +88,7 @@
     [Parameter]
     public EventCallback Cancelled { get; set; }
 
-    private readonly List<SystemUser> _users = [];
+    private readonly List<ExpertOption> _expertOptions = [];
     private string _title = "";
     private string _meetingTime = "";
     private string _endTime = "";
@@ -97,13 +96,19 @@
     private string _groupInfo = "";
     private string _description = "";
     private string _leaderId = "";
-    private string _expertIds = "";
+    private IEnumerable<string> _selectedExpertIds = [];
     private int _status;
     private bool _isLoading = true;
 
     private bool IsNew => !MeetingId.HasValue || MeetingId.Value == Guid.Empty;
 
     private string PageClass => IsModal ? "edit-page modal-edit-content" : "edit-page";
+
+    private List<ExpertOption> SelectedExpertOptions
+        => _selectedExpertIds
+            .Select(id => _expertOptions.FirstOrDefault(x => IsSameValue(x.Id, id)) ?? new ExpertOption(id, id))
+            .OrderBy(x => x.Name)
+            .ToList();
 
     protected override Task OnPageInitializedAsync() => LoadAsync();
 
@@ -117,12 +122,7 @@
         _isLoading = true;
         try
         {
-            _users.Clear();
-            _users.AddRange(await _registryContext.SystemUsers.AsNoTracking()
-                .Where(x => x.DisplayName != "")
-                .OrderBy(x => x.DisplayName)
-                .Take(200)
-                .ToListAsync());
+            await LoadExpertOptionsAsync();
 
             if (IsNew)
             {
@@ -150,7 +150,8 @@
                 .ThenBy(x => x.ExpertId)
                 .ToListAsync();
             _leaderId = experts.FirstOrDefault(x => x.Level == 1)?.ExpertId ?? "";
-            _expertIds = string.Join(", ", experts.Select(x => x.ExpertId));
+            _selectedExpertIds = experts.Select(x => x.ExpertId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            await EnsureSelectedExpertsInOptionsAsync();
         }
         finally
         {
@@ -181,6 +182,14 @@
             }
 
             endTime = parsedEndTime;
+        }
+
+        var expertIds = GetSelectedIds(_selectedExpertIds);
+        var leaderId = _leaderId.Trim();
+        if (expertIds.Count == 0 || string.IsNullOrWhiteSpace(leaderId) || !expertIds.Contains(leaderId, StringComparer.OrdinalIgnoreCase))
+        {
+            inj_snackbar.Add("请选择评审专家和评审组长", Severity.Warning);
+            return;
         }
 
         if (!await ConfirmAsync("确认保存会议信息？"))
@@ -215,12 +224,6 @@
             _registryContext.ReviewMeetings.Add(meeting);
         }
 
-        var expertIds = ParseIds(_expertIds);
-        if (!string.IsNullOrWhiteSpace(_leaderId) && !expertIds.Contains(_leaderId.Trim(), StringComparer.OrdinalIgnoreCase))
-        {
-            expertIds.Insert(0, _leaderId.Trim());
-        }
-
         await using var transaction = await _registryContext.Database.BeginTransactionAsync();
         var currentExperts = await _registryContext.MeetingExperts.Where(x => x.MeetingId == meetingId).ToListAsync();
         var currentExpertIds = currentExperts.Select(x => x.ExpertId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -234,7 +237,7 @@
             {
                 MeetingId = meetingId,
                 ExpertId = expertId,
-                Level = expertId.Equals(_leaderId.Trim(), StringComparison.OrdinalIgnoreCase) ? 1 : 2
+                Level = expertId.Equals(leaderId, StringComparison.OrdinalIgnoreCase) ? 1 : 2
             });
         }
 
@@ -274,10 +277,83 @@
         inj_navigationManager.NavigateTo(RouteConstants.MeetingDetail(MeetingId!.Value));
     }
 
-    private static List<string> ParseIds(string value)
-        => value.Split([',', '，', ';', '；', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+    private async Task LoadExpertOptionsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        string[] expertPermissionCodes = [PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView];
+        var rows = await (
+            from user in _registryContext.SystemUsers.AsNoTracking()
+            join userRole in _registryContext.SystemMapUserRoles.AsNoTracking() on user.Id equals userRole.UserId
+            join rolePermission in _registryContext.SystemMapRolePermissions.AsNoTracking() on userRole.RoleId equals rolePermission.RoleId
+            join permission in _registryContext.SystemPermissions.AsNoTracking() on rolePermission.PermissionId equals permission.Id
+            where user.IsValid && permission.Code != null && expertPermissionCodes.Contains(permission.Code)
+            select new { user.Id, user.DisplayName, user.Account })
+            .ToListAsync();
+
+        _expertOptions.Clear();
+        _expertOptions.AddRange(rows
+            .GroupBy(x => x.Id)
+            .Select(x => x.First())
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.Account)
+            .Select(x => new ExpertOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName)));
+    }
+
+    private async Task EnsureSelectedExpertsInOptionsAsync()
+    {
+        if (_registryContext == null)
+        {
+            return;
+        }
+
+        var missingIds = GetSelectedIds(_selectedExpertIds)
+            .Where(id => !_expertOptions.Any(x => IsSameValue(x.Id, id)))
+            .Select(TryParseGuid)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
             .ToList();
+        if (missingIds.Count == 0)
+        {
+            return;
+        }
+
+        _expertOptions.AddRange(await _registryContext.SystemUsers.AsNoTracking()
+            .Where(x => missingIds.Contains(x.Id))
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.Account)
+            .Select(x => new ExpertOption(x.Id.ToString(), x.DisplayName == "" ? x.Account : x.DisplayName))
+            .ToListAsync());
+    }
+
+    private void OnExpertIdsChanged(IEnumerable<string> values)
+    {
+        var selected = GetSelectedIds(values);
+        _selectedExpertIds = selected;
+        if (!selected.Contains(_leaderId, StringComparer.OrdinalIgnoreCase))
+        {
+            _leaderId = selected.FirstOrDefault() ?? "";
+        }
+    }
+
+    private string GetExpertText(string value)
+        => _expertOptions.FirstOrDefault(x => IsSameValue(x.Id, value))?.Name ?? value;
+
+    private static List<string> GetSelectedIds(IEnumerable<string>? values)
+        => values?
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+    private static Guid? TryParseGuid(string? value)
+        => Guid.TryParse(value, out var guid) ? guid : null;
+
+    private static bool IsSameValue(string? left, string? right)
+        => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private async Task SyncAppraisesForExpertChangesAsync(
         Guid meetingId,
@@ -332,4 +408,6 @@
             }
         }
     }
+
+    private sealed record ExpertOption(string Id, string Name);
 }

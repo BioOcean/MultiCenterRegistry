@@ -204,8 +204,8 @@ try
 
         var endExclusive = endDate.Date.AddDays(1);
         var data = await query
-            .Where(x => x.AdmissionTime.HasValue && x.AdmissionTime.Value >= startDate.Date && x.AdmissionTime.Value < endExclusive)
-            .OrderBy(x => x.AdmissionTime)
+            .Where(x => x.DischargeTime.HasValue && x.DischargeTime.Value >= startDate.Date && x.DischargeTime.Value < endExclusive)
+            .OrderBy(x => x.DischargeTime)
             .ThenBy(x => x.PatientName)
             .ToListAsync();
 
@@ -640,7 +640,7 @@ static async Task<IQueryable<RegistryCase>> ApplyCaseScopeAsync(HttpContext http
             .ToListAsync();
         if (scopes.Count == 0)
         {
-            return query;
+            return query.Where(x => false);
         }
 
         var hospitalIds = scopes.Select(x => x.ToString()).Distinct().ToList();
@@ -651,10 +651,10 @@ static async Task<IQueryable<RegistryCase>> ApplyCaseScopeAsync(HttpContext http
     if (await HasPermissionAsync(httpContext, dbContext, PermissionConstants.CaseSubmit))
     {
         var userIdText = GetCurrentUserId(httpContext);
-        query = query.Where(x => x.OperatorId == userIdText);
+        return query.Where(x => x.OperatorId == userIdText);
     }
 
-    return query;
+    return query.Where(x => false);
 }
 
 static async Task<IQueryable<QualityReport>> ApplyQualityScopeAsync(HttpContext httpContext, RegistryDbContext dbContext, IQueryable<QualityReport> query)
@@ -675,12 +675,12 @@ static async Task<IQueryable<QualityReport>> ApplyQualityScopeAsync(HttpContext 
         .Select(x => x.HospitalId.ToString())
         .Distinct()
         .ToListAsync();
-    if (hospitalIds.Count > 0)
+    if (hospitalIds.Count == 0)
     {
-        query = query.Where(x => x.HospitalId != null && hospitalIds.Contains(x.HospitalId));
+        return query.Where(x => false);
     }
 
-    return query;
+    return query.Where(x => x.HospitalId != null && hospitalIds.Contains(x.HospitalId));
 }
 
 static async Task<Dictionary<Guid, string>> LoadHospitalNamesAsync(RegistryDbContext dbContext, IEnumerable<string?> ids)

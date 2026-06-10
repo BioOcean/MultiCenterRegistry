@@ -160,6 +160,11 @@
     margin-top: 0;
 }
 
+.case-create-date-picker {
+    width: 100%;
+    min-width: 0;
+}
+
 .case-create-form ::deep .mud-input-outlined-border {
     border-color: var(--mcr-border);
     border-radius: 7px;

@@ -139,13 +139,30 @@
     private QualityReport? _quality;
     private readonly List<QualityReject> _rejects = [];
     private readonly List<QualityItemModel> _items = [];
+    private readonly List<string> _scopeHospitalIds = [];
     private bool _isLoading = true;
     private bool _isEditing;
     private bool _isPreview;
 
     protected override async Task OnPageInitializedAsync()
     {
+        await LoadRoleScopesAsync();
         await LoadQualityAsync();
+    }
+
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId) || CurrentRoleId == Guid.Empty)
+        {
+            return;
+        }
+
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId.ToString())
+            .Distinct()
+            .ToListAsync());
     }
 
     private async Task LoadQualityAsync()
@@ -161,6 +178,12 @@
             _quality = await _registryContext.QualityReports.AsNoTracking().FirstOrDefaultAsync(x => x.Id == QualityId);
             _rejects.Clear();
             _items.Clear();
+            if (_quality != null && !CanAccessQuality(_quality))
+            {
+                _quality = null;
+                inj_snackbar.Add("当前账号无权查看该质控报表", Severity.Warning);
+            }
+
             if (_quality == null)
             {
                 return;
@@ -182,6 +205,16 @@
         {
             _isLoading = false;
         }
+    }
+
+    private bool CanAccessQuality(QualityReport item)
+    {
+        if (HasPermission(PermissionConstants.QualityManage))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(item.HospitalId) && _scopeHospitalIds.Contains(item.HospitalId);
     }
 
     private void BackToList() => inj_navigationManager.NavigateTo(RouteConstants.QualityList);

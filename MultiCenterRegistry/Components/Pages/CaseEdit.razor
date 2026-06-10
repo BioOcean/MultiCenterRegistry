@@ -29,13 +29,10 @@
                 <section class="case-create-section">
                     <div class="case-create-grid">
                         <div class="case-create-field case-create-span-2">
-                            <div class="case-create-label"><span class="case-required">*</span>医院</div>
-                            <MudSelect T="string" @bind-Value="_hospitalId" Placeholder="请选择医院" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                @foreach (var hospital in _hospitals)
-                                {
-                                    <MudSelectItem T="string" Value="@hospital.Id.ToString()">@hospital.Name</MudSelectItem>
-                                }
-                            </MudSelect>
+                            <div class="case-create-label">医院</div>
+                            <McrSearchSelect Options="@_hospitals.Select(x => new FixedOption(x.Id.ToString(), x.Name)).ToList()"
+                                             @bind-Value="_hospitalId"
+                                             Placeholder="请选择医院" />
                         </div>
                     </div>
                 </section>
@@ -43,7 +40,6 @@
                 @if (HasSelectedHospital)
                 {
                     <section class="case-create-section">
-                        <div class="case-create-section-title">患者基本信息</div>
                         <div class="case-create-grid">
                             <div class="case-create-field">
                                 <div class="case-create-label"><span class="case-required">*</span>病案号</div>
@@ -64,219 +60,35 @@
                             </div>
                             <div class="case-create-field">
                                 <div class="case-create-label">年龄</div>
-                                <MudTextField T="string" @bind-Value="_patientAge" Placeholder="请输入年龄" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </div>
-                            <div class="case-create-field">
-                                <div class="case-create-label">身份证号码</div>
-                                <MudTextField T="string" @bind-Value="_idNumber" Placeholder="请输入身份证号码" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </div>
-                            <div class="case-create-field">
-                                <div class="case-create-label">住院科室</div>
-                                <MudTextField T="string" @bind-Value="_departmentName" Placeholder="请输入住院科室" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </div>
-                            <div class="case-create-field">
-                                <div class="case-create-label">术者</div>
-                                <MudTextField T="string" Value="@_operatorName" Placeholder="当前账号" Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="true" />
+                                <MudTextField T="string" @bind-Value="_patientAge" Placeholder="请输入年龄" Variant="Variant.Outlined" Margin="Margin.Dense" Adornment="Adornment.End" AdornmentText="岁" />
                             </div>
                             <div class="case-create-field">
                                 <div class="case-create-label">入院时间</div>
-                                <MudDatePicker @bind-Date="_admissionTime" Placeholder="请选择入院时间" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                <McrDateField Class="case-create-date-picker" @bind-Date="_admissionTime" Clearable="true" />
                             </div>
                             <div class="case-create-field">
                                 <div class="case-create-label"><span class="case-required">*</span>出院时间</div>
-                                <MudDatePicker @bind-Date="_dischargeTime" Placeholder="请选择出院时间" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                            </div>
-                            <div class="case-create-field">
-                                <div class="case-create-label">住院天数</div>
-                                <MudTextField T="string" @bind-Value="_hospitalStayDays" Placeholder="自动计算或手动填写" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                <McrDateField Class="case-create-date-picker" @bind-Date="_dischargeTime" Clearable="true" />
                             </div>
                             <div class="case-create-field case-create-span-2">
-                                <div class="case-create-label"><span class="case-required">*</span>手术类型</div>
+                                <div class="case-create-label"><span class="case-required">*</span>手术类别</div>
                                 <div class="case-choice-group">
-                                    @foreach (var option in RegistryFixedCatalog.Diseases)
+                                    @foreach (var option in CreateSurgeryOptions)
                                     {
                                         <button type="button" class="@GetChoiceClass(_diseaseId, option.Value)" @onclick="@(() => SetDisease(option.Value))">@option.Text</button>
                                     }
                                 </div>
                             </div>
                             <div class="case-create-field">
-                                <div class="case-create-label">是否急诊介入</div>
-                                <MudSelect T="string" @bind-Value="_isEmergencyIntervention" Placeholder="请选择" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
-                                    @foreach (var option in RegistryFixedCatalog.YesNoOptions)
-                                    {
-                                        <MudSelectItem T="string" Value="@option.Value">@option.Text</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </div>
-                            <div class="case-create-field">
                                 <div class="case-create-label">离院方式</div>
-                                <MudSelect T="string" @bind-Value="_dischargeMode" Placeholder="请选择离院方式" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
-                                    @foreach (var option in RegistryFixedCatalog.DischargeModes)
-                                    {
-                                        <MudSelectItem T="string" Value="@option.Value">@option.Text</MudSelectItem>
-                                    }
-                                </MudSelect>
+                                <MudTextField T="string" @bind-Value="_dischargeMode" Placeholder="请输入离院方式" Variant="Variant.Outlined" Margin="Margin.Dense" />
                             </div>
-                            @if (IsSameValue(_dischargeMode, "死亡"))
-                            {
-                                <div class="case-create-field">
-                                    <div class="case-create-label">死亡时间</div>
-                                    <MudDatePicker @bind-Date="_deathTime" Placeholder="请选择死亡时间" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                                </div>
-                            }
                             <div class="case-create-field">
                                 <div class="case-create-label">情况/原因说明</div>
-                                <MudSelect T="string" @bind-Value="_situationReason" Placeholder="请选择情况/原因说明" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
-                                    @foreach (var option in RegistryFixedCatalog.SituationReasons)
-                                    {
-                                        <MudSelectItem T="string" Value="@option.Value">@option.Text</MudSelectItem>
-                                    }
-                                </MudSelect>
+                                <McrSearchSelect Options="RegistryFixedCatalog.SituationReasons"
+                                                 @bind-Value="_situationReason"
+                                                 Placeholder="请选择" />
                             </div>
-                            @if (IsSameValue(_situationReason, "4") || IsSameValue(_situationReason, "其他"))
-                            {
-                                <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                    <div class="case-create-label">补充说明</div>
-                                    <MudTextField T="string" @bind-Value="_situationSupplement" Placeholder="请输入补充说明" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                                </div>
-                            }
-                            @if (IsSameValue(_diseaseId, "6237dd62-15b9-4676-972d-bf32476b3546"))
-                            {
-                                <div class="case-create-field case-create-span-2">
-                                    <div class="case-create-label">冠心病介入</div>
-                                    <MudSelect T="string" @bind-Value="_coronaryIntervention" Placeholder="请选择冠心病介入" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                        <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
-                                        @foreach (var option in RegistryFixedCatalog.CoronaryOptions)
-                                        {
-                                            <MudSelectItem T="string" Value="@option.Value">@option.Text</MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                </div>
-                            }
-                            else if (IsSameValue(_diseaseId, "ae92e4fa-5e02-4d4c-a773-3dc79c4935bc"))
-                            {
-                                <div class="case-create-field">
-                                    <div class="case-create-label">导管消融</div>
-                                    <MudTextField T="string" @bind-Value="_ablationIntervention" Placeholder="请输入导管消融" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                                </div>
-                            }
-                            else if (IsSameValue(_diseaseId, "c1174c60-2ef2-45f6-85dd-5269b567f996"))
-                            {
-                                <div class="case-create-field">
-                                    <div class="case-create-label">结构性心脏病介入</div>
-                                    <MudTextField T="string" @bind-Value="_structuralIntervention" Placeholder="请输入结构性心脏病介入" Variant="Variant.Outlined" Margin="Margin.Dense" />
-                                </div>
-                            }
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">病历摘要</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">摘要内容</div>
-                                <MudTextField T="string" @bind-Value="_caseSummary" Placeholder="请输入摘要内容" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">出院诊断</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">出院诊断</div>
-                                <MudTextField T="string" @bind-Value="_dischargeDiagnosis" Placeholder="请输入出院诊断" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">相关实验室检查</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2">
-                                <div class="case-create-label">化验单图片上传</div>
-                                <div class="case-file-empty">暂无附件</div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">主要辅助检查</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2">
-                                <div class="case-create-label">心电图图片上传</div>
-                                <div class="case-file-empty">暂无附件</div>
-                            </div>
-                            <div class="case-create-field case-create-span-2">
-                                <div class="case-create-label">心脏彩超</div>
-                                <div class="case-file-empty">暂无附件</div>
-                            </div>
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">其他检查</div>
-                                <MudTextField T="string" @bind-Value="_otherExam" Placeholder="请输入其他检查" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">介入诊疗情况</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">造影检查结果</div>
-                                <MudTextField T="string" @bind-Value="_angiographyResult" Placeholder="请输入造影检查结果" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">介入经过</div>
-                                <MudTextField T="string" @bind-Value="_interventionProcess" Placeholder="请输入介入经过" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">并发症救治情况</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                <div class="case-create-label">救治经过</div>
-                                <MudTextField T="string" @bind-Value="_rescueProcess" Placeholder="请输入救治经过" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="case-create-section">
-                        <div class="case-create-section-title">并发症讨论结论</div>
-                        <div class="case-create-grid">
-                            <div class="case-create-field case-create-span-2">
-                                <div class="case-create-label">是否组织医院或科室并发症讨论</div>
-                                <MudSelect T="string" @bind-Value="_complicationDiscussion" Placeholder="请选择" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("")">未选择</MudSelectItem>
-                                    @foreach (var option in RegistryFixedCatalog.YesNoOptions)
-                                    {
-                                        <MudSelectItem T="string" Value="@option.Value">@option.Text</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            </div>
-                            @if (IsSameValue(_complicationDiscussion, "1") || IsSameValue(_complicationDiscussion, "是"))
-                            {
-                                <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                    <div class="case-create-label">发生原因</div>
-                                    <MudTextField T="string" @bind-Value="_occurrenceReason" Placeholder="请输入发生原因" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                                </div>
-                                <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                    <div class="case-create-label">死亡原因</div>
-                                    <MudTextField T="string" @bind-Value="_deathReason" Placeholder="请输入死亡原因" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                                </div>
-                                <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                    <div class="case-create-label">经验教训</div>
-                                    <MudTextField T="string" @bind-Value="_lessonsLearned" Placeholder="请输入经验教训" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                                </div>
-                                <div class="case-create-field case-create-span-2 case-create-textarea-field">
-                                    <div class="case-create-label">改进措施</div>
-                                    <MudTextField T="string" @bind-Value="_improvementMeasures" Placeholder="请输入改进措施" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" />
-                                </div>
-                            }
                         </div>
                     </section>
                 }
@@ -297,38 +109,27 @@
     [Parameter]
     public EventCallback Cancelled { get; set; }
 
+    private static readonly IReadOnlyList<FixedOption> CreateSurgeryOptions =
+    [
+        new("6237dd62-15b9-4676-972d-bf32476b3546", "冠心病介入"),
+        new("ae92e4fa-5e02-4d4c-a773-3dc79c4935bc", "导管消融"),
+        new("f827ae4a-f24f-4df9-b92f-7601025a1864", "起搏器及CIED植入/置换"),
+        new("c1174c60-2ef2-45f6-85dd-5269b567f996", "结构性心脏病介入")
+    ];
+
     private readonly List<SystemHospital> _hospitals = [];
+    private readonly List<string> _scopeHospitalIds = [];
     private string _patientName = "";
     private string _patientSex = "";
     private string _patientAge = "";
-    private string _idNumber = "";
     private string _patientNumber = "";
     private string _diseaseId = "";
     private string _hospitalId = "";
-    private string _departmentName = "";
     private string _operatorName = "";
-    private string _hospitalStayDays = "";
-    private string _coronaryIntervention = "";
-    private string _ablationIntervention = "";
-    private string _structuralIntervention = "";
-    private string _isEmergencyIntervention = "";
     private string _dischargeMode = "";
     private string _situationReason = "";
-    private string _situationSupplement = "";
-    private string _caseSummary = "";
-    private string _dischargeDiagnosis = "";
-    private string _otherExam = "";
-    private string _angiographyResult = "";
-    private string _interventionProcess = "";
-    private string _rescueProcess = "";
-    private string _complicationDiscussion = "";
-    private string _occurrenceReason = "";
-    private string _deathReason = "";
-    private string _lessonsLearned = "";
-    private string _improvementMeasures = "";
     private DateTime? _admissionTime;
     private DateTime? _dischargeTime;
-    private DateTime? _deathTime;
     private bool _isLoading = true;
 
     private const string PageClass = "edit-page modal-edit-content";
@@ -340,9 +141,6 @@
                               && !string.IsNullOrWhiteSpace(_patientNumber)
                               && _dischargeTime.HasValue
                               && !string.IsNullOrWhiteSpace(_diseaseId);
-    private bool ShouldShowDeathTime => IsSameValue(_dischargeMode, "死亡");
-    private bool ShouldShowSituationSupplement => IsSameValue(_situationReason, "4") || IsSameValue(_situationReason, "其他");
-    private bool ShouldShowDiscussionFollowup => IsSameValue(_complicationDiscussion, "1") || IsSameValue(_complicationDiscussion, "是");
 
     protected override async Task OnPageInitializedAsync()
     {
@@ -354,15 +152,43 @@
         _isLoading = true;
         try
         {
-            _hospitals.AddRange(await _registryContext.SystemHospitals.AsNoTracking()
+            await LoadRoleScopesAsync();
+            var hospitalQuery = _registryContext.SystemHospitals.AsNoTracking();
+            if (!HasPermission(PermissionConstants.QualityManage) && _scopeHospitalIds.Count > 0)
+            {
+                var scopeIds = _scopeHospitalIds.Select(TryParseGuid).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                hospitalQuery = hospitalQuery.Where(x => scopeIds.Contains(x.Id));
+            }
+
+            _hospitals.AddRange(await hospitalQuery
                 .OrderBy(x => x.Name)
                 .ToListAsync());
+            if (string.IsNullOrWhiteSpace(_hospitalId) && _hospitals.Count == 1)
+            {
+                _hospitalId = _hospitals[0].Id.ToString();
+            }
+
             _operatorName = await GetCurrentUserNameAsync() ?? "";
         }
         finally
         {
             _isLoading = false;
         }
+    }
+
+    private async Task LoadRoleScopesAsync()
+    {
+        if (_registryContext == null || !Guid.TryParse(CurrentUserId, out var userId) || CurrentRoleId == Guid.Empty)
+        {
+            return;
+        }
+
+        _scopeHospitalIds.Clear();
+        _scopeHospitalIds.AddRange(await _registryContext.SystemUserRoleScopes.AsNoTracking()
+            .Where(x => x.UserId == userId && x.RoleId == CurrentRoleId)
+            .Select(x => x.HospitalId.ToString())
+            .Distinct()
+            .ToListAsync());
     }
 
     private async Task SaveAsync()
@@ -374,7 +200,7 @@
 
         if (!CanCreate)
         {
-            inj_snackbar.Add("请选择医院，并填写病案号、出院时间和手术类型", Severity.Warning);
+            inj_snackbar.Add("请选择医院，并填写病案号、出院时间和手术类别", Severity.Warning);
             return;
         }
 
@@ -391,39 +217,19 @@
             PatientSex = EmptyToNull(_patientSex),
             PatientSexText = RegistryFixedCatalog.GetSexName(_patientSex),
             PatientAge = EmptyToNull(_patientAge),
-            IdNumber = EmptyToNull(_idNumber),
             PatientNumber = EmptyToNull(_patientNumber),
             DiseaseId = _diseaseId,
             DiseaseName = RegistryFixedCatalog.GetDiseaseName(_diseaseId),
             HospitalId = EmptyToNull(_hospitalId),
             HospitalName = hospital?.Name,
-            DepartmentName = EmptyToNull(_departmentName),
             OperatorId = EmptyToNull(CurrentUserId),
             OperatorName = operatorName,
             AdmissionTime = ToDbTimestamp(_admissionTime),
             DischargeTime = ToDbTimestamp(_dischargeTime),
-            HospitalStayDays = ParseInt(_hospitalStayDays),
             SurgeryTypeValue = _diseaseId,
             SurgeryTypeText = RegistryFixedCatalog.GetDiseaseName(_diseaseId),
-            CoronaryIntervention = EmptyToNull(_coronaryIntervention),
-            AblationIntervention = EmptyToNull(_ablationIntervention),
-            StructuralIntervention = EmptyToNull(_structuralIntervention),
-            IsEmergencyIntervention = EmptyToNull(_isEmergencyIntervention),
             DischargeMode = EmptyToNull(_dischargeMode),
             SituationReason = EmptyToNull(_situationReason),
-            SituationSupplement = ShouldShowSituationSupplement ? EmptyToNull(_situationSupplement) : null,
-            DeathTime = ShouldShowDeathTime ? ToDbTimestamp(_deathTime) : null,
-            CaseSummary = EmptyToNull(_caseSummary),
-            DischargeDiagnosis = EmptyToNull(_dischargeDiagnosis),
-            OtherExam = EmptyToNull(_otherExam),
-            AngiographyResult = EmptyToNull(_angiographyResult),
-            InterventionProcess = EmptyToNull(_interventionProcess),
-            RescueProcess = EmptyToNull(_rescueProcess),
-            ComplicationDiscussion = EmptyToNull(_complicationDiscussion),
-            OccurrenceReason = ShouldShowDiscussionFollowup ? EmptyToNull(_occurrenceReason) : null,
-            DeathReason = ShouldShowDiscussionFollowup ? EmptyToNull(_deathReason) : null,
-            LessonsLearned = ShouldShowDiscussionFollowup ? EmptyToNull(_lessonsLearned) : null,
-            ImprovementMeasures = ShouldShowDiscussionFollowup ? EmptyToNull(_improvementMeasures) : null,
             Status = 3,
             SubStatus = 0,
             Sort = maxSort + 1,
@@ -461,12 +267,12 @@
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static Guid? TryParseGuid(string? value)
+        => Guid.TryParse(value, out var guid) ? guid : null;
+
     private static DateTime ToDbTimestamp(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
 
     private static DateTime? ToDbTimestamp(DateTime? value) => value.HasValue ? ToDbTimestamp(value.Value) : null;
-
-    private static int? ParseInt(string? value)
-        => int.TryParse(value, out var result) ? result : null;
 
     private static string GetChoiceClass(string currentValue, string optionValue)
         => string.Equals(currentValue, optionValue, StringComparison.OrdinalIgnoreCase)
@@ -476,14 +282,8 @@
     private static string ToggleSingle(string currentValue, string optionValue)
         => string.Equals(currentValue, optionValue, StringComparison.OrdinalIgnoreCase) ? "" : optionValue;
 
-    private static bool IsSameValue(string? left, string? right)
-        => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
-
     private void SetDisease(string value)
     {
         _diseaseId = ToggleSingle(_diseaseId, value);
-        _coronaryIntervention = "";
-        _ablationIntervention = "";
-        _structuralIntervention = "";
     }
 }

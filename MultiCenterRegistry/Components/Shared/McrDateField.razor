@@ -1,0 +1,179 @@
+﻿@namespace MultiCenterRegistry.Components.Shared
+
+<div class="@RootClass" @onfocusin="HandleFocusIn" @onfocusout="HandleFocusOutAsync" @onkeydown="HandleKeyDown">
+    <button type="button" class="@TriggerClass" disabled="@Disabled" @onclick="TogglePanel">
+        <span>@DisplayText</span>
+        <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" />
+    </button>
+    @if (Clearable && Date.HasValue && !Disabled)
+    {
+        <button type="button" class="mcr-date-clear" title="清空" @onclick="ClearAsync">
+            <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+        </button>
+    }
+    @if (_isOpen && !Disabled)
+    {
+        <div class="mcr-date-panel">
+            <div class="mcr-date-panel-head">
+                <button type="button" title="上个月" @onclick="PreviousMonth">
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" />
+                </button>
+                <strong>@_viewMonth.ToString("yyyy年MM月", CultureInfo.InvariantCulture)</strong>
+                <button type="button" title="下个月" @onclick="NextMonth">
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                </button>
+            </div>
+            <div class="mcr-date-week">
+                @foreach (var item in WeekNames)
+                {
+                    <span>@item</span>
+                }
+            </div>
+            <div class="mcr-date-grid">
+                @foreach (var day in CalendarDays)
+                {
+                    <button type="button" class="@GetDayClass(day)" @onclick="@(() => SelectDateAsync(day))">
+                        @day.Day
+                    </button>
+                }
+            </div>
+            <div class="mcr-date-actions">
+                <button type="button" @onclick="SelectTodayAsync">今天</button>
+                @if (Clearable)
+                {
+                    <button type="button" @onclick="ClearAsync">清空</button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] WeekNames = ["一", "二", "三", "四", "五", "六", "日"];
+    private bool _isOpen;
+    private bool _hasFocus;
+    private DateTime _viewMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    [Parameter]
+    public DateTime? Date { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime?> DateChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public bool Clearable { get; set; } = true;
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string RootClass
+        => string.Join(" ", new[] { "mcr-date-field", Class, Disabled ? "is-disabled" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    private string TriggerClass
+        => Date.HasValue ? "mcr-date-trigger has-value" : "mcr-date-trigger";
+
+    private string DisplayText
+        => Date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
+
+    private IEnumerable<DateTime> CalendarDays
+    {
+        get
+        {
+            var firstDay = new DateTime(_viewMonth.Year, _viewMonth.Month, 1);
+            var offset = ((int)firstDay.DayOfWeek + 6) % 7;
+            var start = firstDay.AddDays(-offset);
+            for (var i = 0; i < 42; i++)
+            {
+                yield return start.AddDays(i);
+            }
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!_isOpen)
+        {
+            var value = Date ?? DateTime.Today;
+            _viewMonth = new DateTime(value.Year, value.Month, 1);
+        }
+    }
+
+    private void TogglePanel()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        if (!_isOpen)
+        {
+            var value = Date ?? DateTime.Today;
+            _viewMonth = new DateTime(value.Year, value.Month, 1);
+        }
+
+        _isOpen = !_isOpen;
+    }
+
+    private void HandleFocusIn() => _hasFocus = true;
+
+    private async Task HandleFocusOutAsync()
+    {
+        _hasFocus = false;
+        await Task.Delay(120);
+        if (!_hasFocus)
+        {
+            _isOpen = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            _isOpen = false;
+        }
+    }
+
+    private void PreviousMonth() => _viewMonth = _viewMonth.AddMonths(-1);
+
+    private void NextMonth() => _viewMonth = _viewMonth.AddMonths(1);
+
+    private async Task SelectDateAsync(DateTime date)
+    {
+        _isOpen = false;
+        await DateChanged.InvokeAsync(date.Date);
+    }
+
+    private Task SelectTodayAsync() => SelectDateAsync(DateTime.Today);
+
+    private async Task ClearAsync()
+    {
+        _isOpen = false;
+        await DateChanged.InvokeAsync(null);
+    }
+
+    private string GetDayClass(DateTime day)
+    {
+        var classes = new List<string> { "mcr-date-day" };
+        if (day.Month != _viewMonth.Month)
+        {
+            classes.Add("is-muted");
+        }
+
+        if (day.Date == DateTime.Today)
+        {
+            classes.Add("is-today");
+        }
+
+        if (Date.HasValue && day.Date == Date.Value.Date)
+        {
+            classes.Add("is-selected");
+        }
+
+        return string.Join(" ", classes);
+    }
+}

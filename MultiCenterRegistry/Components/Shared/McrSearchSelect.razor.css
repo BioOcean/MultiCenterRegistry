@@ -1,0 +1,52 @@
+﻿.mcr-search-select {
+    width: 100%;
+    min-width: 0;
+}
+
+.mcr-search-select ::deep .mud-input-control {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.mcr-search-select ::deep .mud-input-control-input-container,
+.mcr-search-select ::deep .mud-input {
+    min-height: 40px;
+}
+
+.mcr-search-select ::deep .mud-input {
+    height: 40px;
+    border-radius: 7px;
+}
+
+.mcr-search-select ::deep .mud-input-root,
+.mcr-search-select ::deep .mud-input-slot {
+    display: flex;
+    align-items: center;
+    height: 38px;
+    min-height: 38px;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    color: var(--mcr-text);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 38px;
+}
+
+.mcr-search-select ::deep .mud-input-outlined-border {
+    border-color: var(--mcr-border);
+    border-radius: 7px;
+}
+
+.mcr-search-select ::deep .mud-input-adornment {
+    height: 40px;
+    margin-top: 0;
+}
+
+.mcr-search-select ::deep .mud-input-adornment svg {
+    color: var(--mcr-muted);
+}
+
+.mcr-search-select.is-disabled ::deep .mud-input {
+    background: #f8fafc;
+}

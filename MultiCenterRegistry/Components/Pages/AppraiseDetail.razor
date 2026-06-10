@@ -81,8 +81,38 @@
                                                 <div class="pdf-question-value">
                                                     @if (field.IsFile)
                                                     {
+                                                        var files = GetCasePreviewFiles(field.FileKey);
                                                         <div class="pdf-file-list">
-                                                            <span class="muted">暂无附件</span>
+                                                            @if (files.Count == 0)
+                                                            {
+                                                                <span class="muted">暂无附件</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                @foreach (var file in files)
+                                                                {
+                                                                    @if (IsImageFile(file))
+                                                                    {
+                                                                        <button type="button"
+                                                                                class="pdf-image-item"
+                                                                                title="点击查看大图"
+                                                                                @onclick="@(() => OpenImagePreview(file))">
+                                                                            <img src="@GetFileUrl(file, false)" alt="" />
+                                                                            <span>点击查看大图</span>
+                                                                        </button>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <div class="pdf-file-item">
+                                                                            <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" />
+                                                                        </div>
+                                                                    }
+                                                                    @if (!string.IsNullOrWhiteSpace(file.Remark))
+                                                                    {
+                                                                        <div class="pdf-file-remark">@file.Remark</div>
+                                                                    }
+                                                                }
+                                                            }
                                                         </div>
                                                     }
                                                     else
@@ -345,6 +375,18 @@
     }
 </div>
 
+@if (_previewImageFile != null)
+{
+    <div class="image-preview-mask" role="presentation" @onclick="CloseImagePreview">
+        <section class="image-preview-dialog" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <button type="button" class="image-preview-close" title="关闭" @onclick="CloseImagePreview">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Medium" />
+            </button>
+            <img src="@GetFileUrl(_previewImageFile, false)" alt="" />
+        </section>
+    </div>
+}
+
 @code {
     private const string CasePreviewAllKey = "all";
     private const string ReviewTabAppraise = "appraise";
@@ -394,6 +436,7 @@
     private ReviewMeeting? _meeting;
     private RegistryCase? _case;
     private readonly List<CasePreviewSection> _caseSections = [];
+    private readonly List<RegistryFile> _caseFiles = [];
     private readonly List<AppraiseBlock> _appraises = [];
     private readonly List<CaseSummary> _summaries = [];
     private readonly List<FieldStatistic> _statistics = [];
@@ -404,6 +447,7 @@
     private string _selectedCasePreviewSectionKey = CasePreviewAllKey;
     private string _activeReviewTab = ReviewTabAppraise;
     private Guid? _selectedAppraiseId;
+    private RegistryFile? _previewImageFile;
     private bool _isLoading = true;
     private bool _isMeetingLeader;
     private readonly HashSet<string> _collapsedReviewSections = [];
@@ -423,6 +467,7 @@
             _meeting = await _registryContext.ReviewMeetings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == MeetingId);
             _case = await _registryContext.Cases.AsNoTracking().FirstOrDefaultAsync(x => x.Id == CaseId);
             _caseSections.Clear();
+            _caseFiles.Clear();
             _appraises.Clear();
             _summaries.Clear();
             _statistics.Clear();
@@ -436,8 +481,20 @@
                 return;
             }
 
+            if (!await CanAccessAppraiseAsync())
+            {
+                _meeting = null;
+                _case = null;
+                inj_snackbar.Add("当前账号无权查看该评审", Severity.Warning);
+                return;
+            }
+
             await LoadCaseNamesAsync();
             await LoadLeaderStateAsync();
+            _caseFiles.AddRange(await _registryContext.Files.AsNoTracking()
+                .Where(x => x.OwnerType == "case" && x.OwnerId == CaseId)
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync());
             BuildCasePreviewSections();
 
             var allAppraises = await _registryContext.CaseAppraises.AsNoTracking()
@@ -499,6 +556,40 @@
         {
             _isLoading = false;
         }
+    }
+
+    private async Task<bool> CanAccessAppraiseAsync()
+    {
+        if (_registryContext == null)
+        {
+            return false;
+        }
+
+        if (HasPermission(PermissionConstants.QualityManage))
+        {
+            return true;
+        }
+
+        if (!HasAnyPermission(PermissionConstants.AppraiseEdit, PermissionConstants.AppraiseView))
+        {
+            return false;
+        }
+
+        var isMeetingCase = await _registryContext.CaseAppraises.AsNoTracking()
+            .AnyAsync(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
+            || await _registryContext.CaseSummaries.AsNoTracking()
+                .AnyAsync(x => x.MeetingId == MeetingId && x.CaseId == CaseId);
+        if (!isMeetingCase)
+        {
+            return false;
+        }
+
+        return await _registryContext.CaseAppraises.AsNoTracking()
+            .AnyAsync(x => x.MeetingId == MeetingId && x.CaseId == CaseId && x.ExpertId == CurrentUserId)
+            || await _registryContext.CaseSummaries.AsNoTracking()
+                .AnyAsync(x => x.MeetingId == MeetingId && x.CaseId == CaseId && x.CreatedBy == CurrentUserId)
+            || await _registryContext.MeetingExperts.AsNoTracking()
+                .AnyAsync(x => x.MeetingId == MeetingId && x.ExpertId == CurrentUserId);
     }
 
     private async Task LoadCaseNamesAsync()
@@ -620,11 +711,11 @@
         AddCaseSection("case-basic", "患者基本信息", basicFields);
         AddCaseSection("case-summary", "病历摘要", [new("摘要内容", _case.CaseSummary, FullRow: true)]);
         AddCaseSection("case-discharge-diagnosis", "出院诊断", [new("出院诊断", _case.DischargeDiagnosis, FullRow: true)]);
-        AddCaseSection("case-lab-exam", "相关实验室检查", [new("化验单图片上传", null, IsFile: true, FullRow: true)]);
+        AddCaseSection("case-lab-exam", "相关实验室检查", [new("化验单图片上传", null, IsFile: true, FullRow: true, FileKey: "lab_file")]);
         AddCaseSection("case-assist-exam", "主要辅助检查",
         [
-            new("心电图图片上传", null, IsFile: true, FullRow: true),
-            new("心脏彩超", null, IsFile: true, FullRow: true),
+            new("心电图图片上传", null, IsFile: true, FullRow: true, FileKey: "ecg_file"),
+            new("心脏彩超", null, IsFile: true, FullRow: true, FileKey: "echo_file"),
             new("其他检查", _case.OtherExam, FullRow: true)
         ]);
         AddCaseSection("case-intervention", "介入诊疗情况",
@@ -800,6 +891,10 @@
 
     private void SelectAppraise(Guid id) => _selectedAppraiseId = id;
 
+    private void OpenImagePreview(RegistryFile file) => _previewImageFile = file;
+
+    private void CloseImagePreview() => _previewImageFile = null;
+
     private string GetCasePreviewNavClass(string key)
         => _selectedCasePreviewSectionKey == key ? "form-nav-link active" : "form-nav-link";
 
@@ -836,6 +931,24 @@
 
     private static string GetPdfQuestionClass(CasePreviewField field)
         => field.IsFile || field.FullRow || field.Value?.Length > 60 ? "pdf-question full-row" : "pdf-question";
+
+    private List<RegistryFile> GetCasePreviewFiles(string? fieldKey)
+        => string.IsNullOrWhiteSpace(fieldKey)
+            ? []
+            : _caseFiles
+                .Where(x => x.FilePath.Contains($"/{fieldKey}/", StringComparison.OrdinalIgnoreCase)
+                            || x.FilePath.Contains($"\\{fieldKey}\\", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+    private string GetFileUrl(RegistryFile file, bool download)
+        => $"{inj_navigationManager.BaseUri.TrimEnd('/')}/files/{file.Id}?download={download.ToString().ToLowerInvariant()}";
+
+    private static bool IsImageFile(RegistryFile file)
+        => file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
+           || IsImageExtension(Path.GetExtension(file.FileName));
+
+    private static bool IsImageExtension(string? extension)
+        => extension?.ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp";
 
     private static bool ShouldShowManagementProblemDescription(AppraiseBlock appraise)
         => IsSameValue(appraise.HasManagementProblem, "1") || IsSameValue(appraise.HasManagementProblem, "是");
@@ -1022,7 +1135,7 @@
             return;
         }
 
-        if (!await ConfirmAsync("确认提交当前评审？提交后状态会变为已评审。"))
+        if (!await ConfirmAsync("确认提交当前评审？提交后该评审将不能修改。"))
         {
             return;
         }
@@ -1032,8 +1145,6 @@
         entity.UpdatedAt = ToDbTimestamp(DateTime.Now);
         entity.UpdatedBy = CurrentUserId;
         _registryContext.OperationLogs.Add(CreateOperationLog("评审", "提交评审", "appraise", appraiseId));
-        await _registryContext.SaveChangesAsync();
-        await UpdateCaseReviewStatusAsync();
         await _registryContext.SaveChangesAsync();
         inj_snackbar.Add("评审已提交", Severity.Success);
         await LoadAppraiseAsync();
@@ -1056,25 +1167,6 @@
         entity.ImprovementContent = ShouldShowImprovementContent(appraise) ? EmptyToNull(appraise.ImprovementContent) : null;
         entity.UpdatedAt = ToDbTimestamp(DateTime.Now);
         entity.UpdatedBy = appraise.ExpertId;
-    }
-
-    private async Task UpdateCaseReviewStatusAsync()
-    {
-        if (_registryContext == null)
-        {
-            return;
-        }
-
-        var statuses = await _registryContext.CaseAppraises.AsNoTracking()
-            .Where(x => x.MeetingId == MeetingId && x.CaseId == CaseId)
-            .Select(x => x.Status)
-            .ToListAsync();
-        var subStatus = statuses.Count > 0 && statuses.All(x => x == 1) ? 2 : 1;
-        await _registryContext.Cases.Where(x => x.Id == CaseId)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.SubStatus, subStatus)
-                .SetProperty(x => x.UpdatedAt, ToDbTimestamp(DateTime.Now))
-                .SetProperty(x => x.UpdatedBy, CurrentUserId));
     }
 
     private bool CanEditSummary(CaseSummary summary)
@@ -1345,7 +1437,7 @@
 
     private sealed record SummaryItem(string Label, string? Value);
 
-    private sealed record CasePreviewField(string Name, string? Value, bool IsFile = false, bool FullRow = false);
+    private sealed record CasePreviewField(string Name, string? Value, bool IsFile = false, bool FullRow = false, string? FileKey = null);
 
     private sealed class CasePreviewSection(string key, string title)
     {

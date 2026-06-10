@@ -389,14 +389,23 @@
             return;
         }
 
+        var now = DateTime.Now;
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
         await _registryContext.ReviewMeetings
             .Where(x => x.Id == meetingId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, 3)
-                .SetProperty(x => x.UpdatedAt, DateTime.Now)
+                .SetProperty(x => x.UpdatedAt, now)
                 .SetProperty(x => x.UpdatedBy, CurrentUserId));
+        var caseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId)
+            .Select(x => x.CaseId)
+            .Distinct()
+            .ToListAsync();
+        await ResetMeetingCasesAsync(meetingId, caseIds, true, now);
         _registryContext.OperationLogs.Add(CreateOperationLog("会议", "关闭会议", "meeting", meetingId));
         await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
         inj_snackbar.Add("会议已关闭", Severity.Success);
         await LoadMeetingsAsync();
     }
@@ -408,6 +417,13 @@
             return;
         }
 
+        await using var transaction = await _registryContext.Database.BeginTransactionAsync();
+        var caseIds = await _registryContext.CaseAppraises.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId)
+            .Select(x => x.CaseId)
+            .Distinct()
+            .ToListAsync();
+        await ResetMeetingCasesAsync(meetingId, caseIds, true, DateTime.Now);
         await _registryContext.CaseVotes.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
         await _registryContext.CaseSummaries.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
         await _registryContext.CaseAppraises.Where(x => x.MeetingId == meetingId).ExecuteDeleteAsync();
@@ -415,8 +431,40 @@
         await _registryContext.ReviewMeetings.Where(x => x.Id == meetingId).ExecuteDeleteAsync();
         _registryContext.OperationLogs.Add(CreateOperationLog("会议", "删除", "meeting", meetingId));
         await _registryContext.SaveChangesAsync();
+        await transaction.CommitAsync();
         inj_snackbar.Add("会议已删除", Severity.Success);
         await LoadMeetingsAsync();
+    }
+
+    private async Task ResetMeetingCasesAsync(Guid meetingId, IReadOnlyCollection<Guid> caseIds, bool onlyIncomplete, DateTime now)
+    {
+        if (_registryContext == null || caseIds.Count == 0)
+        {
+            return;
+        }
+
+        IQueryable<RegistryCase> caseQuery = _registryContext.Cases.Where(x => caseIds.Contains(x.Id));
+        if (onlyIncomplete)
+        {
+            caseQuery = caseQuery.Where(x => x.Status == 2 && x.SubStatus != 2);
+        }
+
+        var resetCaseIds = await caseQuery.Select(x => x.Id).ToListAsync();
+        if (resetCaseIds.Count == 0)
+        {
+            return;
+        }
+
+        await _registryContext.CaseVotes.Where(x => x.MeetingId == meetingId && resetCaseIds.Contains(x.CaseId)).ExecuteDeleteAsync();
+        await _registryContext.CaseSummaries.Where(x => x.MeetingId == meetingId && resetCaseIds.Contains(x.CaseId)).ExecuteDeleteAsync();
+        await _registryContext.CaseAppraises.Where(x => x.MeetingId == meetingId && resetCaseIds.Contains(x.CaseId)).ExecuteDeleteAsync();
+        await _registryContext.Cases
+            .Where(x => resetCaseIds.Contains(x.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.SubStatus, 0)
+                .SetProperty(x => x.Sort, 0)
+                .SetProperty(x => x.UpdatedAt, now)
+                .SetProperty(x => x.UpdatedBy, CurrentUserId));
     }
 
     private static Guid? TryParseGuid(string? value) => Guid.TryParse(value, out var id) ? id : null;
