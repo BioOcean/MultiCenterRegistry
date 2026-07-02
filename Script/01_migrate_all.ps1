@@ -764,8 +764,22 @@ begin
             where (
                     (map.source_table = 'MCR_User' and scope.user_id = map.target_id)
                  or (map.source_table = 'MCR_Role' and scope.role_id = map.target_id)
-                 or (map.source_table = 'MCR_Hospital' and scope.hospital_id = map.target_id)
-                 or (map.source_table = 'MCR_Department' and scope.department_id = map.target_id)
+                 or (
+                     map.source_table = 'MCR_Hospital'
+                     and scope.hospital_id = map.target_id
+                     and exists (
+                         select 1 from tmp_hospital source
+                         where source.old_id = map.source_id and source.id::uuid = map.target_id
+                     )
+                 )
+                 or (
+                     map.source_table = 'MCR_Department'
+                     and scope.department_id = map.target_id
+                     and exists (
+                         select 1 from tmp_department source
+                         where source.old_id = map.source_id and source.id::uuid = map.target_id
+                     )
+                 )
               )
               and not exists (
                   select 1 from tmp_preserved_system_user preserved_user
@@ -794,6 +808,10 @@ begin
             delete from system.sys_department department
             using mcr.migration_map map
             where map.source_table = 'MCR_Department' and department.id = map.target_id
+              and exists (
+                  select 1 from tmp_department source
+                  where source.old_id = map.source_id and source.id::uuid = map.target_id
+              )
               and not exists (
                   select 1 from system.sys_user_role_scope scope
                   where scope.department_id = department.id
@@ -803,6 +821,10 @@ begin
             delete from system.sys_hospital hospital
             using mcr.migration_map map
             where map.source_table = 'MCR_Hospital' and hospital.id = map.target_id
+              and exists (
+                  select 1 from tmp_hospital source
+                  where source.old_id = map.source_id and source.id::uuid = map.target_id
+              )
               and not exists (
                   select 1 from system.sys_user_role_scope scope
                   where scope.hospital_id = hospital.id
@@ -936,26 +958,100 @@ select (
 )::uuid;
 $func$;
 
+create or replace function pg_temp.tmp_hospital_match_key(value text)
+returns text
+language sql
+immutable
+as $func$
+select regexp_replace(
+    regexp_replace(
+        regexp_replace(coalesce(nullif(btrim(value), ''), ''), '[[:space:]　]+', '', 'g'),
+        '^(首都医科大学附属|首都医科大学|中国医学科学院|北京市|北京|天津市|天津)',
+        '',
+        'g'
+    ),
+    '(总医院|医院)$',
+    '',
+    'g'
+);
+$func$;
+
+create temp table tmp_hospital_alias (source_name text primary key, target_name text not null);
+insert into tmp_hospital_alias (source_name, target_name) values
+('首都医科大学附属北京安贞医院', '北京安贞医院'),
+('首都医科大学宣武医院', '宣武医院'),
+('北京大学人民医院', '北京大学人民医院'),
+('首都医科大学附属北京友谊医院', '北京友谊医院'),
+('首都医科大学附属北京世纪坛医院（北京铁路总医院）', '北京世纪坛医院'),
+('首都医科大学附属北京儿童医院', '首都医科大学附属北京儿童医院'),
+('首都医科大学附属北京潞河医院', '北京潞河医院'),
+('中国医学科学院北京协和医院', '北京协和医院'),
+('首都医科大学附属北京朝阳医院', '北京朝阳医院'),
+('首都医科大学附属北京地坛医院', '北京地坛医院'),
+('北京清华长庚医院', '北京清华长庚医院'),
+('天津市胸科医院', '天津胸科医院'),
+('首都儿科研究所附属儿童医院', '北京儿研所'),
+('首都医科大学附属复兴医院', '北京复兴医院');
+
+create temp table tmp_hospital_resolved as
+select h.*,
+       coalesce(alias_hospital.id, existing_hospital.id, h.id::uuid) as target_id
+from tmp_hospital h
+left join tmp_hospital_alias alias on alias.source_name = coalesce(nullif(btrim(h.name), ''), '未命名医院')
+left join system.sys_hospital alias_hospital on alias_hospital.name = alias.target_name
+left join lateral (
+    select sys_hospital.id
+    from system.sys_hospital
+    where alias_hospital.id is null
+      and (
+          sys_hospital.name = coalesce(nullif(h.name, ''), '未命名医院')
+          or (
+              pg_temp.tmp_hospital_match_key(sys_hospital.name) = pg_temp.tmp_hospital_match_key(h.name)
+              and pg_temp.tmp_hospital_match_key(h.name) <> ''
+          )
+      )
+    order by
+        case when sys_hospital.name = coalesce(nullif(h.name, ''), '未命名医院') then 0 else 1 end,
+        sys_hospital.id::text
+    limit 1
+) existing_hospital on true;
+
 insert into system.sys_hospital (id, name)
-select id::uuid, coalesce(nullif(name, ''), '未命名医院')
-from tmp_hospital
+select target_id, coalesce(nullif(name, ''), '未命名医院')
+from tmp_hospital_resolved
+where target_id = id::uuid
 on conflict (id) do update set name = excluded.name;
 
 insert into mcr.migration_map (id, source_table, source_id, target_table, target_id, created_at)
-select pg_temp.tmp_stable_uuid('MCR_Hospital:' || old_id), 'MCR_Hospital', old_id, 'system.sys_hospital', id::uuid, now()
-from tmp_hospital
+select pg_temp.tmp_stable_uuid('MCR_Hospital:' || old_id), 'MCR_Hospital', old_id, 'system.sys_hospital', target_id, now()
+from tmp_hospital_resolved
 where nullif(old_id, '') is not null
 on conflict (source_table, source_id) do update set target_table = excluded.target_table, target_id = excluded.target_id;
 
-insert into system.sys_department (id, hospital_id, name, display_name)
-select d.id::uuid, hm.target_id, coalesce(nullif(d.name, ''), '未命名科室'), nullif(d.display_name, '')
+create temp table tmp_department_resolved as
+select d.*,
+       hr.target_id as hospital_target_id,
+       coalesce(existing_department.id, d.id::uuid) as target_id
 from tmp_department d
-join mcr.migration_map hm on hm.source_table = 'MCR_Hospital' and hm.source_id = d.old_hospital_id
+join tmp_hospital_resolved hr on hr.old_id = d.old_hospital_id
+left join lateral (
+    select department.id
+    from system.sys_department department
+    where department.hospital_id = hr.target_id
+      and btrim(department.name) = btrim(coalesce(nullif(d.name, ''), '未命名科室'))
+    order by department.id::text
+    limit 1
+) existing_department on true;
+
+insert into system.sys_department (id, hospital_id, name, display_name)
+select target_id, hospital_target_id, coalesce(nullif(name, ''), '未命名科室'), nullif(display_name, '')
+from tmp_department_resolved
+where target_id = id::uuid
 on conflict (id) do update set hospital_id = excluded.hospital_id, name = excluded.name, display_name = excluded.display_name;
 
 insert into mcr.migration_map (id, source_table, source_id, target_table, target_id, created_at)
-select pg_temp.tmp_stable_uuid('MCR_Department:' || old_id), 'MCR_Department', old_id, 'system.sys_department', id::uuid, now()
-from tmp_department
+select pg_temp.tmp_stable_uuid('MCR_Department:' || old_id), 'MCR_Department', old_id, 'system.sys_department', target_id, now()
+from tmp_department_resolved
 where nullif(old_id, '') is not null
 on conflict (source_table, source_id) do update set target_table = excluded.target_table, target_id = excluded.target_id;
 
